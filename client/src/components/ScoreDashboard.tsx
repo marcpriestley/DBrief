@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -142,6 +142,9 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Update {selectedMetric?.name} Score</DialogTitle>
+            <DialogDescription>
+              Enter a score from 0 to 100 for {selectedMetric?.name} on the selected date.
+            </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4 py-4">

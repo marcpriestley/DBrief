@@ -9,10 +9,17 @@ interface SpeechToTextHook {
   resetTranscript: () => void;
 }
 
+declare global {
+  interface Window {
+    SpeechRecognition: any;
+    webkitSpeechRecognition: any;
+  }
+}
+
 export function useSpeechToText(): SpeechToTextHook {
   const [isRecording, setIsRecording] = useState(false);
   const [transcript, setTranscript] = useState("");
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const recognitionRef = useRef<any>(null);
 
   const isSupported = typeof window !== "undefined" && 
     ("webkitSpeechRecognition" in window || "SpeechRecognition" in window);
@@ -34,26 +41,22 @@ export function useSpeechToText(): SpeechToTextHook {
       setIsRecording(true);
     };
 
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
+    recognition.onresult = (event: any) => {
       let finalTranscript = "";
-      let interimTranscript = "";
-
+      
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
         if (result.isFinal) {
           finalTranscript += result[0].transcript + " ";
-        } else {
-          interimTranscript += result[0].transcript;
         }
       }
 
-      setTranscript(prev => {
-        const base = prev.split(" ").slice(0, -1).join(" ");
-        return (base + " " + finalTranscript + interimTranscript).trim();
-      });
+      if (finalTranscript.trim()) {
+        setTranscript(prev => (prev + " " + finalTranscript).trim());
+      }
     };
 
-    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+    recognition.onerror = (event: any) => {
       console.error("Speech recognition error:", event.error);
       setIsRecording(false);
     };

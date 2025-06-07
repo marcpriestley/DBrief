@@ -118,31 +118,28 @@ export class MemStorage implements IStorage {
     });
     this.currentJournalEntryId = 4;
 
-    // Create sample daily scores
+    // Create sample daily scores - only for previous days, not today
+    const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const dayBeforeYesterday = new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    
     const sampleScores: DailyScore[] = [
-      // Today's scores
-      { id: 1, userId: 1, date: today.toISOString().split('T')[0], metricName: "Happiness", value: 85, isAutoSynced: false },
-      { id: 2, userId: 1, date: today.toISOString().split('T')[0], metricName: "Productivity", value: 78, isAutoSynced: false },
-      { id: 3, userId: 1, date: today.toISOString().split('T')[0], metricName: "Energy", value: 82, isAutoSynced: false },
-      { id: 4, userId: 1, date: today.toISOString().split('T')[0], metricName: "Sleep", value: 75, isAutoSynced: true },
-      
       // Yesterday's scores
-      { id: 5, userId: 1, date: new Date(today.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0], metricName: "Happiness", value: 65, isAutoSynced: false },
-      { id: 6, userId: 1, date: new Date(today.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0], metricName: "Productivity", value: 55, isAutoSynced: false },
-      { id: 7, userId: 1, date: new Date(today.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0], metricName: "Energy", value: 60, isAutoSynced: false },
-      { id: 8, userId: 1, date: new Date(today.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0], metricName: "Sleep", value: 45, isAutoSynced: true },
+      { id: 1, userId: 1, date: yesterday, metricName: "Happiness", value: 65, isAutoSynced: false },
+      { id: 2, userId: 1, date: yesterday, metricName: "Productivity", value: 55, isAutoSynced: false },
+      { id: 3, userId: 1, date: yesterday, metricName: "Energy", value: 60, isAutoSynced: false },
+      { id: 4, userId: 1, date: yesterday, metricName: "Sleep", value: 45, isAutoSynced: true },
       
       // Day before yesterday's scores
-      { id: 9, userId: 1, date: new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], metricName: "Happiness", value: 90, isAutoSynced: false },
-      { id: 10, userId: 1, date: new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], metricName: "Productivity", value: 70, isAutoSynced: false },
-      { id: 11, userId: 1, date: new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], metricName: "Energy", value: 88, isAutoSynced: false },
-      { id: 12, userId: 1, date: new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], metricName: "Sleep", value: 80, isAutoSynced: true },
+      { id: 5, userId: 1, date: dayBeforeYesterday, metricName: "Happiness", value: 90, isAutoSynced: false },
+      { id: 6, userId: 1, date: dayBeforeYesterday, metricName: "Productivity", value: 70, isAutoSynced: false },
+      { id: 7, userId: 1, date: dayBeforeYesterday, metricName: "Energy", value: 88, isAutoSynced: false },
+      { id: 8, userId: 1, date: dayBeforeYesterday, metricName: "Sleep", value: 80, isAutoSynced: true },
     ];
 
     sampleScores.forEach(score => {
       this.dailyScores.set(score.id, score);
     });
-    this.currentDailyScoreId = 13;
+    this.currentDailyScoreId = 9;
 
     // Create default streak
     const defaultStreak: Streak = {
