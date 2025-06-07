@@ -84,6 +84,66 @@ export class MemStorage implements IStorage {
 
     this.currentUserMetricId = 7;
 
+    // Create sample journal entries
+    const today = new Date();
+    const sampleEntries: JournalEntry[] = [
+      {
+        id: 1,
+        userId: 1,
+        date: today.toISOString().split('T')[0],
+        content: "Had a great day today! Started with morning exercise and felt energized throughout. Work was productive - finished the quarterly report and had a good team meeting. Evening walk in the park was refreshing.",
+        isVoiceEntry: false,
+        createdAt: today,
+      },
+      {
+        id: 2,
+        userId: 1,
+        date: new Date(today.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        content: "Feeling a bit overwhelmed with work deadlines. Had trouble sleeping last night. Need to focus on time management and stress reduction. Did some meditation which helped a bit.",
+        isVoiceEntry: false,
+        createdAt: new Date(today.getTime() - 24 * 60 * 60 * 1000),
+      },
+      {
+        id: 3,
+        userId: 1,
+        date: new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        content: "Beautiful weekend! Spent time with family and friends. Went hiking and enjoyed nature. Feeling grateful for the people in my life. This is the kind of balance I want to maintain.",
+        isVoiceEntry: true,
+        createdAt: new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000),
+      },
+    ];
+
+    sampleEntries.forEach(entry => {
+      this.journalEntries.set(entry.id, entry);
+    });
+    this.currentJournalEntryId = 4;
+
+    // Create sample daily scores
+    const sampleScores: DailyScore[] = [
+      // Today's scores
+      { id: 1, userId: 1, date: today.toISOString().split('T')[0], metricName: "Happiness", value: 85, isAutoSynced: false },
+      { id: 2, userId: 1, date: today.toISOString().split('T')[0], metricName: "Productivity", value: 78, isAutoSynced: false },
+      { id: 3, userId: 1, date: today.toISOString().split('T')[0], metricName: "Energy", value: 82, isAutoSynced: false },
+      { id: 4, userId: 1, date: today.toISOString().split('T')[0], metricName: "Sleep", value: 75, isAutoSynced: true },
+      
+      // Yesterday's scores
+      { id: 5, userId: 1, date: new Date(today.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0], metricName: "Happiness", value: 65, isAutoSynced: false },
+      { id: 6, userId: 1, date: new Date(today.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0], metricName: "Productivity", value: 55, isAutoSynced: false },
+      { id: 7, userId: 1, date: new Date(today.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0], metricName: "Energy", value: 60, isAutoSynced: false },
+      { id: 8, userId: 1, date: new Date(today.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0], metricName: "Sleep", value: 45, isAutoSynced: true },
+      
+      // Day before yesterday's scores
+      { id: 9, userId: 1, date: new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], metricName: "Happiness", value: 90, isAutoSynced: false },
+      { id: 10, userId: 1, date: new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], metricName: "Productivity", value: 70, isAutoSynced: false },
+      { id: 11, userId: 1, date: new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], metricName: "Energy", value: 88, isAutoSynced: false },
+      { id: 12, userId: 1, date: new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], metricName: "Sleep", value: 80, isAutoSynced: true },
+    ];
+
+    sampleScores.forEach(score => {
+      this.dailyScores.set(score.id, score);
+    });
+    this.currentDailyScoreId = 13;
+
     // Create default streak
     const defaultStreak: Streak = {
       id: 1,
