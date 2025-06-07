@@ -4,6 +4,8 @@ import {
   type DailyScore, type InsertDailyScore, type UserMetric, type InsertUserMetric,
   type Streak, type InsertStreak, type AIInsight, type InsertAIInsight
 } from "@shared/schema";
+import { db } from "./db";
+import { eq, and, desc } from "drizzle-orm";
 
 export interface IStorage {
   // User methods
@@ -299,4 +301,173 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+export class DatabaseStorage implements IStorage {
+  async getUser(id: number): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user || undefined;
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user || undefined;
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values(insertUser)
+      .returning();
+    return user;
+  }
+
+  async getJournalEntry(id: number): Promise<JournalEntry | undefined> {
+    const [entry] = await db.select().from(journalEntries).where(eq(journalEntries.id, id));
+    return entry || undefined;
+  }
+
+  async getJournalEntriesByUser(userId: number): Promise<JournalEntry[]> {
+    return await db
+      .select()
+      .from(journalEntries)
+      .where(eq(journalEntries.userId, userId))
+      .orderBy(desc(journalEntries.date));
+  }
+
+  async getJournalEntryByDate(userId: number, date: string): Promise<JournalEntry | undefined> {
+    const [entry] = await db
+      .select()
+      .from(journalEntries)
+      .where(and(eq(journalEntries.userId, userId), eq(journalEntries.date, date)));
+    return entry || undefined;
+  }
+
+  async createJournalEntry(entry: InsertJournalEntry): Promise<JournalEntry> {
+    const [newEntry] = await db
+      .insert(journalEntries)
+      .values(entry)
+      .returning();
+    return newEntry;
+  }
+
+  async updateJournalEntry(id: number, updates: Partial<InsertJournalEntry>): Promise<JournalEntry | undefined> {
+    const [updatedEntry] = await db
+      .update(journalEntries)
+      .set(updates)
+      .where(eq(journalEntries.id, id))
+      .returning();
+    return updatedEntry || undefined;
+  }
+
+  async getDailyScoresByUserAndDate(userId: number, date: string): Promise<DailyScore[]> {
+    return await db
+      .select()
+      .from(dailyScores)
+      .where(and(eq(dailyScores.userId, userId), eq(dailyScores.date, date)));
+  }
+
+  async getDailyScoresByUser(userId: number): Promise<DailyScore[]> {
+    return await db
+      .select()
+      .from(dailyScores)
+      .where(eq(dailyScores.userId, userId));
+  }
+
+  async createDailyScore(score: InsertDailyScore): Promise<DailyScore> {
+    const [newScore] = await db
+      .insert(dailyScores)
+      .values(score)
+      .returning();
+    return newScore;
+  }
+
+  async updateDailyScore(userId: number, date: string, metricName: string, value: number): Promise<DailyScore | undefined> {
+    // Try to update existing score first
+    const [existingScore] = await db
+      .update(dailyScores)
+      .set({ value })
+      .where(and(
+        eq(dailyScores.userId, userId),
+        eq(dailyScores.date, date),
+        eq(dailyScores.metricName, metricName)
+      ))
+      .returning();
+
+    if (existingScore) {
+      return existingScore;
+    }
+
+    // If no existing score, create a new one
+    return this.createDailyScore({ userId, date, metricName, value, isAutoSynced: false });
+  }
+
+  async getUserMetrics(userId: number): Promise<UserMetric[]> {
+    return await db
+      .select()
+      .from(userMetrics)
+      .where(and(eq(userMetrics.userId, userId), eq(userMetrics.isActive, true)));
+  }
+
+  async createUserMetric(metric: InsertUserMetric): Promise<UserMetric> {
+    const [newMetric] = await db
+      .insert(userMetrics)
+      .values(metric)
+      .returning();
+    return newMetric;
+  }
+
+  async updateUserMetric(id: number, updates: Partial<InsertUserMetric>): Promise<UserMetric | undefined> {
+    const [updatedMetric] = await db
+      .update(userMetrics)
+      .set(updates)
+      .where(eq(userMetrics.id, id))
+      .returning();
+    return updatedMetric || undefined;
+  }
+
+  async getUserStreak(userId: number): Promise<Streak | undefined> {
+    const [streak] = await db.select().from(streaks).where(eq(streaks.userId, userId));
+    return streak || undefined;
+  }
+
+  async createStreak(streak: InsertStreak): Promise<Streak> {
+    const [newStreak] = await db
+      .insert(streaks)
+      .values(streak)
+      .returning();
+    return newStreak;
+  }
+
+  async updateStreak(userId: number, updates: Partial<InsertStreak>): Promise<Streak | undefined> {
+    const [updatedStreak] = await db
+      .update(streaks)
+      .set(updates)
+      .where(eq(streaks.userId, userId))
+      .returning();
+    return updatedStreak || undefined;
+  }
+
+  async getActiveAIInsights(userId: number): Promise<AIInsight[]> {
+    return await db
+      .select()
+      .from(aiInsights)
+      .where(and(eq(aiInsights.userId, userId), eq(aiInsights.isActive, true)))
+      .orderBy(desc(aiInsights.createdAt));
+  }
+
+  async createAIInsight(insight: InsertAIInsight): Promise<AIInsight> {
+    const [newInsight] = await db
+      .insert(aiInsights)
+      .values(insight)
+      .returning();
+    return newInsight;
+  }
+
+  async deactivateAIInsight(id: number): Promise<void> {
+    await db
+      .update(aiInsights)
+      .set({ isActive: false })
+      .where(eq(aiInsights.id, id));
+  }
+}
+
+export const storage = new DatabaseStorage();

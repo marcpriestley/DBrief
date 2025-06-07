@@ -1,4 +1,5 @@
 import { pgTable, text, serial, integer, date, timestamp, jsonb, boolean } from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -78,6 +79,50 @@ export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
 });
+
+// Define relations
+export const usersRelations = relations(users, ({ many }) => ({
+  journalEntries: many(journalEntries),
+  dailyScores: many(dailyScores),
+  userMetrics: many(userMetrics),
+  streaks: many(streaks),
+  aiInsights: many(aiInsights),
+}));
+
+export const journalEntriesRelations = relations(journalEntries, ({ one }) => ({
+  user: one(users, {
+    fields: [journalEntries.userId],
+    references: [users.id],
+  }),
+}));
+
+export const dailyScoresRelations = relations(dailyScores, ({ one }) => ({
+  user: one(users, {
+    fields: [dailyScores.userId],
+    references: [users.id],
+  }),
+}));
+
+export const userMetricsRelations = relations(userMetrics, ({ one }) => ({
+  user: one(users, {
+    fields: [userMetrics.userId],
+    references: [users.id],
+  }),
+}));
+
+export const streaksRelations = relations(streaks, ({ one }) => ({
+  user: one(users, {
+    fields: [streaks.userId],
+    references: [users.id],
+  }),
+}));
+
+export const aiInsightsRelations = relations(aiInsights, ({ one }) => ({
+  user: one(users, {
+    fields: [aiInsights.userId],
+    references: [users.id],
+  }),
+}));
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
