@@ -17,7 +17,7 @@ export default function Dashboard() {
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
   const [isCustomizeModalOpen, setIsCustomizeModalOpen] = useState(false);
 
-  const { data: streak } = useQuery({
+  const { data: streak } = useQuery<any>({
     queryKey: ["/api/streak"],
   });
 
@@ -35,7 +35,7 @@ export default function Dashboard() {
             </div>
             
             <div className="flex items-center space-x-4">
-              {streak && (
+              {streak && streak.currentStreak && (
                 <div className="flex items-center space-x-2 bg-amber-50 px-3 py-1 rounded-full">
                   <Flame className="h-4 w-4 text-amber-500" />
                   <span className="text-sm font-medium text-amber-700">
@@ -43,6 +43,12 @@ export default function Dashboard() {
                   </span>
                 </div>
               )}
+              
+              <Link href="/trends">
+                <Button variant="ghost" size="icon">
+                  <TrendingUp className="h-4 w-4" />
+                </Button>
+              </Link>
               
               <Button variant="ghost" size="icon">
                 <Settings className="h-4 w-4" />
