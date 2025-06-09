@@ -7,7 +7,8 @@ import AIInsights from "@/components/AIInsights";
 import VoiceRecordingModal from "@/components/VoiceRecordingModal";
 import CustomizeScoresModal from "@/components/CustomizeScoresModal";
 import { Button } from "@/components/ui/button";
-import { Settings, Plus, Flame, User } from "lucide-react";
+import { Settings, Plus, Flame, User, TrendingUp } from "lucide-react";
+import { Link } from "wouter";
 
 export default function Dashboard() {
   const [selectedDate, setSelectedDate] = useState<string>(

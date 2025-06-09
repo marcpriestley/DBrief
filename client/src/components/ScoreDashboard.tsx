@@ -106,7 +106,7 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
         {metrics.map((metric) => {
           const score = getScoreForMetric(metric.name);
           const previousScore = getPreviousScoreForMetric(metric.name);
-          const value = score?.value || 0;
+          const value = score?.value ?? 0;
           const percentage = Math.min(100, Math.max(0, value));
 
           return (
