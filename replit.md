@@ -19,11 +19,15 @@ A comprehensive daily journaling app with voice recording, customizable metric t
 - **AI**: OpenAI integration for journal insights and pattern analysis
 
 ## Recent Changes
-- **2025-06-30**: Fixed score persistence logic - scores now remain visible in circles after input
-- **2025-06-30**: Created comprehensive trends visualization with multiple chart types
-- **2025-06-30**: Added navigation between dashboard and trends pages
-- **2025-06-30**: Implemented health tracker metrics (Steps) in default storage setup
-- **2025-06-30**: Switched back to MemStorage due to database connection issues
+- **2025-06-30**: Fixed score persistence logic - scores now remain blank until inputted, then persist until next day
+- **2025-06-30**: Enhanced trends page with comprehensive analytics dashboard featuring:
+  - Multiple chart types: Line, Area, Bar, and Heat Map visualizations
+  - Extended time ranges: 1 Week to 1 Year analysis
+  - Statistical insights: averages, trends, consistency metrics, and goal progress
+  - Interactive metric selection and weekly/monthly comparisons
+- **2025-06-30**: Improved calendar integration to display scores alongside journal entries
+- **2025-06-30**: Enhanced health tracker integration with auto-sync indicators
+- **2025-06-30**: Fixed score circle display to show blank state correctly before input
 
 ## Features Implemented
 - ✅ Voice recording with speech-to-text transcription

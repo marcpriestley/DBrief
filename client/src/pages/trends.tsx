@@ -1,10 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, Area, AreaChart } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CalendarDays, TrendingUp, Target, Activity, ArrowLeft } from "lucide-react";
+import { CalendarDays, TrendingUp, Target, Activity, ArrowLeft, BarChart3, LineChart as LineChartIcon, PieChart } from "lucide-react";
 import { Link } from "wouter";
 import type { DailyScore, UserMetric } from "@shared/schema";
 
@@ -13,9 +13,10 @@ interface TrendData {
   [key: string]: string | number;
 }
 
-export default function Trends() {
+export default function TrendsEnhanced() {
   const [timeRange, setTimeRange] = useState<string>("30");
   const [selectedMetrics, setSelectedMetrics] = useState<string[]>([]);
+  const [chartType, setChartType] = useState<string>("line");
 
   const { data: metrics = [] } = useQuery<UserMetric[]>({
     queryKey: ["/api/user-metrics"],
@@ -42,7 +43,7 @@ export default function Trends() {
       
       metrics.forEach(metric => {
         const score = allScores.find(s => s.date === date && s.metricName === metric.name);
-        dayData[metric.name] = score?.value ?? 0;
+        dayData[metric.name] = score?.value || 0;
       });
       
       return dayData;
@@ -52,30 +53,118 @@ export default function Trends() {
   };
 
   const chartData = processedData();
+  const displayMetrics = selectedMetrics.length > 0 
+    ? metrics.filter(m => selectedMetrics.includes(m.name))
+    : metrics.slice(0, 3); // Show first 3 by default
 
   // Calculate statistics
   const getMetricStats = (metricName: string) => {
-    const values = allScores
-      .filter(score => score.metricName === metricName && score.value > 0)
-      .map(score => score.value);
+    const scores = allScores.filter(s => s.metricName === metricName);
+    if (scores.length === 0) return { avg: 0, trend: 0, best: 0, consistency: 0 };
     
-    if (values.length === 0) return { avg: 0, min: 0, max: 0, trend: 0 };
-
-    const avg = values.reduce((sum, val) => sum + val, 0) / values.length;
-    const min = Math.min(...values);
-    const max = Math.max(...values);
+    const values = scores.map(s => s.value);
+    const avg = values.reduce((a, b) => a + b, 0) / values.length;
+    const best = Math.max(...values);
     
-    // Simple trend calculation (last 7 days vs previous 7 days)
+    // Simple trend calculation (last week vs previous week)
     const recent = values.slice(-7);
     const previous = values.slice(-14, -7);
-    const recentAvg = recent.length > 0 ? recent.reduce((sum, val) => sum + val, 0) / recent.length : 0;
-    const previousAvg = previous.length > 0 ? previous.reduce((sum, val) => sum + val, 0) / previous.length : 0;
+    const recentAvg = recent.length > 0 ? recent.reduce((a, b) => a + b, 0) / recent.length : 0;
+    const previousAvg = previous.length > 0 ? previous.reduce((a, b) => a + b, 0) / previous.length : 0;
     const trend = recentAvg - previousAvg;
-
-    return { avg: Math.round(avg), min, max, trend: Math.round(trend) };
+    
+    // Consistency (inverse of standard deviation)
+    const variance = values.reduce((sum, val) => sum + Math.pow(val - avg, 2), 0) / values.length;
+    const consistency = Math.max(0, 100 - Math.sqrt(variance));
+    
+    return { avg, trend, best, consistency };
   };
 
-  const activeMetrics = selectedMetrics.length > 0 ? metrics.filter(m => selectedMetrics.includes(m.name)) : metrics.slice(0, 4);
+  const formatTimeRange = (range: string) => {
+    const days = parseInt(range);
+    if (days === 7) return "1 Week";
+    if (days === 14) return "2 Weeks"; 
+    if (days === 30) return "1 Month";
+    if (days === 90) return "3 Months";
+    if (days === 180) return "6 Months";
+    if (days === 365) return "1 Year";
+    return `${days} Days`;
+  };
+
+  const renderChart = () => {
+    const commonXAxis = (
+      <XAxis 
+        dataKey="date" 
+        tick={{ fontSize: 12 }}
+        tickFormatter={(value) => {
+          const date = new Date(value);
+          return `${date.getMonth() + 1}/${date.getDate()}`;
+        }}
+      />
+    );
+
+    const commonProps = (
+      <>
+        <CartesianGrid strokeDasharray="3 3" />
+        {commonXAxis}
+        <YAxis />
+        <Tooltip labelFormatter={(value) => new Date(value).toLocaleDateString()} />
+        <Legend />
+      </>
+    );
+
+    if (chartType === "line") {
+      return (
+        <LineChart data={chartData}>
+          {commonProps}
+          {displayMetrics.map((metric) => (
+            <Line
+              key={metric.name}
+              type="monotone"
+              dataKey={metric.name}
+              stroke={metric.color}
+              strokeWidth={3}
+              dot={{ fill: metric.color, strokeWidth: 2, r: 5 }}
+              connectNulls={false}
+            />
+          ))}
+        </LineChart>
+      );
+    }
+
+    if (chartType === "area") {
+      return (
+        <AreaChart data={chartData}>
+          {commonProps}
+          {displayMetrics.map((metric) => (
+            <Area
+              key={metric.name}
+              type="monotone"
+              dataKey={metric.name}
+              stroke={metric.color}
+              fill={metric.color}
+              fillOpacity={0.6}
+              strokeWidth={2}
+            />
+          ))}
+        </AreaChart>
+      );
+    }
+
+    return (
+      <BarChart data={chartData}>
+        {commonProps}
+        {displayMetrics.map((metric) => (
+          <Bar
+            key={metric.name}
+            dataKey={metric.name}
+            fill={metric.color}
+            radius={[4, 4, 0, 0]}
+          />
+        ))}
+      </BarChart>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -92,7 +181,7 @@ export default function Trends() {
               <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
                 <span className="text-white text-sm font-semibold">D</span>
               </div>
-              <h1 className="text-xl font-semibold text-gray-900">DBrief - Trends</h1>
+              <h1 className="text-xl font-semibold text-gray-900">DBrief - Analytics Dashboard</h1>
             </div>
             
             <div className="flex items-center space-x-4">
@@ -101,10 +190,24 @@ export default function Trends() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="7">7 days</SelectItem>
-                  <SelectItem value="14">14 days</SelectItem>
-                  <SelectItem value="30">30 days</SelectItem>
-                  <SelectItem value="90">90 days</SelectItem>
+                  <SelectItem value="7">1 Week</SelectItem>
+                  <SelectItem value="14">2 Weeks</SelectItem>
+                  <SelectItem value="30">1 Month</SelectItem>
+                  <SelectItem value="90">3 Months</SelectItem>
+                  <SelectItem value="180">6 Months</SelectItem>
+                  <SelectItem value="365">1 Year</SelectItem>
+                </SelectContent>
+              </Select>
+              
+              <Select value={chartType} onValueChange={setChartType}>
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="line">Line Chart</SelectItem>
+                  <SelectItem value="area">Area Chart</SelectItem>
+                  <SelectItem value="bar">Bar Chart</SelectItem>
+                  <SelectItem value="heatmap">Heat Map</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -117,25 +220,37 @@ export default function Trends() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {metrics.slice(0, 4).map((metric) => {
             const stats = getMetricStats(metric.name);
+            
             return (
               <Card key={metric.id}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">{metric.name}</CardTitle>
-                  <div 
-                    className="w-4 h-4 rounded-full"
-                    style={{ backgroundColor: metric.color }}
-                  />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{stats.avg}</div>
-                  <div className="flex items-center text-xs text-muted-foreground">
-                    <TrendingUp className="mr-1 h-3 w-3" />
-                    <span className={stats.trend >= 0 ? "text-green-600" : "text-red-600"}>
-                      {stats.trend >= 0 ? "+" : ""}{stats.trend} vs last week
-                    </span>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">{metric.name}</p>
+                      <p className="text-2xl font-bold text-gray-900">{stats.avg.toFixed(1)}</p>
+                    </div>
+                    <div 
+                      className="w-12 h-12 rounded-full flex items-center justify-center"
+                      style={{ backgroundColor: `${metric.color}20`, color: metric.color }}
+                    >
+                      <TrendingUp className="h-6 w-6" />
+                    </div>
                   </div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    Range: {stats.min} - {stats.max}
+                  <div className="mt-4 space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">Best Score</span>
+                      <span className="font-medium">{stats.best}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">Trend</span>
+                      <span className={`font-medium ${stats.trend >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {stats.trend >= 0 ? '+' : ''}{stats.trend.toFixed(1)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">Consistency</span>
+                      <span className="font-medium">{stats.consistency.toFixed(1)}%</span>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -145,13 +260,8 @@ export default function Trends() {
 
         {/* Metric Selection */}
         <Card className="mb-8">
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Target className="mr-2 h-5 w-5" />
-              Select Metrics to Display
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+          <CardContent className="p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Select Metrics to Display</h3>
             <div className="flex flex-wrap gap-2">
               {metrics.map((metric) => (
                 <Button
@@ -186,124 +296,97 @@ export default function Trends() {
           </CardContent>
         </Card>
 
-        {/* Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Line Chart */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Activity className="mr-2 h-5 w-5" />
-                Trend Over Time
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="date" 
-                    tick={{ fontSize: 12 }}
-                    tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                  />
-                  <YAxis domain={[0, 100]} />
-                  <Tooltip 
-                    labelFormatter={(value) => new Date(value).toLocaleDateString()}
-                    formatter={(value: any, name: string) => [value || 'No data', name]}
-                  />
-                  <Legend />
-                  {activeMetrics.map((metric) => (
-                    <Line
-                      key={metric.id}
-                      type="monotone"
-                      dataKey={metric.name}
-                      stroke={metric.color}
-                      strokeWidth={2}
-                      dot={{ fill: metric.color, strokeWidth: 2, r: 4 }}
-                      connectNulls={false}
-                    />
-                  ))}
-                </LineChart>
+        {/* Main Chart */}
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              {chartType === "line" ? <LineChartIcon className="mr-2 h-5 w-5" /> :
+               chartType === "area" ? <Activity className="mr-2 h-5 w-5" /> :
+               chartType === "bar" ? <BarChart3 className="mr-2 h-5 w-5" /> : 
+               <PieChart className="mr-2 h-5 w-5" />}
+              {chartType === "line" ? `Trends Over ${formatTimeRange(timeRange)}` :
+               chartType === "area" ? `Progress Areas - ${formatTimeRange(timeRange)}` :
+               chartType === "bar" ? `Score Comparison - ${formatTimeRange(timeRange)}` : 
+               `Activity Heat Map - ${formatTimeRange(timeRange)}`}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {chartType === "heatmap" ? (
+              <div className="space-y-4">
+                <p className="text-sm text-gray-600 text-center">
+                  Heat map showing activity intensity over the selected time period
+                </p>
+                <div className="grid grid-cols-7 gap-2 max-w-lg mx-auto">
+                  {chartData.slice(-49).map((day, index) => {
+                    const avgScore = displayMetrics.length > 0 
+                      ? displayMetrics.reduce((sum, metric) => sum + (day[metric.name] as number || 0), 0) / displayMetrics.length
+                      : 0;
+                    const intensity = avgScore / 100;
+                    
+                    return (
+                      <div
+                        key={index}
+                        className="w-8 h-8 rounded border cursor-pointer transition-all hover:scale-110"
+                        style={{
+                          backgroundColor: `rgba(34, 197, 94, ${intensity})`,
+                          borderColor: intensity > 0.3 ? '#22c55e' : '#e5e7eb'
+                        }}
+                        title={`${new Date(day.date).toLocaleDateString()}: Avg ${avgScore.toFixed(1)}`}
+                      />
+                    );
+                  })}
+                </div>
+                <div className="flex items-center justify-between text-xs text-gray-500 max-w-lg mx-auto">
+                  <span>Less active</span>
+                  <span>More active</span>
+                </div>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={400}>
+                {renderChart()}
               </ResponsiveContainer>
-            </CardContent>
-          </Card>
+            )}
+          </CardContent>
+        </Card>
 
-          {/* Area Chart */}
+        {/* Weekly Summary */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center">
                 <CalendarDays className="mr-2 h-5 w-5" />
-                Daily Patterns
+                Weekly Averages
               </CardTitle>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
-                <AreaChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="date" 
-                    tick={{ fontSize: 12 }}
-                    tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                  />
-                  <YAxis domain={[0, 100]} />
-                  <Tooltip 
-                    labelFormatter={(value) => new Date(value).toLocaleDateString()}
-                    formatter={(value: any, name: string) => [value || 'No data', name]}
-                  />
-                  <Legend />
-                  {activeMetrics.slice(0, 2).map((metric, index) => (
-                    <Area
-                      key={metric.id}
-                      type="monotone"
-                      dataKey={metric.name}
-                      stackId={index === 0 ? "1" : "2"}
-                      stroke={metric.color}
-                      fill={metric.color}
-                      fillOpacity={0.3}
-                    />
-                  ))}
-                </AreaChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          {/* Bar Chart - Weekly Averages */}
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle>Weekly Averages</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
                 <BarChart 
-                  data={chartData.filter((_, index) => index % 7 === 0).map(item => {
-                    const weekData = { ...item };
-                    // Calculate weekly averages
-                    metrics.forEach(metric => {
-                      const weekValues = chartData
-                        .slice(chartData.indexOf(item), chartData.indexOf(item) + 7)
-                        .map(d => d[metric.name] as number)
-                        .filter(v => v && v > 0);
+                  data={(() => {
+                    const weeklyData = [];
+                    for (let i = 0; i < Math.min(4, Math.floor(chartData.length / 7)); i++) {
+                      const week = chartData.slice(i * 7, (i + 1) * 7);
+                      const weekData: any = { week: `Week ${i + 1}` };
                       
-                      weekData[metric.name] = weekValues.length > 0 
-                        ? Math.round(weekValues.reduce((sum, val) => sum + val, 0) / weekValues.length)
-                        : 0;
-                    });
-                    return weekData;
-                  })}
+                      displayMetrics.forEach(metric => {
+                        const values = week.map(day => day[metric.name] as number).filter(v => v > 0);
+                        weekData[metric.name] = values.length > 0 
+                          ? values.reduce((a, b) => a + b, 0) / values.length 
+                          : 0;
+                      });
+                      
+                      weeklyData.push(weekData);
+                    }
+                    return weeklyData;
+                  })()}
                 >
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="date" 
-                    tick={{ fontSize: 12 }}
-                    tickFormatter={(value) => `Week of ${new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
-                  />
-                  <YAxis domain={[0, 100]} />
-                  <Tooltip 
-                    labelFormatter={(value) => `Week of ${new Date(value).toLocaleDateString()}`}
-                  />
+                  <XAxis dataKey="week" />
+                  <YAxis />
+                  <Tooltip />
                   <Legend />
-                  {activeMetrics.map((metric) => (
+                  {displayMetrics.map((metric) => (
                     <Bar
-                      key={metric.id}
+                      key={metric.name}
                       dataKey={metric.name}
                       fill={metric.color}
                       radius={[4, 4, 0, 0]}
@@ -313,52 +396,44 @@ export default function Trends() {
               </ResponsiveContainer>
             </CardContent>
           </Card>
-        </div>
 
-        {/* Insights */}
-        <Card className="mt-8">
-          <CardHeader>
-            <CardTitle>Key Insights</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {metrics.slice(0, 3).map((metric) => {
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Target className="mr-2 h-5 w-5" />
+                Goal Progress
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {displayMetrics.map((metric) => {
                 const stats = getMetricStats(metric.name);
-                const recentScores = allScores
-                  .filter(score => score.metricName === metric.name)
-                  .slice(-7)
-                  .map(s => s.value);
+                const goal = 80; // Example goal
+                const progress = (stats.avg / goal) * 100;
                 
-                const consistency = recentScores.length > 1 
-                  ? 100 - (Math.max(...recentScores) - Math.min(...recentScores))
-                  : 0;
-
                 return (
-                  <div key={metric.id} className="p-4 bg-gray-50 rounded-lg">
-                    <div className="flex items-center space-x-2 mb-2">
-                      <div 
-                        className="w-3 h-3 rounded-full"
-                        style={{ backgroundColor: metric.color }}
-                      />
-                      <h4 className="font-medium">{metric.name}</h4>
+                  <div key={metric.name} className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="font-medium">{metric.name}</span>
+                      <span className="text-gray-500">{stats.avg.toFixed(1)}/{goal}</span>
                     </div>
-                    <p className="text-sm text-gray-600 mb-1">
-                      Average: <span className="font-medium">{stats.avg}/100</span>
-                    </p>
-                    <p className="text-sm text-gray-600 mb-1">
-                      Consistency: <span className="font-medium">{Math.round(consistency)}%</span>
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      Trend: <span className={`font-medium ${stats.trend >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {stats.trend >= 0 ? 'Improving' : 'Declining'}
-                      </span>
-                    </p>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className="h-2 rounded-full transition-all duration-300"
+                        style={{
+                          width: `${Math.min(100, progress)}%`,
+                          backgroundColor: metric.color
+                        }}
+                      />
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {progress >= 100 ? "Goal achieved!" : `${(100 - progress).toFixed(1)}% to goal`}
+                    </div>
                   </div>
                 );
               })}
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
       </main>
     </div>
   );

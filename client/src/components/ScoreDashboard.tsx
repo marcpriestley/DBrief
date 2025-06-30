@@ -66,7 +66,8 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
     return previousScores.find(score => score.metricName === metricName);
   }
 
-  function getTrendText(current: number, previous?: number): string {
+  function getTrendText(current: number | undefined, previous?: number): string {
+    if (current === undefined) return "Tap to add";
     if (previous === undefined) return "No previous data";
     const diff = current - previous;
     if (diff > 0) return `+${diff} from yesterday`;
@@ -106,8 +107,9 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
         {metrics.map((metric) => {
           const score = getScoreForMetric(metric.name);
           const previousScore = getPreviousScoreForMetric(metric.name);
-          const value = score?.value ?? 0;
-          const percentage = Math.min(100, Math.max(0, value));
+          const value = score?.value;
+          const displayValue = value !== undefined ? value : "";
+          const percentage = value !== undefined ? Math.min(100, Math.max(0, value)) : 0;
 
           return (
             <div 
@@ -124,7 +126,7 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
                 />
                 <div className="absolute inset-0 flex items-center justify-center">
                   <span className="text-lg font-semibold text-gray-900">
-                    {value}
+                    {displayValue}
                   </span>
                 </div>
               </div>
