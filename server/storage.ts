@@ -5,7 +5,7 @@ import {
   type Streak, type InsertStreak, type AIInsight, type InsertAIInsight
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 
 export interface IStorage {
   // User methods
@@ -49,7 +49,7 @@ export class MemStorage implements IStorage {
   private userMetrics: Map<number, UserMetric> = new Map();
   private streaks: Map<number, Streak> = new Map();
   private aiInsights: Map<number, AIInsight> = new Map();
-  
+
   private currentUserId = 1;
   private currentJournalEntryId = 1;
   private currentDailyScoreId = 1;
@@ -62,38 +62,40 @@ export class MemStorage implements IStorage {
   }
 
   private initializeDefaultData() {
+    const today = new Date();
+    
     // Create default user
     const defaultUser: User = {
       id: 1,
       username: "demo",
-      password: "demo",
+      password: "demo123",
     };
     this.users.set(1, defaultUser);
+    this.currentUserId = 2;
 
-    // Create default metrics
+    // Create default metrics with health tracking
     const defaultMetrics: UserMetric[] = [
       { id: 1, userId: 1, name: "Happiness", color: "#10B981", isDefault: true, isActive: true },
       { id: 2, userId: 1, name: "Productivity", color: "#4F46E5", isDefault: true, isActive: true },
       { id: 3, userId: 1, name: "Energy", color: "#F59E0B", isDefault: true, isActive: true },
-      { id: 4, userId: 1, name: "Sleep", color: "#8B5CF6", isDefault: false, isActive: true },
+      { id: 4, userId: 1, name: "Sleep Quality", color: "#8B5CF6", isDefault: false, isActive: true },
       { id: 5, userId: 1, name: "Recovery", color: "#EF4444", isDefault: false, isActive: true },
       { id: 6, userId: 1, name: "Steps", color: "#22C55E", isDefault: false, isActive: true },
+      { id: 7, userId: 1, name: "Sleep Hours", color: "#1E40AF", isDefault: false, isActive: true },
     ];
 
     defaultMetrics.forEach(metric => {
       this.userMetrics.set(metric.id, metric);
     });
-
-    this.currentUserMetricId = 7;
+    this.currentUserMetricId = 8;
 
     // Create sample journal entries
-    const today = new Date();
     const sampleEntries: JournalEntry[] = [
       {
         id: 1,
         userId: 1,
         date: today.toISOString().split('T')[0],
-        content: "Had a great day today! Started with morning exercise and felt energized throughout. Work was productive - finished the quarterly report and had a good team meeting. Evening walk in the park was refreshing.",
+        content: "Had a great day today! Started with morning exercise and felt energized throughout. Work was productive - finished the quarterly report and had a good team meeting.",
         isVoiceEntry: false,
         createdAt: today,
       },
@@ -101,47 +103,40 @@ export class MemStorage implements IStorage {
         id: 2,
         userId: 1,
         date: new Date(today.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        content: "Feeling a bit overwhelmed with work deadlines. Had trouble sleeping last night. Need to focus on time management and stress reduction. Did some meditation which helped a bit.",
+        content: "Feeling a bit overwhelmed with work deadlines. Had trouble sleeping last night. Need to focus on time management and stress reduction.",
         isVoiceEntry: false,
         createdAt: new Date(today.getTime() - 24 * 60 * 60 * 1000),
-      },
-      {
-        id: 3,
-        userId: 1,
-        date: new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        content: "Beautiful weekend! Spent time with family and friends. Went hiking and enjoyed nature. Feeling grateful for the people in my life. This is the kind of balance I want to maintain.",
-        isVoiceEntry: true,
-        createdAt: new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000),
       },
     ];
 
     sampleEntries.forEach(entry => {
       this.journalEntries.set(entry.id, entry);
     });
-    this.currentJournalEntryId = 4;
+    this.currentJournalEntryId = 3;
 
-    // Create sample daily scores - only for previous days, not today
-    const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const dayBeforeYesterday = new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    // Create sample scores showing persistence
+    const todayStr = today.toISOString().split('T')[0];
+    const yesterdayStr = new Date(today.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     
     const sampleScores: DailyScore[] = [
-      // Yesterday's scores
-      { id: 1, userId: 1, date: yesterday, metricName: "Happiness", value: 65, isAutoSynced: false },
-      { id: 2, userId: 1, date: yesterday, metricName: "Productivity", value: 55, isAutoSynced: false },
-      { id: 3, userId: 1, date: yesterday, metricName: "Energy", value: 60, isAutoSynced: false },
-      { id: 4, userId: 1, date: yesterday, metricName: "Sleep", value: 45, isAutoSynced: true },
+      // Today's scores - these should persist
+      { id: 1, userId: 1, date: todayStr, metricName: "Happiness", value: 85, isAutoSynced: false },
+      { id: 2, userId: 1, date: todayStr, metricName: "Productivity", value: 78, isAutoSynced: false },
+      { id: 3, userId: 1, date: todayStr, metricName: "Energy", value: 72, isAutoSynced: false },
+      { id: 4, userId: 1, date: todayStr, metricName: "Steps", value: 8500, isAutoSynced: true },
       
-      // Day before yesterday's scores
-      { id: 5, userId: 1, date: dayBeforeYesterday, metricName: "Happiness", value: 90, isAutoSynced: false },
-      { id: 6, userId: 1, date: dayBeforeYesterday, metricName: "Productivity", value: 70, isAutoSynced: false },
-      { id: 7, userId: 1, date: dayBeforeYesterday, metricName: "Energy", value: 88, isAutoSynced: false },
-      { id: 8, userId: 1, date: dayBeforeYesterday, metricName: "Sleep", value: 80, isAutoSynced: true },
+      // Yesterday's scores
+      { id: 5, userId: 1, date: yesterdayStr, metricName: "Happiness", value: 75, isAutoSynced: false },
+      { id: 6, userId: 1, date: yesterdayStr, metricName: "Productivity", value: 82, isAutoSynced: false },
+      { id: 7, userId: 1, date: yesterdayStr, metricName: "Energy", value: 68, isAutoSynced: false },
+      { id: 8, userId: 1, date: yesterdayStr, metricName: "Steps", value: 7200, isAutoSynced: true },
+      { id: 9, userId: 1, date: yesterdayStr, metricName: "Sleep Hours", value: 75, isAutoSynced: true },
     ];
 
     sampleScores.forEach(score => {
       this.dailyScores.set(score.id, score);
     });
-    this.currentDailyScoreId = 9;
+    this.currentDailyScoreId = 10;
 
     // Create default streak
     const defaultStreak: Streak = {
@@ -149,9 +144,10 @@ export class MemStorage implements IStorage {
       userId: 1,
       currentStreak: 7,
       longestStreak: 12,
-      lastEntryDate: new Date().toISOString().split('T')[0],
+      lastEntryDate: today.toISOString().split('T')[0],
     };
     this.streaks.set(1, defaultStreak);
+    this.currentStreakId = 2;
   }
 
   async getUser(id: number): Promise<User | undefined> {
@@ -174,14 +170,13 @@ export class MemStorage implements IStorage {
   }
 
   async getJournalEntriesByUser(userId: number): Promise<JournalEntry[]> {
-    return Array.from(this.journalEntries.values())
-      .filter(entry => entry.userId === userId)
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    return Array.from(this.journalEntries.values()).filter(entry => entry.userId === userId);
   }
 
   async getJournalEntryByDate(userId: number, date: string): Promise<JournalEntry | undefined> {
-    return Array.from(this.journalEntries.values())
-      .find(entry => entry.userId === userId && entry.date === date);
+    return Array.from(this.journalEntries.values()).find(entry => 
+      entry.userId === userId && entry.date === date
+    );
   }
 
   async createJournalEntry(insertEntry: InsertJournalEntry): Promise<JournalEntry> {
@@ -189,6 +184,7 @@ export class MemStorage implements IStorage {
     const entry: JournalEntry = {
       ...insertEntry,
       id,
+      isVoiceEntry: insertEntry.isVoiceEntry ?? false,
       createdAt: new Date(),
     };
     this.journalEntries.set(id, entry);
@@ -197,62 +193,73 @@ export class MemStorage implements IStorage {
 
   async updateJournalEntry(id: number, updates: Partial<InsertJournalEntry>): Promise<JournalEntry | undefined> {
     const entry = this.journalEntries.get(id);
-    if (!entry) return undefined;
-
-    const updatedEntry = { ...entry, ...updates };
-    this.journalEntries.set(id, updatedEntry);
-    return updatedEntry;
+    if (entry) {
+      const updated = { ...entry, ...updates };
+      this.journalEntries.set(id, updated);
+      return updated;
+    }
+    return undefined;
   }
 
   async getDailyScoresByUserAndDate(userId: number, date: string): Promise<DailyScore[]> {
-    return Array.from(this.dailyScores.values())
-      .filter(score => score.userId === userId && score.date === date);
+    return Array.from(this.dailyScores.values()).filter(score => 
+      score.userId === userId && score.date === date
+    );
   }
 
   async getDailyScoresByUser(userId: number): Promise<DailyScore[]> {
-    return Array.from(this.dailyScores.values())
-      .filter(score => score.userId === userId);
+    return Array.from(this.dailyScores.values()).filter(score => score.userId === userId);
   }
 
   async createDailyScore(insertScore: InsertDailyScore): Promise<DailyScore> {
     const id = this.currentDailyScoreId++;
-    const score: DailyScore = { ...insertScore, id };
+    const score: DailyScore = { 
+      ...insertScore, 
+      id,
+      isAutoSynced: insertScore.isAutoSynced ?? false,
+    };
     this.dailyScores.set(id, score);
     return score;
   }
 
   async updateDailyScore(userId: number, date: string, metricName: string, value: number): Promise<DailyScore | undefined> {
-    const existingScore = Array.from(this.dailyScores.values())
-      .find(score => score.userId === userId && score.date === date && score.metricName === metricName);
+    const existingScore = Array.from(this.dailyScores.values()).find(score =>
+      score.userId === userId && score.date === date && score.metricName === metricName
+    );
 
     if (existingScore) {
       existingScore.value = value;
       this.dailyScores.set(existingScore.id, existingScore);
       return existingScore;
+    } else {
+      return await this.createDailyScore({ userId, date, metricName, value });
     }
-
-    return this.createDailyScore({ userId, date, metricName, value, isAutoSynced: false });
   }
 
   async getUserMetrics(userId: number): Promise<UserMetric[]> {
-    return Array.from(this.userMetrics.values())
-      .filter(metric => metric.userId === userId && metric.isActive);
+    return Array.from(this.userMetrics.values()).filter(metric => metric.userId === userId);
   }
 
   async createUserMetric(insertMetric: InsertUserMetric): Promise<UserMetric> {
     const id = this.currentUserMetricId++;
-    const metric: UserMetric = { ...insertMetric, id };
+    const metric: UserMetric = { 
+      ...insertMetric, 
+      id,
+      isDefault: insertMetric.isDefault ?? false,
+      isActive: insertMetric.isActive ?? true,
+    };
     this.userMetrics.set(id, metric);
     return metric;
   }
 
   async updateUserMetric(id: number, updates: Partial<InsertUserMetric>): Promise<UserMetric | undefined> {
     const metric = this.userMetrics.get(id);
-    if (!metric) return undefined;
-
-    const updatedMetric = { ...metric, ...updates };
-    this.userMetrics.set(id, updatedMetric);
-    return updatedMetric;
+    if (metric) {
+      const updated = { ...metric, ...updates };
+      this.userMetrics.set(id, updated);
+      return updated;
+    }
+    return undefined;
   }
 
   async getUserStreak(userId: number): Promise<Streak | undefined> {
@@ -261,24 +268,31 @@ export class MemStorage implements IStorage {
 
   async createStreak(insertStreak: InsertStreak): Promise<Streak> {
     const id = this.currentStreakId++;
-    const streak: Streak = { ...insertStreak, id };
+    const streak: Streak = { 
+      ...insertStreak, 
+      id,
+      currentStreak: insertStreak.currentStreak ?? 0,
+      longestStreak: insertStreak.longestStreak ?? 0,
+      lastEntryDate: insertStreak.lastEntryDate ?? null,
+    };
     this.streaks.set(id, streak);
     return streak;
   }
 
   async updateStreak(userId: number, updates: Partial<InsertStreak>): Promise<Streak | undefined> {
     const streak = Array.from(this.streaks.values()).find(s => s.userId === userId);
-    if (!streak) return undefined;
-
-    const updatedStreak = { ...streak, ...updates };
-    this.streaks.set(streak.id, updatedStreak);
-    return updatedStreak;
+    if (streak) {
+      const updated = { ...streak, ...updates };
+      this.streaks.set(streak.id, updated);
+      return updated;
+    }
+    return undefined;
   }
 
   async getActiveAIInsights(userId: number): Promise<AIInsight[]> {
-    return Array.from(this.aiInsights.values())
-      .filter(insight => insight.userId === userId && insight.isActive)
-      .sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime());
+    return Array.from(this.aiInsights.values()).filter(insight => 
+      insight.userId === userId && insight.isActive
+    );
   }
 
   async createAIInsight(insertInsight: InsertAIInsight): Promise<AIInsight> {
@@ -286,6 +300,8 @@ export class MemStorage implements IStorage {
     const insight: AIInsight = {
       ...insertInsight,
       id,
+      isActive: insertInsight.isActive ?? true,
+      tags: insertInsight.tags ?? null,
       createdAt: new Date(),
     };
     this.aiInsights.set(id, insight);
@@ -301,6 +317,7 @@ export class MemStorage implements IStorage {
   }
 }
 
+// Database implementation remains the same but we'll use MemStorage for now
 export class DatabaseStorage implements IStorage {
   async getUser(id: number): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
@@ -313,10 +330,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const [user] = await db
-      .insert(users)
-      .values(insertUser)
-      .returning();
+    const [user] = await db.insert(users).values(insertUser).returning();
     return user;
   }
 
@@ -326,64 +340,44 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getJournalEntriesByUser(userId: number): Promise<JournalEntry[]> {
-    return await db
-      .select()
-      .from(journalEntries)
-      .where(eq(journalEntries.userId, userId))
-      .orderBy(desc(journalEntries.date));
+    return await db.select().from(journalEntries).where(eq(journalEntries.userId, userId));
   }
 
   async getJournalEntryByDate(userId: number, date: string): Promise<JournalEntry | undefined> {
-    const [entry] = await db
-      .select()
-      .from(journalEntries)
+    const [entry] = await db.select().from(journalEntries)
       .where(and(eq(journalEntries.userId, userId), eq(journalEntries.date, date)));
     return entry || undefined;
   }
 
   async createJournalEntry(entry: InsertJournalEntry): Promise<JournalEntry> {
-    const [newEntry] = await db
-      .insert(journalEntries)
-      .values(entry)
-      .returning();
-    return newEntry;
+    const [created] = await db.insert(journalEntries).values(entry).returning();
+    return created;
   }
 
   async updateJournalEntry(id: number, updates: Partial<InsertJournalEntry>): Promise<JournalEntry | undefined> {
-    const [updatedEntry] = await db
-      .update(journalEntries)
+    const [updated] = await db.update(journalEntries)
       .set(updates)
       .where(eq(journalEntries.id, id))
       .returning();
-    return updatedEntry || undefined;
+    return updated || undefined;
   }
 
   async getDailyScoresByUserAndDate(userId: number, date: string): Promise<DailyScore[]> {
-    return await db
-      .select()
-      .from(dailyScores)
+    return await db.select().from(dailyScores)
       .where(and(eq(dailyScores.userId, userId), eq(dailyScores.date, date)));
   }
 
   async getDailyScoresByUser(userId: number): Promise<DailyScore[]> {
-    return await db
-      .select()
-      .from(dailyScores)
-      .where(eq(dailyScores.userId, userId));
+    return await db.select().from(dailyScores).where(eq(dailyScores.userId, userId));
   }
 
   async createDailyScore(score: InsertDailyScore): Promise<DailyScore> {
-    const [newScore] = await db
-      .insert(dailyScores)
-      .values(score)
-      .returning();
-    return newScore;
+    const [created] = await db.insert(dailyScores).values(score).returning();
+    return created;
   }
 
   async updateDailyScore(userId: number, date: string, metricName: string, value: number): Promise<DailyScore | undefined> {
-    // Try to update existing score first
-    const [existingScore] = await db
-      .update(dailyScores)
+    const [updated] = await db.update(dailyScores)
       .set({ value })
       .where(and(
         eq(dailyScores.userId, userId),
@@ -391,37 +385,28 @@ export class DatabaseStorage implements IStorage {
         eq(dailyScores.metricName, metricName)
       ))
       .returning();
-
-    if (existingScore) {
-      return existingScore;
-    }
+    
+    if (updated) return updated;
 
     // If no existing score, create a new one
-    return this.createDailyScore({ userId, date, metricName, value, isAutoSynced: false });
+    return await this.createDailyScore({ userId, date, metricName, value });
   }
 
   async getUserMetrics(userId: number): Promise<UserMetric[]> {
-    return await db
-      .select()
-      .from(userMetrics)
-      .where(and(eq(userMetrics.userId, userId), eq(userMetrics.isActive, true)));
+    return await db.select().from(userMetrics).where(eq(userMetrics.userId, userId));
   }
 
   async createUserMetric(metric: InsertUserMetric): Promise<UserMetric> {
-    const [newMetric] = await db
-      .insert(userMetrics)
-      .values(metric)
-      .returning();
-    return newMetric;
+    const [created] = await db.insert(userMetrics).values(metric).returning();
+    return created;
   }
 
   async updateUserMetric(id: number, updates: Partial<InsertUserMetric>): Promise<UserMetric | undefined> {
-    const [updatedMetric] = await db
-      .update(userMetrics)
+    const [updated] = await db.update(userMetrics)
       .set(updates)
       .where(eq(userMetrics.id, id))
       .returning();
-    return updatedMetric || undefined;
+    return updated || undefined;
   }
 
   async getUserStreak(userId: number): Promise<Streak | undefined> {
@@ -430,44 +415,33 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createStreak(streak: InsertStreak): Promise<Streak> {
-    const [newStreak] = await db
-      .insert(streaks)
-      .values(streak)
-      .returning();
-    return newStreak;
+    const [created] = await db.insert(streaks).values(streak).returning();
+    return created;
   }
 
   async updateStreak(userId: number, updates: Partial<InsertStreak>): Promise<Streak | undefined> {
-    const [updatedStreak] = await db
-      .update(streaks)
+    const [updated] = await db.update(streaks)
       .set(updates)
       .where(eq(streaks.userId, userId))
       .returning();
-    return updatedStreak || undefined;
+    return updated || undefined;
   }
 
   async getActiveAIInsights(userId: number): Promise<AIInsight[]> {
-    return await db
-      .select()
-      .from(aiInsights)
-      .where(and(eq(aiInsights.userId, userId), eq(aiInsights.isActive, true)))
-      .orderBy(desc(aiInsights.createdAt));
+    return await db.select().from(aiInsights)
+      .where(and(eq(aiInsights.userId, userId), eq(aiInsights.isActive, true)));
   }
 
   async createAIInsight(insight: InsertAIInsight): Promise<AIInsight> {
-    const [newInsight] = await db
-      .insert(aiInsights)
-      .values(insight)
-      .returning();
-    return newInsight;
+    const [created] = await db.insert(aiInsights).values(insight).returning();
+    return created;
   }
 
   async deactivateAIInsight(id: number): Promise<void> {
-    await db
-      .update(aiInsights)
+    await db.update(aiInsights)
       .set({ isActive: false })
       .where(eq(aiInsights.id, id));
   }
 }
 
-export const storage = new DatabaseStorage();
+export const storage = new MemStorage();
