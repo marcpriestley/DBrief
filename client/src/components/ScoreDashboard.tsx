@@ -24,18 +24,24 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
 
   const { data: scores = [] } = useQuery<DailyScore[]>({
     queryKey: ["/api/daily-scores", selectedDate],
+    queryFn: () => fetch(`/api/daily-scores/${selectedDate}`).then(res => res.json()),
   });
 
   const { data: previousScores = [] } = useQuery<DailyScore[]>({
     queryKey: ["/api/daily-scores", getPreviousDate(selectedDate)],
+    queryFn: () => fetch(`/api/daily-scores/${getPreviousDate(selectedDate)}`).then(res => res.json()),
   });
 
   const updateScoreMutation = useMutation({
     mutationFn: async (data: { date: string; metricName: string; value: number }) => {
       return apiRequest("POST", "/api/daily-scores", data);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/daily-scores"] });
+    onSuccess: (data, variables) => {
+      // Invalidate the specific date query to ensure UI updates
+      queryClient.invalidateQueries({ queryKey: ["/api/daily-scores", variables.date] });
+      // Also invalidate the previous date query for trend calculations
+      queryClient.invalidateQueries({ queryKey: ["/api/daily-scores", getPreviousDate(variables.date)] });
+      
       toast({
         title: "Score updated",
         description: "Your daily score has been saved successfully.",
