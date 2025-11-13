@@ -75,19 +75,20 @@ export class MemStorage implements IStorage {
 
     // Create default metrics with health tracking
     const defaultMetrics: UserMetric[] = [
-      { id: 1, userId: 1, name: "Happiness", color: "#10B981", isDefault: true, isActive: true },
-      { id: 2, userId: 1, name: "Productivity", color: "#4F46E5", isDefault: true, isActive: true },
-      { id: 3, userId: 1, name: "Energy", color: "#F59E0B", isDefault: true, isActive: true },
-      { id: 4, userId: 1, name: "Sleep Quality", color: "#8B5CF6", isDefault: false, isActive: true },
-      { id: 5, userId: 1, name: "Recovery", color: "#EF4444", isDefault: false, isActive: true },
-      { id: 6, userId: 1, name: "Steps", color: "#22C55E", isDefault: false, isActive: true },
-      { id: 7, userId: 1, name: "Sleep Hours", color: "#1E40AF", isDefault: false, isActive: true },
+      { id: 1, userId: 1, name: "Happiness", color: "#10B981", maxValue: 10, isDefault: true, isActive: true },
+      { id: 2, userId: 1, name: "Productivity", color: "#4F46E5", maxValue: 10, isDefault: true, isActive: true },
+      { id: 3, userId: 1, name: "Energy", color: "#F59E0B", maxValue: 10, isDefault: true, isActive: true },
+      { id: 4, userId: 1, name: "Nutrition", color: "#EC4899", maxValue: 10, isDefault: true, isActive: true },
+      { id: 5, userId: 1, name: "Sleep Quality", color: "#8B5CF6", maxValue: 100, isDefault: false, isActive: true },
+      { id: 6, userId: 1, name: "Recovery", color: "#EF4444", maxValue: 100, isDefault: false, isActive: true },
+      { id: 7, userId: 1, name: "Steps", color: "#22C55E", maxValue: 100, isDefault: false, isActive: true },
+      { id: 8, userId: 1, name: "Sleep Hours", color: "#1E40AF", maxValue: 100, isDefault: false, isActive: true },
     ];
 
     defaultMetrics.forEach(metric => {
       this.userMetrics.set(metric.id, metric);
     });
-    this.currentUserMetricId = 8;
+    this.currentUserMetricId = 9;
 
     // Create sample journal entries
     const sampleEntries: JournalEntry[] = [
@@ -120,23 +121,25 @@ export class MemStorage implements IStorage {
     
     const sampleScores: DailyScore[] = [
       // Today's scores - these should persist
-      { id: 1, userId: 1, date: todayStr, metricName: "Happiness", value: 85, isAutoSynced: false },
-      { id: 2, userId: 1, date: todayStr, metricName: "Productivity", value: 78, isAutoSynced: false },
-      { id: 3, userId: 1, date: todayStr, metricName: "Energy", value: 72, isAutoSynced: false },
-      { id: 4, userId: 1, date: todayStr, metricName: "Steps", value: 8500, isAutoSynced: true },
+      { id: 1, userId: 1, date: todayStr, metricName: "Happiness", value: 8, isAutoSynced: false },
+      { id: 2, userId: 1, date: todayStr, metricName: "Productivity", value: 7, isAutoSynced: false },
+      { id: 3, userId: 1, date: todayStr, metricName: "Energy", value: 7, isAutoSynced: false },
+      { id: 4, userId: 1, date: todayStr, metricName: "Nutrition", value: 9, isAutoSynced: false },
+      { id: 5, userId: 1, date: todayStr, metricName: "Steps", value: 8500, isAutoSynced: true },
       
       // Yesterday's scores
-      { id: 5, userId: 1, date: yesterdayStr, metricName: "Happiness", value: 75, isAutoSynced: false },
-      { id: 6, userId: 1, date: yesterdayStr, metricName: "Productivity", value: 82, isAutoSynced: false },
-      { id: 7, userId: 1, date: yesterdayStr, metricName: "Energy", value: 68, isAutoSynced: false },
-      { id: 8, userId: 1, date: yesterdayStr, metricName: "Steps", value: 7200, isAutoSynced: true },
-      { id: 9, userId: 1, date: yesterdayStr, metricName: "Sleep Hours", value: 75, isAutoSynced: true },
+      { id: 6, userId: 1, date: yesterdayStr, metricName: "Happiness", value: 7, isAutoSynced: false },
+      { id: 7, userId: 1, date: yesterdayStr, metricName: "Productivity", value: 8, isAutoSynced: false },
+      { id: 8, userId: 1, date: yesterdayStr, metricName: "Energy", value: 6, isAutoSynced: false },
+      { id: 9, userId: 1, date: yesterdayStr, metricName: "Nutrition", value: 8, isAutoSynced: false },
+      { id: 10, userId: 1, date: yesterdayStr, metricName: "Steps", value: 7200, isAutoSynced: true },
+      { id: 11, userId: 1, date: yesterdayStr, metricName: "Sleep Hours", value: 75, isAutoSynced: true },
     ];
 
     sampleScores.forEach(score => {
       this.dailyScores.set(score.id, score);
     });
-    this.currentDailyScoreId = 10;
+    this.currentDailyScoreId = 12;
 
     // Create default streak
     const defaultStreak: Streak = {
@@ -245,6 +248,7 @@ export class MemStorage implements IStorage {
     const metric: UserMetric = { 
       ...insertMetric, 
       id,
+      maxValue: insertMetric.maxValue ?? 100,
       isDefault: insertMetric.isDefault ?? false,
       isActive: insertMetric.isActive ?? true,
     };

@@ -32,6 +32,7 @@ export const userMetrics = pgTable("user_metrics", {
   userId: integer("user_id").notNull(),
   name: text("name").notNull(),
   color: text("color").notNull(),
+  maxValue: integer("max_value").default(100),
   isDefault: boolean("is_default").default(false),
   isActive: boolean("is_active").default(true),
 });

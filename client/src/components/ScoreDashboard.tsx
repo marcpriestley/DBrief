@@ -91,10 +91,12 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
     if (!selectedMetric) return;
     
     const value = parseInt(scoreValue);
-    if (isNaN(value) || value < 0 || value > 100) {
+    const maxValue = selectedMetric.maxValue || 100;
+    
+    if (isNaN(value) || value < 0 || value > maxValue) {
       toast({
         title: "Invalid score",
-        description: "Please enter a score between 0 and 100.",
+        description: `Please enter a score between 0 and ${maxValue}.`,
         variant: "destructive",
       });
       return;
@@ -115,7 +117,8 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
           const previousScore = getPreviousScoreForMetric(metric.name);
           const value = score?.value;
           const displayValue = value !== undefined ? value : "";
-          const percentage = value !== undefined ? Math.min(100, Math.max(0, value)) : 0;
+          const maxValue = metric.maxValue || 100;
+          const percentage = value !== undefined ? Math.min(100, Math.max(0, (value / maxValue) * 100)) : 0;
 
           return (
             <div 
@@ -151,7 +154,7 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
           <DialogHeader>
             <DialogTitle>Update {selectedMetric?.name} Score</DialogTitle>
             <DialogDescription>
-              Enter a score from 0 to 100 for {selectedMetric?.name} on the selected date.
+              Enter a score from 0 to {selectedMetric?.maxValue || 100} for {selectedMetric?.name} on the selected date.
             </DialogDescription>
           </DialogHeader>
           
@@ -161,7 +164,7 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
                 className="w-20 h-20 mx-auto mb-4 rounded-full"
                 style={{
                   background: selectedMetric 
-                    ? `conic-gradient(from 0deg, ${selectedMetric.color} ${Math.min(100, Math.max(0, parseInt(scoreValue) || 0))}%, #E5E7EB ${Math.min(100, Math.max(0, parseInt(scoreValue) || 0))}%)`
+                    ? `conic-gradient(from 0deg, ${selectedMetric.color} ${Math.min(100, Math.max(0, ((parseInt(scoreValue) || 0) / (selectedMetric.maxValue || 100)) * 100))}%, #E5E7EB ${Math.min(100, Math.max(0, ((parseInt(scoreValue) || 0) / (selectedMetric.maxValue || 100)) * 100))}%)`
                     : '#E5E7EB'
                 }}
               >
@@ -174,15 +177,15 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
             </div>
             
             <div>
-              <Label htmlFor="score">Score (0-100)</Label>
+              <Label htmlFor="score">Score (0-{selectedMetric?.maxValue || 100})</Label>
               <Input
                 id="score"
                 type="number"
                 min="0"
-                max="100"
+                max={selectedMetric?.maxValue || 100}
                 value={scoreValue}
                 onChange={(e) => setScoreValue(e.target.value)}
-                placeholder="Enter score from 0 to 100"
+                placeholder={`Enter score from 0 to ${selectedMetric?.maxValue || 100}`}
                 className="mt-1"
               />
             </div>
