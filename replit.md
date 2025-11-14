@@ -23,6 +23,10 @@ A comprehensive daily journaling app with voice recording, customizable metric t
 - **Health Tracking**: Oura Ring API integration for automatic health metrics syncing
 
 ## Recent Changes
+- **2025-11-14**: Fixed calendar scrolling, long-press duration, and journal persistence:
+  - Fixed calendar scroll issue by removing `touch-none` class (allows scrolling while preventing highlight)
+  - Reduced long-press duration by 35% from 3 seconds to 1.95 seconds (~2 seconds)
+  - Fixed journal entries to persist in textarea after saving (immediate state update in onSuccess)
 - **2025-11-14**: Removed Steps metric and fixed journal/calendar UX issues:
   - Completely removed Steps metric from application (no longer tracking or syncing)
   - Fixed calendar long-press to prevent browser highlight box (added CSS to prevent text selection and tap highlight)
@@ -102,8 +106,9 @@ A comprehensive daily journaling app with voice recording, customizable metric t
 - **Error Handling**: Gracefully handles missing Oura data with informative error messages
 - **Metric History**: GET /api/metric-history/:metricName?days=14 endpoint for trend graphs
 - **Long-Press**: 
-  - Ref-based timer management with per-date timeout tracking to avoid memory leaks (3 second delay)
-  - CSS prevents highlight box: select-none, touch-none, webkit-tap-highlight-color: transparent
+  - Ref-based timer management with per-date timeout tracking to avoid memory leaks (1.95 second delay - reduced by 35%)
+  - CSS prevents highlight box: select-none (NOT touch-none to allow scrolling), webkit-tap-highlight-color: transparent
+  - Calendar remains scrollable while preventing text selection highlight
 - **Trend Dialog**: Two-mode dialog (trend/edit) with proper state management and query invalidation
 - **Journal Timestamps**: 
   - Automatic timestamping for all new entries, appending behavior for today's entries only
@@ -114,8 +119,9 @@ A comprehensive daily journaling app with voice recording, customizable metric t
   - Voice modal: query enabled only when open to optimize performance
 - **Journal Persistence**:
   - Mutations invalidate both list and specific date queries
+  - onSuccess callback immediately updates content and initialContent state
   - useEffect updates textarea content when currentEntry changes
-  - Saved content remains visible after save operation
+  - Saved content remains visible after save operation with no delay
 
 ## Next Steps
 - Monitor Oura API rate limits and optimize sync frequency
