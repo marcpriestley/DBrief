@@ -24,7 +24,6 @@ async function seed() {
     { userId, name: "Nutrition", color: "#EC4899", maxValue: 10, isDefault: true, isActive: true },
     { userId, name: "Sleep Quality", color: "#8B5CF6", maxValue: 100, isDefault: false, isActive: true },
     { userId, name: "Readiness", color: "#EF4444", maxValue: 100, isDefault: false, isActive: true },
-    { userId, name: "Steps", color: "#22C55E", maxValue: 50000, isDefault: false, isActive: true },
   ];
 
   await db

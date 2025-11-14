@@ -255,11 +255,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         updatedScores.push(readiness);
       }
       
-      if (ouraData.steps !== undefined) {
-        const steps = await storage.updateDailyScore(userId, date, "Steps", ouraData.steps, true);
-        updatedScores.push(steps);
-      }
-      
       res.json({ success: true, data: ouraData, updatedScores });
     } catch (error) {
       console.error("Oura sync error:", error);

@@ -82,13 +82,12 @@ export class MemStorage implements IStorage {
       { id: 4, userId: 1, name: "Nutrition", color: "#EC4899", maxValue: 10, isDefault: true, isActive: true },
       { id: 5, userId: 1, name: "Sleep Quality", color: "#8B5CF6", maxValue: 100, isDefault: false, isActive: true },
       { id: 6, userId: 1, name: "Readiness", color: "#EF4444", maxValue: 100, isDefault: false, isActive: true },
-      { id: 7, userId: 1, name: "Steps", color: "#22C55E", maxValue: 50000, isDefault: false, isActive: true },
     ];
 
     defaultMetrics.forEach(metric => {
       this.userMetrics.set(metric.id, metric);
     });
-    this.currentUserMetricId = 8;
+    this.currentUserMetricId = 7;
 
     // Create sample journal entries
     const sampleEntries: JournalEntry[] = [
