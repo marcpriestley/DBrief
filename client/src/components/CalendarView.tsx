@@ -2,9 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { useState } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { useState, useRef, useEffect } from "react";
 import { getCalendarDays, formatDate } from "@/lib/dateUtils";
-import type { JournalEntry } from "@shared/schema";
+import type { JournalEntry, DailyScore, UserMetric } from "@shared/schema";
 
 interface CalendarViewProps {
   selectedDate: string;
@@ -13,9 +14,27 @@ interface CalendarViewProps {
 
 export default function CalendarView({ selectedDate, onDateSelect }: CalendarViewProps) {
   const [currentMonth, setCurrentMonth] = useState(new Date(selectedDate));
+  const [longPressDate, setLongPressDate] = useState<string | null>(null);
+  const pressTimers = useRef<Record<string, NodeJS.Timeout>>({});
 
   const { data: journalEntries = [] } = useQuery<JournalEntry[]>({
     queryKey: ["/api/journal-entries"],
+  });
+
+  const { data: longPressEntry } = useQuery<JournalEntry | null>({
+    queryKey: ["/api/journal-entries", longPressDate],
+    queryFn: () => fetch(`/api/journal-entries/${longPressDate}`).then(res => res.json()),
+    enabled: !!longPressDate,
+  });
+
+  const { data: longPressScores = [] } = useQuery<DailyScore[]>({
+    queryKey: ["/api/daily-scores", longPressDate],
+    queryFn: () => fetch(`/api/daily-scores/${longPressDate}`).then(res => res.json()),
+    enabled: !!longPressDate,
+  });
+
+  const { data: metrics = [] } = useQuery<UserMetric[]>({
+    queryKey: ["/api/user-metrics"],
   });
 
   const calendarDays = getCalendarDays(currentMonth);
@@ -29,6 +48,52 @@ export default function CalendarView({ selectedDate, onDateSelect }: CalendarVie
     const newMonth = new Date(currentMonth);
     newMonth.setMonth(currentMonth.getMonth() + (direction === 'next' ? 1 : -1));
     setCurrentMonth(newMonth);
+  };
+
+  const handleLongPress = (dateStr: string) => {
+    setLongPressDate(dateStr);
+  };
+
+  const getScoreForMetric = (metricName: string): DailyScore | undefined => {
+    return longPressScores.find(score => score.metricName === metricName);
+  };
+
+  // Cleanup all timers on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(pressTimers.current).forEach(timer => clearTimeout(timer));
+      pressTimers.current = {};
+    };
+  }, []);
+
+  const createLongPressHandlers = (dateStr: string) => {
+    const startPress = (e: React.MouseEvent | React.TouchEvent) => {
+      // Clear any existing timer for this date
+      if (pressTimers.current[dateStr]) {
+        clearTimeout(pressTimers.current[dateStr]);
+      }
+      
+      // Create new timer
+      pressTimers.current[dateStr] = setTimeout(() => {
+        handleLongPress(dateStr);
+        delete pressTimers.current[dateStr];
+      }, 500);
+    };
+    
+    const cancelPress = () => {
+      if (pressTimers.current[dateStr]) {
+        clearTimeout(pressTimers.current[dateStr]);
+        delete pressTimers.current[dateStr];
+      }
+    };
+    
+    return {
+      onMouseDown: startPress,
+      onMouseUp: cancelPress,
+      onMouseLeave: cancelPress,
+      onTouchStart: startPress,
+      onTouchEnd: cancelPress,
+    };
   };
 
   return (
@@ -78,6 +143,7 @@ export default function CalendarView({ selectedDate, onDateSelect }: CalendarVie
               <div key={index} className="h-12">
                 {day && (
                   <button
+                    {...createLongPressHandlers(dateStr)}
                     onClick={() => onDateSelect(dateStr)}
                     className={`
                       w-full h-full flex flex-col items-center justify-center text-sm rounded-lg
@@ -89,6 +155,7 @@ export default function CalendarView({ selectedDate, onDateSelect }: CalendarVie
                       ${!isCurrentMonth ? 'text-gray-400' : 'text-gray-900'}
                       hover:transform hover:-translate-y-0.5
                     `}
+                    data-testid={`calendar-date-${dateStr}`}
                   >
                     <span className={isToday ? 'font-semibold' : ''}>{day.getDate()}</span>
                     {hasEntry && (
@@ -112,8 +179,90 @@ export default function CalendarView({ selectedDate, onDateSelect }: CalendarVie
             <div className="w-2 h-2 bg-primary rounded-full" />
             <span>Selected</span>
           </div>
+          <div className="flex items-center space-x-1">
+            <span>Hold date to view details</span>
+          </div>
         </div>
       </CardContent>
+
+      {/* Journal Entry & Scores Dialog */}
+      <Dialog open={!!longPressDate} onOpenChange={(open) => !open && setLongPressDate(null)}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {longPressDate && new Date(longPressDate).toLocaleDateString('en-US', { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+              })}
+            </DialogTitle>
+            <DialogDescription>
+              Journal entry and daily scores
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-6 py-4">
+            {/* Daily Scores Section */}
+            {longPressScores.length > 0 && (
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Daily Scores</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {metrics.map((metric) => {
+                    const score = getScoreForMetric(metric.name);
+                    const value = score?.value;
+                    const maxValue = metric.maxValue || 100;
+                    const percentage = value !== undefined ? Math.min(100, Math.max(0, (value / maxValue) * 100)) : 0;
+
+                    return (
+                      <div key={metric.id} className="bg-gray-50 rounded-lg p-3 text-center">
+                        <div className="relative w-12 h-12 mx-auto mb-2">
+                          <div 
+                            className="w-full h-full rounded-full"
+                            style={{
+                              background: value !== undefined
+                                ? `conic-gradient(from 0deg, ${metric.color} ${percentage}%, #E5E7EB ${percentage}%)`
+                                : '#E5E7EB'
+                            }}
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <span className="text-sm font-semibold text-gray-900">
+                              {value !== undefined ? value : '—'}
+                            </span>
+                          </div>
+                        </div>
+                        <h4 className="text-xs font-medium text-gray-700">{metric.name}</h4>
+                        {score?.isAutoSynced && (
+                          <span className="text-xs text-blue-600">Auto-synced</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Journal Entry Section */}
+            {longPressEntry ? (
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Journal Entry</h3>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  {longPressEntry.isVoiceEntry && (
+                    <span className="inline-block px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded-md mb-2">
+                      Voice Entry
+                    </span>
+                  )}
+                  <p className="text-gray-800 whitespace-pre-wrap">{longPressEntry.content}</p>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center text-gray-500 py-8">
+                <p>No journal entry for this date</p>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
