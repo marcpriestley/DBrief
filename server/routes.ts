@@ -82,6 +82,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/metric-history/:metricName", async (req, res) => {
+    try {
+      const userId = 1;
+      const { metricName } = req.params;
+      const days = parseInt(req.query.days as string) || 14;
+      const history = await storage.getMetricHistory(userId, metricName, days);
+      res.json(history);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch metric history" });
+    }
+  });
+
   app.post("/api/daily-scores", async (req, res) => {
     try {
       const userId = 1;

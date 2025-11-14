@@ -23,6 +23,7 @@ export interface IStorage {
   // Daily scores methods
   getDailyScoresByUserAndDate(userId: number, date: string): Promise<DailyScore[]>;
   getDailyScoresByUser(userId: number): Promise<DailyScore[]>;
+  getMetricHistory(userId: number, metricName: string, days: number): Promise<DailyScore[]>;
   createDailyScore(score: InsertDailyScore): Promise<DailyScore>;
   updateDailyScore(userId: number, date: string, metricName: string, value: number, isAutoSynced?: boolean): Promise<DailyScore | undefined>;
 
@@ -81,14 +82,13 @@ export class MemStorage implements IStorage {
       { id: 4, userId: 1, name: "Nutrition", color: "#EC4899", maxValue: 10, isDefault: true, isActive: true },
       { id: 5, userId: 1, name: "Sleep Quality", color: "#8B5CF6", maxValue: 100, isDefault: false, isActive: true },
       { id: 6, userId: 1, name: "Readiness", color: "#EF4444", maxValue: 100, isDefault: false, isActive: true },
-      { id: 7, userId: 1, name: "Steps", color: "#22C55E", maxValue: 100, isDefault: false, isActive: true },
-      { id: 8, userId: 1, name: "Sleep Hours", color: "#1E40AF", maxValue: 100, isDefault: false, isActive: true },
+      { id: 7, userId: 1, name: "Steps", color: "#22C55E", maxValue: 50000, isDefault: false, isActive: true },
     ];
 
     defaultMetrics.forEach(metric => {
       this.userMetrics.set(metric.id, metric);
     });
-    this.currentUserMetricId = 9;
+    this.currentUserMetricId = 8;
 
     // Create sample journal entries
     const sampleEntries: JournalEntry[] = [
@@ -212,6 +212,26 @@ export class MemStorage implements IStorage {
 
   async getDailyScoresByUser(userId: number): Promise<DailyScore[]> {
     return Array.from(this.dailyScores.values()).filter(score => score.userId === userId);
+  }
+
+  async getMetricHistory(userId: number, metricName: string, days: number): Promise<DailyScore[]> {
+    // Validate and cap days to prevent unbounded scans
+    const validDays = Math.max(1, Math.min(90, days));
+    
+    // Calculate date floor (inclusive range)
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(endDate.getDate() - (validDays - 1));
+    const dateFloor = startDate.toISOString().split('T')[0];
+    
+    // Filter and sort
+    return Array.from(this.dailyScores.values())
+      .filter(score => 
+        score.userId === userId && 
+        score.metricName === metricName && 
+        score.date >= dateFloor
+      )
+      .sort((a, b) => a.date.localeCompare(b.date));
   }
 
   async createDailyScore(insertScore: InsertDailyScore): Promise<DailyScore> {
@@ -374,6 +394,29 @@ export class DatabaseStorage implements IStorage {
 
   async getDailyScoresByUser(userId: number): Promise<DailyScore[]> {
     return await db.select().from(dailyScores).where(eq(dailyScores.userId, userId));
+  }
+
+  async getMetricHistory(userId: number, metricName: string, days: number): Promise<DailyScore[]> {
+    const { gte } = await import("drizzle-orm");
+    
+    // Validate and cap days to prevent unbounded scans
+    const validDays = Math.max(1, Math.min(90, days));
+    
+    // Calculate date floor (inclusive range)
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(endDate.getDate() - (validDays - 1));
+    const dateFloor = startDate.toISOString().split('T')[0];
+    
+    // Query with indexed filtering and ordering
+    return await db.select().from(dailyScores)
+      .where(and(
+        eq(dailyScores.userId, userId),
+        eq(dailyScores.metricName, metricName),
+        gte(dailyScores.date, dateFloor)
+      ))
+      .orderBy(dailyScores.date)
+      .limit(validDays);
   }
 
   async createDailyScore(score: InsertDailyScore): Promise<DailyScore> {

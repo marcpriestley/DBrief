@@ -7,14 +7,18 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { DailyScore, UserMetric } from "@shared/schema";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Edit } from "lucide-react";
+import MetricTrendChart from "./MetricTrendChart";
 
 interface ScoreDashboardProps {
   selectedDate: string;
 }
 
+type DialogMode = 'trend' | 'edit';
+
 export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
   const [selectedMetric, setSelectedMetric] = useState<UserMetric | null>(null);
+  const [dialogMode, setDialogMode] = useState<DialogMode>('trend');
   const [scoreValue, setScoreValue] = useState<string>("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -31,6 +35,15 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
   const { data: previousScores = [] } = useQuery<DailyScore[]>({
     queryKey: ["/api/daily-scores", getPreviousDate(selectedDate)],
     queryFn: () => fetch(`/api/daily-scores/${getPreviousDate(selectedDate)}`).then(res => res.json()),
+  });
+
+  const { data: metricHistory = [] } = useQuery<DailyScore[]>({
+    queryKey: ["/api/metric-history", selectedMetric?.name],
+    queryFn: () => {
+      if (!selectedMetric) return Promise.resolve([]);
+      return fetch(`/api/metric-history/${selectedMetric.name}?days=14`).then(res => res.json());
+    },
+    enabled: !!selectedMetric,
   });
 
   const syncOuraMutation = useMutation({
@@ -56,7 +69,7 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
   useEffect(() => {
     const isToday = selectedDate === new Date().toISOString().split('T')[0];
     const hasOuraMetrics = metrics.some(m => 
-      m.name === "Sleep Quality" || m.name === "Readiness" || m.name === "Steps" || m.name === "Sleep Hours"
+      m.name === "Sleep Quality" || m.name === "Readiness" || m.name === "Steps"
     );
     const hasAutoSyncedScores = scores.some(s => s.isAutoSynced);
     
@@ -75,11 +88,15 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
       // Also invalidate the previous date query for trend calculations
       queryClient.invalidateQueries({ queryKey: ["/api/daily-scores", getPreviousDate(variables.date)] });
       
+      const metricName = selectedMetric?.name;
       toast({
         title: "Score updated",
         description: "Your daily score has been saved successfully.",
       });
-      setSelectedMetric(null);
+      if (metricName) {
+        queryClient.invalidateQueries({ queryKey: ["/api/metric-history", metricName] });
+      }
+      setDialogMode('trend');
       setScoreValue("");
     },
     onError: () => {
@@ -116,8 +133,19 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
 
   const handleMetricClick = (metric: UserMetric) => {
     setSelectedMetric(metric);
+    setDialogMode('trend');
     const existingScore = getScoreForMetric(metric.name);
     setScoreValue(existingScore?.value?.toString() || "");
+  };
+
+  const handleEditClick = () => {
+    setDialogMode('edit');
+  };
+
+  const handleCloseDialog = () => {
+    setSelectedMetric(null);
+    setDialogMode('trend');
+    setScoreValue("");
   };
 
   const handleSaveScore = () => {
@@ -199,65 +227,94 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
         })}
       </div>
 
-      {/* Score Input Modal */}
-      <Dialog open={!!selectedMetric} onOpenChange={() => setSelectedMetric(null)}>
-        <DialogContent className="max-w-sm">
+      {/* Metric Dialog - Trend and Edit */}
+      <Dialog open={!!selectedMetric} onOpenChange={(open) => !open && handleCloseDialog()}>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Update {selectedMetric?.name} Score</DialogTitle>
+            <DialogTitle>
+              {dialogMode === 'trend' ? `${selectedMetric?.name} Trends` : `Update ${selectedMetric?.name} Score`}
+            </DialogTitle>
             <DialogDescription>
-              Enter a score from 0 to {selectedMetric?.maxValue || 100} for {selectedMetric?.name} on the selected date.
+              {dialogMode === 'trend' 
+                ? `14-day trend for ${selectedMetric?.name}. Tap Edit to update today's score.`
+                : `Enter a score from 0 to ${selectedMetric?.maxValue || 100} for ${selectedMetric?.name} on ${selectedDate}.`
+              }
             </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-4 py-4">
-            <div className="text-center">
-              <div 
-                className="w-20 h-20 mx-auto mb-4 rounded-full"
-                style={{
-                  background: selectedMetric 
-                    ? `conic-gradient(from 0deg, ${selectedMetric.color} ${Math.min(100, Math.max(0, ((parseInt(scoreValue) || 0) / (selectedMetric.maxValue || 100)) * 100))}%, #E5E7EB ${Math.min(100, Math.max(0, ((parseInt(scoreValue) || 0) / (selectedMetric.maxValue || 100)) * 100))}%)`
-                    : '#E5E7EB'
-                }}
-              >
-                <div className="w-full h-full flex items-center justify-center">
-                  <span className="text-xl font-semibold text-gray-900">
-                    {scoreValue || 0}
-                  </span>
+          <div className="py-4">
+            {dialogMode === 'trend' && selectedMetric ? (
+              <div className="space-y-4">
+                <MetricTrendChart 
+                  metric={selectedMetric} 
+                  history={metricHistory} 
+                  selectedDate={selectedDate}
+                />
+                <div className="flex justify-end">
+                  <Button 
+                    onClick={handleEditClick}
+                    data-testid="button-edit-score"
+                  >
+                    <Edit className="w-4 h-4 mr-2" />
+                    Edit Score
+                  </Button>
                 </div>
               </div>
-            </div>
-            
-            <div>
-              <Label htmlFor="score">Score (0-{selectedMetric?.maxValue || 100})</Label>
-              <Input
-                id="score"
-                type="number"
-                min="0"
-                max={selectedMetric?.maxValue || 100}
-                value={scoreValue}
-                onChange={(e) => setScoreValue(e.target.value)}
-                placeholder={`Enter score from 0 to ${selectedMetric?.maxValue || 100}`}
-                className="mt-1"
-              />
-            </div>
-            
-            <div className="flex space-x-2">
-              <Button 
-                variant="outline" 
-                className="flex-1"
-                onClick={() => setSelectedMetric(null)}
-                disabled={updateScoreMutation.isPending}
-              >
-                Cancel
-              </Button>
-              <Button 
-                className="flex-1"
-                onClick={handleSaveScore}
-                disabled={updateScoreMutation.isPending}
-              >
-                {updateScoreMutation.isPending ? "Saving..." : "Save"}
-              </Button>
-            </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="text-center">
+                  <div 
+                    className="w-20 h-20 mx-auto mb-4 rounded-full"
+                    style={{
+                      background: selectedMetric 
+                        ? `conic-gradient(from 0deg, ${selectedMetric.color} ${Math.min(100, Math.max(0, ((parseInt(scoreValue) || 0) / (selectedMetric.maxValue || 100)) * 100))}%, #E5E7EB ${Math.min(100, Math.max(0, ((parseInt(scoreValue) || 0) / (selectedMetric.maxValue || 100)) * 100))}%)`
+                        : '#E5E7EB'
+                    }}
+                  >
+                    <div className="w-full h-full flex items-center justify-center">
+                      <span className="text-xl font-semibold text-gray-900">
+                        {scoreValue || 0}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div>
+                  <Label htmlFor="score">Score (0-{selectedMetric?.maxValue || 100})</Label>
+                  <Input
+                    id="score"
+                    type="number"
+                    min="0"
+                    max={selectedMetric?.maxValue || 100}
+                    value={scoreValue}
+                    onChange={(e) => setScoreValue(e.target.value)}
+                    placeholder={`Enter score from 0 to ${selectedMetric?.maxValue || 100}`}
+                    className="mt-1"
+                    data-testid="input-score"
+                  />
+                </div>
+                
+                <div className="flex space-x-2">
+                  <Button 
+                    variant="outline" 
+                    className="flex-1"
+                    onClick={() => setDialogMode('trend')}
+                    disabled={updateScoreMutation.isPending}
+                    data-testid="button-back-to-trends"
+                  >
+                    Back to Trends
+                  </Button>
+                  <Button 
+                    className="flex-1"
+                    onClick={handleSaveScore}
+                    disabled={updateScoreMutation.isPending}
+                    data-testid="button-save-score"
+                  >
+                    {updateScoreMutation.isPending ? "Saving..." : "Save"}
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>
