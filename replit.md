@@ -27,7 +27,9 @@ A comprehensive daily journaling app with voice recording, customizable metric t
   - Each new text or voice input adds a timestamped paragraph
   - First entry of the day gets an initial timestamp
   - Timestamps format: [HH:MM AM/PM]
+  - Whitespace preservation: ALL content saved exactly as typed, no trimming except for new content being added
   - Added debug logging to Oura sync for troubleshooting
+  - VoiceRecordingModal query optimized to only fetch when modal is open
 - **2025-11-14**: Added interactive trend graphs and calendar long-press features:
   - Removed Sleep Hours metric (only Sleep Quality, Readiness, Steps remain)
   - Changed Steps metric scale from 0-100 to 0-50000 to accurately reflect step counts
@@ -92,7 +94,13 @@ A comprehensive daily journaling app with voice recording, customizable metric t
 - **Metric History**: GET /api/metric-history/:metricName?days=14 endpoint for trend graphs
 - **Long-Press**: Ref-based timer management with per-date timeout tracking to avoid memory leaks (3 second delay)
 - **Trend Dialog**: Two-mode dialog (trend/edit) with proper state management and query invalidation
-- **Journal Timestamps**: Automatic timestamping for all new entries, appending behavior for today's entries only
+- **Journal Timestamps**: 
+  - Automatic timestamping for all new entries, appending behavior for today's entries only
+  - Exact whitespace preservation: content saved as-is without trimming (except new content being added)
+  - Append detection via exact string comparison (no trimming during comparison)
+  - Today's appends: new content gets timestamp, existing content preserved exactly
+  - Past date edits: saved as-is with no modifications
+  - Voice modal: query enabled only when open to optimize performance
 
 ## Next Steps
 - Monitor Oura API rate limits and optimize sync frequency
