@@ -23,7 +23,12 @@ export default function CalendarView({ selectedDate, onDateSelect }: CalendarVie
 
   const { data: longPressEntry } = useQuery<JournalEntry | null>({
     queryKey: ["/api/journal-entries", longPressDate],
-    queryFn: () => fetch(`/api/journal-entries/${longPressDate}`).then(res => res.json()),
+    queryFn: async () => {
+      if (!longPressDate) return null;
+      const response = await fetch(`/api/journal-entries/${longPressDate}`);
+      if (!response.ok) return null;
+      return response.json();
+    },
     enabled: !!longPressDate,
   });
 

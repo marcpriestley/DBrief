@@ -39,9 +39,10 @@ export default function VoiceRecordingModal({
 
   const saveEntryMutation = useMutation({
     mutationFn: async (data: { content: string; date: string; isVoiceEntry: boolean }) => {
-      return apiRequest("POST", "/api/journal-entries", data);
+      const response = await apiRequest("POST", "/api/journal-entries", data);
+      return response.json() as Promise<JournalEntry>;
     },
-    onSuccess: (data, variables) => {
+    onSuccess: (data: JournalEntry, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/journal-entries"] });
       queryClient.invalidateQueries({ queryKey: ["/api/journal-entries", variables.date] });
       queryClient.invalidateQueries({ queryKey: ["/api/streak"] });
