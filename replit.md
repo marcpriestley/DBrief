@@ -30,7 +30,7 @@ A comprehensive daily journaling app with voice recording, customizable metric t
     - Includes "Edit Score" button to update values
     - After saving, returns to updated trend view
   - Added long-press functionality to calendar dates:
-    - Hold any calendar date for 500ms to view details
+    - Hold any calendar date for 3 seconds to view details
     - Dialog shows journal entry and all daily scores for that date
     - Score circles display with proper scaling and auto-sync indicators
     - Implemented using ref-based timer management for stability
@@ -72,7 +72,7 @@ A comprehensive daily journaling app with voice recording, customizable metric t
   - See current value, 7-day average, and trend direction
 - ✅ Calendar long-press feature:
   - Hold calendar dates to view journal entry and daily scores in a dialog
-  - Timer-based detection with 500ms delay
+  - Timer-based detection with 3 second delay
   - Displays all metrics with score circles and auto-sync indicators
 
 ## Technical Implementation Notes
@@ -81,7 +81,7 @@ A comprehensive daily journaling app with voice recording, customizable metric t
 - **Concurrency**: Prevents multiple simultaneous sync operations
 - **Error Handling**: Gracefully handles missing Oura data with informative error messages
 - **Metric History**: GET /api/metric-history/:metricName?days=14 endpoint for trend graphs
-- **Long-Press**: Ref-based timer management with per-date timeout tracking to avoid memory leaks
+- **Long-Press**: Ref-based timer management with per-date timeout tracking to avoid memory leaks (3 second delay)
 - **Trend Dialog**: Two-mode dialog (trend/edit) with proper state management and query invalidation
 
 ## Next Steps

@@ -77,7 +77,7 @@ export default function CalendarView({ selectedDate, onDateSelect }: CalendarVie
       pressTimers.current[dateStr] = setTimeout(() => {
         handleLongPress(dateStr);
         delete pressTimers.current[dateStr];
-      }, 500);
+      }, 3000);
     };
     
     const cancelPress = () => {
