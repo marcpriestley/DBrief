@@ -17,6 +17,7 @@ interface JournalPanelProps {
 
 export default function JournalPanel({ selectedDate, onVoiceRecord }: JournalPanelProps) {
   const [content, setContent] = useState("");
+  const [initialContent, setInitialContent] = useState("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -58,7 +59,9 @@ export default function JournalPanel({ selectedDate, onVoiceRecord }: JournalPan
   });
 
   useEffect(() => {
-    setContent(currentEntry?.content || "");
+    const entryContent = currentEntry?.content || "";
+    setContent(entryContent);
+    setInitialContent(entryContent);
   }, [currentEntry]);
 
   const handleSave = () => {
@@ -71,8 +74,46 @@ export default function JournalPanel({ selectedDate, onVoiceRecord }: JournalPan
       return;
     }
 
+    // Check if this is today's date
+    const today = new Date().toISOString().split('T')[0];
+    const isToday = selectedDate === today;
+    
+    let finalContent = content; // Preserve exact content by default
+    
+    // Only add timestamps for today's entries
+    if (isToday) {
+      if (initialContent && content.startsWith(initialContent)) {
+        // Content starts with original (exact match) - check if new content was added
+        const afterInitial = content.substring(initialContent.length);
+        const newContent = afterInitial.trim();
+        if (newContent) {
+          // Append with timestamp
+          const timestamp = new Date().toLocaleTimeString('en-US', { 
+            hour: 'numeric', 
+            minute: '2-digit',
+            hour12: true 
+          });
+          finalContent = `${initialContent}\n\n[${timestamp}]\n${newContent}`;
+        } else {
+          // No new content, preserve original exactly
+          finalContent = initialContent;
+        }
+      } else if (!initialContent) {
+        // First entry of today, add timestamp
+        const timestamp = new Date().toLocaleTimeString('en-US', { 
+          hour: 'numeric', 
+          minute: '2-digit',
+          hour12: true 
+        });
+        finalContent = `[${timestamp}]\n${content.trim()}`;
+      }
+      // If content doesn't start with initial content, user edited it
+      // Save the edited content as-is (already in finalContent)
+    }
+    // For past dates, finalContent = content (no trimming, preserves whitespace)
+
     saveEntryMutation.mutate({
-      content: content.trim(),
+      content: finalContent,
       date: selectedDate,
       isVoiceEntry: false,
     });

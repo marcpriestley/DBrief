@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Mic, MicOff, Save, X } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useSpeechToText } from "@/hooks/useSpeechToText";
 import { apiRequest } from "@/lib/queryClient";
+import type { JournalEntry } from "@shared/schema";
 
 interface VoiceRecordingModalProps {
   isOpen: boolean;
@@ -22,6 +23,11 @@ export default function VoiceRecordingModal({
   const [transcription, setTranscription] = useState("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  
+  const { data: currentEntry } = useQuery<JournalEntry | null>({
+    queryKey: ["/api/journal-entries", selectedDate],
+    enabled: isOpen,
+  });
   
   const {
     isRecording,
@@ -88,8 +94,38 @@ export default function VoiceRecordingModal({
       return;
     }
 
+    // Check if this is today's date
+    const today = new Date().toISOString().split('T')[0];
+    const isToday = selectedDate === today;
+    
+    let finalContent = transcription.trim();
+    
+    if (isToday) {
+      // Only add timestamps for today's entries
+      if (currentEntry?.content) {
+        // Append with timestamp if there's existing content
+        const timestamp = new Date().toLocaleTimeString('en-US', { 
+          hour: 'numeric', 
+          minute: '2-digit',
+          hour12: true 
+        });
+        finalContent = `${currentEntry.content}\n\n[${timestamp}]\n${transcription.trim()}`;
+      } else {
+        // First entry of today, add timestamp
+        const timestamp = new Date().toLocaleTimeString('en-US', { 
+          hour: 'numeric', 
+          minute: '2-digit',
+          hour12: true 
+        });
+        finalContent = `[${timestamp}]\n${transcription.trim()}`;
+      }
+    } else if (currentEntry?.content) {
+      // For past dates, append without timestamp to preserve existing content
+      finalContent = `${currentEntry.content}\n\n${transcription.trim()}`;
+    }
+
     saveEntryMutation.mutate({
-      content: transcription.trim(),
+      content: finalContent,
       date: selectedDate,
       isVoiceEntry: true,
     });

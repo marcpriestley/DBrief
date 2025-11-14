@@ -21,6 +21,13 @@ A comprehensive daily journaling app with voice recording, customizable metric t
 - **Health Tracking**: Oura Ring API integration for automatic health metrics syncing
 
 ## Recent Changes
+- **2025-11-14**: Enhanced journal entry with timestamps and appending functionality:
+  - Changed calendar long-press duration from 500ms to 3 seconds for better UX
+  - Journal entries now append with timestamps for today's date
+  - Each new text or voice input adds a timestamped paragraph
+  - First entry of the day gets an initial timestamp
+  - Timestamps format: [HH:MM AM/PM]
+  - Added debug logging to Oura sync for troubleshooting
 - **2025-11-14**: Added interactive trend graphs and calendar long-press features:
   - Removed Sleep Hours metric (only Sleep Quality, Readiness, Steps remain)
   - Changed Steps metric scale from 0-100 to 0-50000 to accurately reflect step counts
@@ -77,12 +84,15 @@ A comprehensive daily journaling app with voice recording, customizable metric t
 
 ## Technical Implementation Notes
 - **Oura API**: Uses v2 endpoints (daily_sleep, daily_readiness, daily_activity) - removed /sleep endpoint
+  - Note: Activity data (Steps) may not be available immediately and processes later in the day
+  - Debug logging added to track API responses
 - **Auto-sync**: Triggers once per day on dashboard load for today's date
 - **Concurrency**: Prevents multiple simultaneous sync operations
 - **Error Handling**: Gracefully handles missing Oura data with informative error messages
 - **Metric History**: GET /api/metric-history/:metricName?days=14 endpoint for trend graphs
 - **Long-Press**: Ref-based timer management with per-date timeout tracking to avoid memory leaks (3 second delay)
 - **Trend Dialog**: Two-mode dialog (trend/edit) with proper state management and query invalidation
+- **Journal Timestamps**: Automatic timestamping for all new entries, appending behavior for today's entries only
 
 ## Next Steps
 - Monitor Oura API rate limits and optimize sync frequency

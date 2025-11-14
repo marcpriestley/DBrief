@@ -87,19 +87,26 @@ export async function getOuraDataForDate(date: string): Promise<OuraData> {
       fetchOuraData("daily_activity", date, date) as Promise<OuraActivityData>,
     ]);
 
+    console.log(`[Oura Sync ${date}] Raw activity data:`, JSON.stringify(activityData, null, 2));
+
     const result: OuraData = {};
 
     if (sleepScoreData.data && sleepScoreData.data.length > 0) {
       const sleep = sleepScoreData.data[0];
       result.sleepScore = sleep.score;
+      console.log(`[Oura Sync ${date}] Sleep score: ${result.sleepScore}`);
     }
 
     if (readinessData.data && readinessData.data.length > 0) {
       result.readinessScore = readinessData.data[0].score;
+      console.log(`[Oura Sync ${date}] Readiness score: ${result.readinessScore}`);
     }
 
     if (activityData.data && activityData.data.length > 0) {
       result.steps = activityData.data[0].steps;
+      console.log(`[Oura Sync ${date}] Steps: ${result.steps}`);
+    } else {
+      console.log(`[Oura Sync ${date}] No activity data found`);
     }
 
     return result;
