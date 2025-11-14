@@ -73,11 +73,11 @@ export default function CalendarView({ selectedDate, onDateSelect }: CalendarVie
         clearTimeout(pressTimers.current[dateStr]);
       }
       
-      // Create new timer
+      // Create new timer (reduced by 35% from 3s to ~2s)
       pressTimers.current[dateStr] = setTimeout(() => {
         handleLongPress(dateStr);
         delete pressTimers.current[dateStr];
-      }, 3000);
+      }, 1950);
     };
     
     const cancelPress = () => {
@@ -148,7 +148,7 @@ export default function CalendarView({ selectedDate, onDateSelect }: CalendarVie
                     className={`
                       w-full h-full flex flex-col items-center justify-center text-sm rounded-lg
                       transition-all duration-200 hover:bg-gray-50 hover:border-gray-200
-                      select-none touch-none
+                      select-none
                       ${isSelected 
                         ? 'bg-primary/10 border border-primary/20 text-primary font-medium' 
                         : 'border border-transparent'

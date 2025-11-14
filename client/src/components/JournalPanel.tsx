@@ -42,6 +42,10 @@ export default function JournalPanel({ selectedDate, onVoiceRecord }: JournalPan
       return apiRequest("POST", "/api/journal-entries", data);
     },
     onSuccess: (data, variables) => {
+      // Update local state immediately to show saved content in textarea
+      setContent(variables.content);
+      setInitialContent(variables.content);
+      
       queryClient.invalidateQueries({ queryKey: ["/api/journal-entries"] });
       queryClient.invalidateQueries({ queryKey: ["/api/journal-entries", variables.date] });
       queryClient.invalidateQueries({ queryKey: ["/api/streak"] });
