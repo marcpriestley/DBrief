@@ -23,6 +23,11 @@ A comprehensive daily journaling app with voice recording, customizable metric t
 - **Health Tracking**: Oura Ring API integration for automatic health metrics syncing
 
 ## Recent Changes
+- **2025-11-14**: Fixed calendar long-press dialog and journal entry mutations:
+  - Fixed calendar long-press dialog showing blank journal entries (added proper queryFn for date-specific fetch)
+  - Fixed journal mutations to parse JSON response and update local state immediately
+  - Applied same fix to VoiceRecordingModal for consistency
+  - Journal entries now properly append with timestamps and display correctly in calendar dialog
 - **2025-11-14**: Fixed calendar scrolling, long-press duration, and journal persistence:
   - Fixed calendar scroll issue by removing `touch-none` class (allows scrolling while preventing highlight)
   - Reduced long-press duration by 35% from 3 seconds to 1.95 seconds (~2 seconds)
@@ -118,10 +123,16 @@ A comprehensive daily journaling app with voice recording, customizable metric t
   - Past date edits: saved as-is with no modifications
   - Voice modal: query enabled only when open to optimize performance
 - **Journal Persistence**:
+  - Mutations parse JSON response from backend and use it to update local state
+  - onSuccess callback immediately updates content and initialContent with data.content
   - Mutations invalidate both list and specific date queries
-  - onSuccess callback immediately updates content and initialContent state
   - useEffect updates textarea content when currentEntry changes
   - Saved content remains visible after save operation with no delay
+- **Calendar Dialog**:
+  - Long-press query uses custom queryFn to fetch journal entry by date
+  - Properly handles array query keys for cache management
+  - Returns null gracefully if date isn't set or request fails
+  - Dialog displays journal content with whitespace-pre-wrap for proper formatting
 
 ## Next Steps
 - Monitor Oura API rate limits and optimize sync frequency
