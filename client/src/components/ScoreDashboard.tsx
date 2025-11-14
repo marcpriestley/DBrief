@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { DailyScore, UserMetric } from "@shared/schema";
+import { RefreshCw } from "lucide-react";
 
 interface ScoreDashboardProps {
   selectedDate: string;
@@ -31,6 +32,38 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
     queryKey: ["/api/daily-scores", getPreviousDate(selectedDate)],
     queryFn: () => fetch(`/api/daily-scores/${getPreviousDate(selectedDate)}`).then(res => res.json()),
   });
+
+  const syncOuraMutation = useMutation({
+    mutationFn: async (date: string) => {
+      return apiRequest("POST", `/api/oura/sync/${date}`, {});
+    },
+    onSuccess: (data, date) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/daily-scores", date] });
+      toast({
+        title: "Oura data synced",
+        description: "Your Oura ring data has been updated successfully.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Sync failed",
+        description: error.message || "Failed to sync Oura data. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  useEffect(() => {
+    const hasOuraMetrics = metrics.some(m => 
+      m.name === "Sleep Quality" || m.name === "Readiness" || m.name === "Steps" || m.name === "Sleep Hours"
+    );
+    
+    const hasAutoSyncedScores = scores.some(s => s.isAutoSynced);
+    
+    if (hasOuraMetrics && !hasAutoSyncedScores && selectedDate === new Date().toISOString().split('T')[0]) {
+      syncOuraMutation.mutate(selectedDate);
+    }
+  }, [selectedDate, metrics]);
 
   const updateScoreMutation = useMutation({
     mutationFn: async (data: { date: string; metricName: string; value: number }) => {
@@ -109,8 +142,26 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
     });
   };
 
+  const handleSyncOura = () => {
+    syncOuraMutation.mutate(selectedDate);
+  };
+
   return (
     <>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-lg font-semibold text-gray-900">Daily Scores</h2>
+        <Button 
+          variant="outline" 
+          size="sm"
+          onClick={handleSyncOura}
+          disabled={syncOuraMutation.isPending}
+          data-testid="button-sync-oura"
+        >
+          <RefreshCw className={`w-4 h-4 mr-2 ${syncOuraMutation.isPending ? 'animate-spin' : ''}`} />
+          {syncOuraMutation.isPending ? "Syncing..." : "Sync Oura"}
+        </Button>
+      </div>
+      
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
         {metrics.map((metric) => {
           const score = getScoreForMetric(metric.name);

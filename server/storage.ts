@@ -225,17 +225,18 @@ export class MemStorage implements IStorage {
     return score;
   }
 
-  async updateDailyScore(userId: number, date: string, metricName: string, value: number): Promise<DailyScore | undefined> {
+  async updateDailyScore(userId: number, date: string, metricName: string, value: number, isAutoSynced: boolean = false): Promise<DailyScore | undefined> {
     const existingScore = Array.from(this.dailyScores.values()).find(score =>
       score.userId === userId && score.date === date && score.metricName === metricName
     );
 
     if (existingScore) {
       existingScore.value = value;
+      existingScore.isAutoSynced = isAutoSynced;
       this.dailyScores.set(existingScore.id, existingScore);
       return existingScore;
     } else {
-      return await this.createDailyScore({ userId, date, metricName, value });
+      return await this.createDailyScore({ userId, date, metricName, value, isAutoSynced });
     }
   }
 

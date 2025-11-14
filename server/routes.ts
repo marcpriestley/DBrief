@@ -6,6 +6,7 @@ import {
   insertUserMetricSchema, insertAIInsightSchema 
 } from "@shared/schema";
 import OpenAI from "openai";
+import { getOuraDataForDate } from "./oura";
 
 const openai = new OpenAI({ 
   apiKey: process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_ENV_VAR || "default_key" 
@@ -222,6 +223,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Oura Integration
+  app.post("/api/oura/sync/:date", async (req, res) => {
+    try {
+      const userId = 1;
+      const { date } = req.params;
+      
+      const ouraData = await getOuraDataForDate(date);
+      
+      const updatedScores = [];
+      
+      if (ouraData.sleepScore !== undefined) {
+        const sleepScore = await storage.updateDailyScore(userId, date, "Sleep Quality", ouraData.sleepScore, true);
+        updatedScores.push(sleepScore);
+      }
+      
+      if (ouraData.sleepHours !== undefined) {
+        const sleepHours = await storage.updateDailyScore(userId, date, "Sleep Hours", ouraData.sleepHours, true);
+        updatedScores.push(sleepHours);
+      }
+      
+      if (ouraData.readinessScore !== undefined) {
+        const readiness = await storage.updateDailyScore(userId, date, "Readiness", ouraData.readinessScore, true);
+        updatedScores.push(readiness);
+      }
+      
+      if (ouraData.steps !== undefined) {
+        const steps = await storage.updateDailyScore(userId, date, "Steps", ouraData.steps, true);
+        updatedScores.push(steps);
+      }
+      
+      res.json({ success: true, data: ouraData, updatedScores });
+    } catch (error) {
+      console.error("Oura sync error:", error);
+      res.status(500).json({ message: "Failed to sync Oura data", error: String(error) });
+    }
+  });
+
   app.delete("/api/ai-insights/:id", async (req, res) => {
     try {
       const { id } = req.params;
@@ -255,10 +293,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Entry for today
         if (streak.lastEntryDate === yesterdayStr) {
           // Continuing streak
-          const newCurrentStreak = streak.currentStreak + 1;
+          const newCurrentStreak = (streak.currentStreak ?? 0) + 1;
           await storage.updateStreak(userId, {
             currentStreak: newCurrentStreak,
-            longestStreak: Math.max(streak.longestStreak, newCurrentStreak),
+            longestStreak: Math.max(streak.longestStreak ?? 0, newCurrentStreak),
             lastEntryDate: entryDate,
           });
         } else if (streak.lastEntryDate !== today) {
