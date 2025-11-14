@@ -41,8 +41,9 @@ export default function JournalPanel({ selectedDate, onVoiceRecord }: JournalPan
     mutationFn: async (data: { content: string; date: string; isVoiceEntry: boolean }) => {
       return apiRequest("POST", "/api/journal-entries", data);
     },
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/journal-entries"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/journal-entries", variables.date] });
       queryClient.invalidateQueries({ queryKey: ["/api/streak"] });
       toast({
         title: "Entry saved",
