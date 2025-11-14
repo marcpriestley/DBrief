@@ -238,11 +238,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         updatedScores.push(sleepScore);
       }
       
-      if (ouraData.sleepHours !== undefined) {
-        const sleepHours = await storage.updateDailyScore(userId, date, "Sleep Hours", ouraData.sleepHours, true);
-        updatedScores.push(sleepHours);
-      }
-      
       if (ouraData.readinessScore !== undefined) {
         const readiness = await storage.updateDailyScore(userId, date, "Readiness", ouraData.readinessScore, true);
         updatedScores.push(readiness);

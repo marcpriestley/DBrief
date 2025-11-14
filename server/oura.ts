@@ -18,19 +18,6 @@ interface OuraSleepScoreData {
   }>;
 }
 
-interface OuraSleepData {
-  data: Array<{
-    id: string;
-    day: string;
-    total_sleep_duration: number;
-    deep_sleep_duration: number;
-    light_sleep_duration: number;
-    rem_sleep_duration: number;
-    awake_time: number;
-    time_in_bed: number;
-  }>;
-}
-
 interface OuraReadinessData {
   data: Array<{
     day: string;
@@ -65,7 +52,6 @@ interface OuraActivityData {
 
 export interface OuraData {
   sleepScore?: number;
-  sleepHours?: number;
   readinessScore?: number;
   steps?: number;
 }
@@ -95,9 +81,8 @@ async function fetchOuraData(endpoint: string, startDate: string, endDate: strin
 
 export async function getOuraDataForDate(date: string): Promise<OuraData> {
   try {
-    const [sleepScoreData, sleepDurationData, readinessData, activityData] = await Promise.all([
+    const [sleepScoreData, readinessData, activityData] = await Promise.all([
       fetchOuraData("daily_sleep", date, date) as Promise<OuraSleepScoreData>,
-      fetchOuraData("sleep", date, date) as Promise<OuraSleepData>,
       fetchOuraData("daily_readiness", date, date) as Promise<OuraReadinessData>,
       fetchOuraData("daily_activity", date, date) as Promise<OuraActivityData>,
     ]);
@@ -107,13 +92,6 @@ export async function getOuraDataForDate(date: string): Promise<OuraData> {
     if (sleepScoreData.data && sleepScoreData.data.length > 0) {
       const sleep = sleepScoreData.data[0];
       result.sleepScore = sleep.score;
-    }
-
-    if (sleepDurationData.data && sleepDurationData.data.length > 0) {
-      const sleep = sleepDurationData.data[0];
-      if (sleep.total_sleep_duration) {
-        result.sleepHours = Math.round(sleep.total_sleep_duration / 3600);
-      }
     }
 
     if (readinessData.data && readinessData.data.length > 0) {
