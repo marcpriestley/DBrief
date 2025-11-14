@@ -6,7 +6,7 @@ A comprehensive daily journaling app with voice recording, customizable metric t
 ## User Preferences
 - Score circles must always remain at the top of the main dashboard
 - Scores should persist until the next day, then reset to blank for new inputs
-- Integration with health tracker APIs for automated data (steps, sleep, recovery)
+- Integration with Oura Ring API for automated health data (Sleep Quality, Readiness, Steps, Sleep Hours)
 - Scores must be logged in calendar and displayed when dates are clicked alongside journal entries
 - Duolingo-style streak tracking for user engagement
 
@@ -17,8 +17,18 @@ A comprehensive daily journaling app with voice recording, customizable metric t
 - **UI**: Shadcn/ui components with Tailwind CSS
 - **Voice**: Web Speech API for voice-to-text transcription
 - **AI**: OpenAI integration for journal insights and pattern analysis
+- **Health Tracking**: Oura Ring API integration for automatic health metrics syncing
 
 ## Recent Changes
+- **2025-11-14**: Fully integrated Oura Ring API for automatic health metric syncing:
+  - Created Oura API service module (server/oura.ts) with support for multiple endpoints
+  - Added POST /api/oura/sync/:date endpoint for fetching and storing Oura data
+  - Implemented automatic sync on dashboard load for today's date
+  - Added manual "Sync Oura" button with loading state and toast notifications
+  - Syncs four key health metrics: Sleep Quality, Readiness, Steps, Sleep Hours
+  - Auto-synced scores display "Auto-synced" badge instead of trend comparison
+  - Changed "Recovery" metric to "Readiness" to match Oura terminology
+  - Updated all metrics to support different scales (0-10 and 0-100)
 - **2025-06-30**: Fixed score persistence logic - scores now remain blank until inputted, then persist until next day
 - **2025-06-30**: Enhanced trends page with comprehensive analytics dashboard featuring:
   - Multiple chart types: Line, Area, Bar, and Heat Map visualizations
@@ -36,10 +46,22 @@ A comprehensive daily journaling app with voice recording, customizable metric t
 - ✅ AI-powered insights using OpenAI
 - ✅ Trends visualization with interactive charts
 - ✅ Streak tracking system
-- ✅ Basic health metrics (Steps)
+- ✅ Oura Ring API integration with automatic syncing:
+  - Sleep Quality (0-100 scale)
+  - Readiness (0-100 scale, formerly "Recovery")
+  - Steps (0-100 scale)
+  - Sleep Hours (0-100 scale)
+- ✅ Manual and automatic health data synchronization
+- ✅ Multi-scale metric support (0-10 for wellness, 0-100 for health tracking)
+
+## Technical Implementation Notes
+- **Oura API**: Uses v2 endpoints (daily_sleep, sleep, daily_readiness, daily_activity)
+- **Sleep Hours**: Fetched from /sleep endpoint's total_sleep_duration field (converted from seconds to hours)
+- **Auto-sync**: Triggers once per day on dashboard load for today's date
+- **Concurrency**: Prevents multiple simultaneous sync operations
+- **Error Handling**: Gracefully handles missing Oura data with informative error messages
 
 ## Next Steps
-- Enhance sleep tracking metrics
-- Improve health tracker API integration
-- Ensure complete score persistence across date changes
-- Fix any remaining TypeScript errors
+- Monitor Oura API rate limits and optimize sync frequency
+- Add historical data backfill option for past dates
+- Consider adding more Oura metrics (HRV, body temperature, etc.)

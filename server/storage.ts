@@ -24,7 +24,7 @@ export interface IStorage {
   getDailyScoresByUserAndDate(userId: number, date: string): Promise<DailyScore[]>;
   getDailyScoresByUser(userId: number): Promise<DailyScore[]>;
   createDailyScore(score: InsertDailyScore): Promise<DailyScore>;
-  updateDailyScore(userId: number, date: string, metricName: string, value: number): Promise<DailyScore | undefined>;
+  updateDailyScore(userId: number, date: string, metricName: string, value: number, isAutoSynced?: boolean): Promise<DailyScore | undefined>;
 
   // User metrics methods
   getUserMetrics(userId: number): Promise<UserMetric[]>;
@@ -80,7 +80,7 @@ export class MemStorage implements IStorage {
       { id: 3, userId: 1, name: "Energy", color: "#F59E0B", maxValue: 10, isDefault: true, isActive: true },
       { id: 4, userId: 1, name: "Nutrition", color: "#EC4899", maxValue: 10, isDefault: true, isActive: true },
       { id: 5, userId: 1, name: "Sleep Quality", color: "#8B5CF6", maxValue: 100, isDefault: false, isActive: true },
-      { id: 6, userId: 1, name: "Recovery", color: "#EF4444", maxValue: 100, isDefault: false, isActive: true },
+      { id: 6, userId: 1, name: "Readiness", color: "#EF4444", maxValue: 100, isDefault: false, isActive: true },
       { id: 7, userId: 1, name: "Steps", color: "#22C55E", maxValue: 100, isDefault: false, isActive: true },
       { id: 8, userId: 1, name: "Sleep Hours", color: "#1E40AF", maxValue: 100, isDefault: false, isActive: true },
     ];

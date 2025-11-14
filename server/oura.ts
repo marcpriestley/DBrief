@@ -2,19 +2,32 @@ import type { Request, Response } from "express";
 
 const OURA_BASE_URL = "https://api.ouraring.com/v2/usercollection";
 
-interface OuraSleepData {
+interface OuraSleepScoreData {
   data: Array<{
     day: string;
     score: number;
     contributors: {
-      total_sleep_duration: number;
+      deep_sleep: number;
       efficiency: number;
-      restfulness: number;
-      rem_sleep_duration: number;
-      deep_sleep_duration: number;
       latency: number;
+      rem_sleep: number;
+      restfulness: number;
       timing: number;
+      total_sleep: number;
     };
+  }>;
+}
+
+interface OuraSleepData {
+  data: Array<{
+    id: string;
+    day: string;
+    total_sleep_duration: number;
+    deep_sleep_duration: number;
+    light_sleep_duration: number;
+    rem_sleep_duration: number;
+    awake_time: number;
+    time_in_bed: number;
   }>;
 }
 
@@ -82,19 +95,24 @@ async function fetchOuraData(endpoint: string, startDate: string, endDate: strin
 
 export async function getOuraDataForDate(date: string): Promise<OuraData> {
   try {
-    const [sleepData, readinessData, activityData] = await Promise.all([
-      fetchOuraData("daily_sleep", date, date) as Promise<OuraSleepData>,
+    const [sleepScoreData, sleepDurationData, readinessData, activityData] = await Promise.all([
+      fetchOuraData("daily_sleep", date, date) as Promise<OuraSleepScoreData>,
+      fetchOuraData("sleep", date, date) as Promise<OuraSleepData>,
       fetchOuraData("daily_readiness", date, date) as Promise<OuraReadinessData>,
       fetchOuraData("daily_activity", date, date) as Promise<OuraActivityData>,
     ]);
 
     const result: OuraData = {};
 
-    if (sleepData.data && sleepData.data.length > 0) {
-      const sleep = sleepData.data[0];
+    if (sleepScoreData.data && sleepScoreData.data.length > 0) {
+      const sleep = sleepScoreData.data[0];
       result.sleepScore = sleep.score;
-      if (sleep.contributors?.total_sleep_duration) {
-        result.sleepHours = Math.round(sleep.contributors.total_sleep_duration / 3600);
+    }
+
+    if (sleepDurationData.data && sleepDurationData.data.length > 0) {
+      const sleep = sleepDurationData.data[0];
+      if (sleep.total_sleep_duration) {
+        result.sleepHours = Math.round(sleep.total_sleep_duration / 3600);
       }
     }
 
