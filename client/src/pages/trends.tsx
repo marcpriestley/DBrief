@@ -174,7 +174,7 @@ export default function TrendsEnhanced() {
       {/* Header */}
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
+          <div className="flex flex-wrap justify-between items-center h-auto md:h-16 py-3 md:py-0 gap-3">
             <div className="flex items-center space-x-3">
               <Link href="/">
                 <Button variant="ghost" size="icon">
@@ -184,10 +184,10 @@ export default function TrendsEnhanced() {
               <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
                 <span className="text-white text-sm font-semibold">D</span>
               </div>
-              <h1 className="text-xl font-semibold text-gray-900">DBrief - Analytics Dashboard</h1>
+              <h1 className="text-xl font-semibold text-gray-900">Analytics Dashboard</h1>
             </div>
             
-            <div className="flex items-center space-x-4">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-4">
               <Select value={timeRange} onValueChange={setTimeRange}>
                 <SelectTrigger className="w-32">
                   <SelectValue />
