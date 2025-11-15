@@ -174,21 +174,27 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
   const handleSyncOura = () => {
     syncOuraMutation.mutate(selectedDate);
   };
+  
+  // Check if selected date is today (using same UTC-based method as dashboard initialization)
+  // Note: This matches the format used in dashboard.tsx line 16
+  const isToday = selectedDate === new Date().toISOString().split('T')[0];
 
   return (
     <>
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-lg font-semibold text-gray-900">Daily Scores</h2>
-        <Button 
-          variant="outline" 
-          size="sm"
-          onClick={handleSyncOura}
-          disabled={syncOuraMutation.isPending}
-          data-testid="button-sync-oura"
-        >
-          <RefreshCw className={`w-4 h-4 mr-2 ${syncOuraMutation.isPending ? 'animate-spin' : ''}`} />
-          {syncOuraMutation.isPending ? "Syncing..." : "Sync Oura"}
-        </Button>
+        {!isToday && (
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={handleSyncOura}
+            disabled={syncOuraMutation.isPending}
+            data-testid="button-sync-oura"
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${syncOuraMutation.isPending ? 'animate-spin' : ''}`} />
+            {syncOuraMutation.isPending ? "Syncing..." : "Sync Oura"}
+          </Button>
+        )}
       </div>
       
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">

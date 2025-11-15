@@ -8,10 +8,12 @@ A comprehensive daily journaling app with voice recording, customizable metric t
 - Scores should persist until the next day, then reset to blank for new inputs
 - Integration with Oura Ring API for automated health data (Sleep Quality, Readiness only - Steps removed)
 - Trend graphs should pop up when tapping metric circles
-- Journal entries and scores should display in a dialog when holding calendar dates (3 seconds)
+- Journal entries and scores should display in a dialog when holding calendar dates (2 seconds)
 - No highlight box during calendar long-press
 - Journal entries must persist in textarea after saving
-- Duolingo-style streak tracking for user engagement
+- Duolingo-style streak tracking for user engagement based on score inputs (not journal entries)
+- Today's scores remain blank until manually inputted (no automatic Oura syncing for current day)
+- Analytics/trends show only user-input data (auto-synced scores excluded)
 
 ## Project Architecture
 - **Frontend**: React with TypeScript, Wouter for routing, TanStack Query for data fetching
@@ -23,8 +25,23 @@ A comprehensive daily journaling app with voice recording, customizable metric t
 - **Health Tracking**: Oura Ring API integration for automatic health metrics syncing
 
 ## Recent Changes
+- **2025-11-15**: Changed streak tracking to score-based with celebration animation:
+  - **Reduced calendar long-press** from 3 seconds to 2 seconds for better UX
+  - **Disabled automatic Oura sync** for today - scores remain blank until user manually inputs them
+  - **Sync Oura button hidden** for today's date to prevent auto-population of scores
+  - **Changed streak tracking** from journal-entry-based to score-input-based:
+    - Streak increments when user inputs scores (not when writing journal entries)
+    - Auto-synced Oura scores do NOT count toward streak
+    - updateUserStreak moved from journal endpoint to daily-scores endpoint
+  - **Added Duolingo-style streak animation** with framer-motion:
+    - Flame icon shakes and scales when streak updates
+    - "+1 🔥" popup appears above streak badge
+    - Badge itself scales up and down
+  - **Analytics filtering**: Trends page now shows only user-input scores (excludes auto-synced Oura data)
+  - **Responsive headers**: Both dashboard and trends headers now wrap properly on mobile (flex-wrap, auto height)
+  - **Known limitation**: Date comparison uses UTC-based logic which may have edge cases at midnight in non-UTC timezones
 - **2025-11-15**: Fixed query issues and improved UX:
-  - Increased calendar long-press duration to 3 seconds (from ~2 seconds)
+  - Increased calendar long-press duration to 3 seconds (from ~2 seconds) [later reduced to 2 seconds]
   - Fixed JournalPanel to use custom queryFn for fetching entry by date (was using default fetcher incorrectly)
   - Fixed VoiceRecordingModal to use custom queryFn for consistency
   - Removed redundant "Scores for Selected Date" section since calendar long-press now shows this
@@ -117,7 +134,7 @@ A comprehensive daily journaling app with voice recording, customizable metric t
 - **Error Handling**: Gracefully handles missing Oura data with informative error messages
 - **Metric History**: GET /api/metric-history/:metricName?days=14 endpoint for trend graphs
 - **Long-Press**: 
-  - Ref-based timer management with per-date timeout tracking to avoid memory leaks (3 second delay)
+  - Ref-based timer management with per-date timeout tracking to avoid memory leaks (2 second delay)
   - CSS prevents highlight box: select-none (NOT touch-none to allow scrolling), webkit-tap-highlight-color: transparent
   - Calendar remains scrollable while preventing text selection highlight
 - **Trend Dialog**: Two-mode dialog (trend/edit) with proper state management and query invalidation
@@ -141,11 +158,26 @@ A comprehensive daily journaling app with voice recording, customizable metric t
   - Properly handles array query keys `["/api/journal-entries", date]` for cache management
   - Returns null gracefully if date isn't set or request fails
 - **Calendar Dialog**:
-  - Long-press (3 seconds) shows dialog with journal entry and daily scores
+  - Long-press (2 seconds) shows dialog with journal entry and daily scores
   - Dialog displays journal content with whitespace-pre-wrap for proper formatting
   - Removed redundant "Scores for Selected Date" section from main view
+- **Streak Tracking**:
+  - Tracks continuous days with score inputs (not journal entries)
+  - Only counts user-input scores (excludes auto-synced Oura data)
+  - Updates backend via updateUserStreak in daily-scores endpoint
+  - Frontend animation triggers on streak increment with framer-motion
+- **Auto-Sync Behavior**:
+  - Automatic Oura sync disabled for today's date
+  - Sync Oura button hidden when viewing current day
+  - Manual sync available for past dates only
+  - Ensures today's scores remain blank until user manually inputs them
+- **Analytics Filtering**:
+  - Trends page filters out scores where isAutoSynced === true
+  - Charts and statistics show only user-input data
+  - Provides accurate representation of user's manual tracking
 
 ## Next Steps
+- Consider implementing local-date utility library to fix timezone edge cases at midnight (current UTC-based comparison may fail at day boundaries)
 - Monitor Oura API rate limits and optimize sync frequency
 - Add historical data backfill option for past dates
 - Consider adding more Oura metrics (HRV, body temperature, etc.)
