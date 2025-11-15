@@ -110,13 +110,13 @@ export default function ScoreDashboard({}: ScoreDashboardProps) {
 
   const handleMetricClick = (metric: UserMetric) => {
     setSelectedMetric(metric);
-    setDialogMode('trend');
+    setDialogMode('edit');  // Open directly to edit mode
     const existingScore = getScoreForMetric(metric.name);
     setScoreValue(existingScore?.value?.toString() || "");
   };
 
-  const handleEditClick = () => {
-    setDialogMode('edit');
+  const handleViewTrendsClick = () => {
+    setDialogMode('trend');
   };
 
   const handleCloseDialog = () => {
@@ -229,7 +229,7 @@ export default function ScoreDashboard({}: ScoreDashboardProps) {
                 />
                 <div className="flex justify-end">
                   <Button 
-                    onClick={handleEditClick}
+                    onClick={() => setDialogMode('edit')}
                     data-testid="button-edit-score"
                   >
                     <Edit className="w-4 h-4 mr-2" />
@@ -275,11 +275,11 @@ export default function ScoreDashboard({}: ScoreDashboardProps) {
                   <Button 
                     variant="outline" 
                     className="flex-1"
-                    onClick={() => setDialogMode('trend')}
+                    onClick={handleViewTrendsClick}
                     disabled={updateScoreMutation.isPending}
-                    data-testid="button-back-to-trends"
+                    data-testid="button-view-trends"
                   >
-                    Back to Trends
+                    View Trends
                   </Button>
                   <Button 
                     className="flex-1"
