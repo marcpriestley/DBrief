@@ -16,6 +16,8 @@ DBrief is a daily journaling application designed to help users track their well
 - Journal entries must persist in textarea after saving
 - Duolingo-style streak tracking for user engagement based on score inputs (not journal entries)
 - Analytics/trends show only user-input data (auto-synced scores excluded)
+- **Daily reminders at 9pm (UTC) by default** - customizable time in settings
+- **Notifications enabled by default** - can be turned off in settings modal
 
 ## System Architecture
 **Frontend**: React with TypeScript, Wouter for routing, and TanStack Query for data fetching.
@@ -25,6 +27,7 @@ DBrief is a daily journaling application designed to help users track their well
 **Voice**: Web Speech API for voice-to-text transcription.
 **AI**: OpenAI integration for generating journal insights and pattern analysis.
 **Health Tracking**: Oura Ring API integration for automatic health metrics synchronization (Sleep Quality, Readiness).
+**Push Notifications**: Web Push API with service worker for daily score reminders. VAPID keys for secure delivery. Cron scheduler for timed notifications.
 **Feature Specifications**:
 - Voice recording with speech-to-text.
 - Calendar-based journal entry and score retrieval.
@@ -42,3 +45,20 @@ DBrief is a daily journaling application designed to help users track their well
 - **PostgreSQL**: Database for persistent storage (currently on fallback to in-memory).
 - **Oura Ring API**: For syncing Sleep Quality and Readiness metrics.
 - **OpenAI API**: For AI-powered journal insights and analysis.
+- **Web Push API**: For browser push notifications (requires VAPID keys: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_EMAIL).
+
+## Recent Updates (Nov 15, 2025)
+- ✅ **Push Notification System**: Daily reminders at customizable time (default 9pm UTC)
+  - Service worker (/sw.js) handles push notifications
+  - Settings modal for notification preferences
+  - Backend cron scheduler checks every minute for due reminders
+  - Notifications gracefully degrade if VAPID keys not configured
+  - User preferences: notificationsEnabled, reminderTime, timezone
+- ✅ **Simplified Score Input UX**: Tap circle → Enter score → Save (2 steps)
+  - Removed trend comparison from score circles  
+  - "View Trends" button accessible from edit dialog
+- ✅ **Clean Slate Start**: Removed seed data for today's scores and journal
+  - Streak starts at 0
+  - Manual metrics blank until user input
+  - Oura metrics auto-sync on first load
+- ✅ **AI Insights Repositioned**: Moved to bottom of page after calendar/journal grid

@@ -370,7 +370,7 @@ export class MemStorage implements IStorage {
     const usersWithReminders: Array<User & { subscriptions: PushSubscription[] }> = [];
     
     for (const user of this.users.values()) {
-      if (user.notificationsEnabled && user.reminderTime === time) {
+      if (user.notificationsEnabled) {
         const subscriptions = await this.getPushSubscriptions(user.id);
         if (subscriptions.length > 0) {
           usersWithReminders.push({ ...user, subscriptions });
@@ -561,10 +561,7 @@ export class DatabaseStorage implements IStorage {
 
   async getAllUsersForReminder(time: string): Promise<Array<User & { subscriptions: PushSubscription[] }>> {
     const usersWithNotifs = await db.select().from(users)
-      .where(and(
-        eq(users.notificationsEnabled, true),
-        eq(users.reminderTime, time)
-      ));
+      .where(eq(users.notificationsEnabled, true));
     
     const usersWithSubscriptions: Array<User & { subscriptions: PushSubscription[] }> = [];
     

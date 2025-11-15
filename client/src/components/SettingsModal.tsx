@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Dialog,
@@ -35,16 +35,16 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     enabled: isOpen,
   });
 
-  const [notificationsEnabled, setNotificationsEnabled] = useState(settings?.notificationsEnabled ?? true);
-  const [reminderTime, setReminderTime] = useState(settings?.reminderTime ?? "21:00");
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [reminderTime, setReminderTime] = useState("21:00");
 
   // Update local state when settings are loaded
-  useState(() => {
+  useEffect(() => {
     if (settings) {
       setNotificationsEnabled(settings.notificationsEnabled);
       setReminderTime(settings.reminderTime);
     }
-  });
+  }, [settings]);
 
   const updateSettingsMutation = useMutation({
     mutationFn: async (data: Partial<UserSettings>) => {
@@ -67,9 +67,13 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   });
 
   const handleSave = () => {
+    // Get user's timezone
+    const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    
     updateSettingsMutation.mutate({
       notificationsEnabled,
       reminderTime,
+      timezone: userTimezone,
     });
   };
 
