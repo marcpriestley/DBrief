@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import ScoreDashboard from "@/components/ScoreDashboard";
 import CalendarView from "@/components/CalendarView";
@@ -9,6 +9,7 @@ import CustomizeScoresModal from "@/components/CustomizeScoresModal";
 import { Button } from "@/components/ui/button";
 import { Settings, Plus, Flame, User, TrendingUp } from "lucide-react";
 import { Link } from "wouter";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function Dashboard() {
   const [selectedDate, setSelectedDate] = useState<string>(
@@ -16,10 +17,23 @@ export default function Dashboard() {
   );
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
   const [isCustomizeModalOpen, setIsCustomizeModalOpen] = useState(false);
+  const [previousStreak, setPreviousStreak] = useState<number>(0);
+  const [showStreakAnimation, setShowStreakAnimation] = useState(false);
 
   const { data: streak } = useQuery<any>({
     queryKey: ["/api/streak"],
   });
+  
+  // Detect streak changes and trigger animation
+  useEffect(() => {
+    if (streak?.currentStreak && previousStreak > 0 && streak.currentStreak > previousStreak) {
+      setShowStreakAnimation(true);
+      setTimeout(() => setShowStreakAnimation(false), 2000);
+    }
+    if (streak?.currentStreak) {
+      setPreviousStreak(streak.currentStreak);
+    }
+  }, [streak?.currentStreak]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -36,12 +50,39 @@ export default function Dashboard() {
             
             <div className="flex items-center space-x-4">
               {streak && streak.currentStreak && (
-                <div className="flex items-center space-x-2 bg-amber-50 px-3 py-1 rounded-full">
-                  <Flame className="h-4 w-4 text-amber-500" />
+                <motion.div 
+                  className="flex items-center space-x-2 bg-amber-50 px-3 py-1 rounded-full relative"
+                  animate={showStreakAnimation ? { 
+                    scale: [1, 1.2, 1],
+                  } : {}}
+                  transition={{ duration: 0.5 }}
+                >
+                  <motion.div
+                    animate={showStreakAnimation ? {
+                      rotate: [0, -10, 10, -10, 10, 0],
+                      scale: [1, 1.2, 1.2, 1.2, 1.2, 1]
+                    } : {}}
+                    transition={{ duration: 0.6 }}
+                  >
+                    <Flame className="h-4 w-4 text-amber-500" />
+                  </motion.div>
                   <span className="text-sm font-medium text-amber-700">
                     {streak.currentStreak} day streak
                   </span>
-                </div>
+                  <AnimatePresence>
+                    {showStreakAnimation && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -10, scale: 0.5 }}
+                        animate={{ opacity: 1, y: -30, scale: 1.5 }}
+                        exit={{ opacity: 0, y: -40 }}
+                        transition={{ duration: 0.8 }}
+                        className="absolute -top-8 left-1/2 transform -translate-x-1/2 text-2xl font-bold text-amber-500"
+                      >
+                        +1 🔥
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </motion.div>
               )}
               
               <Link href="/trends">
