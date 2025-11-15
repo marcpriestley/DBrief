@@ -66,17 +66,18 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
     },
   });
 
-  useEffect(() => {
-    const isToday = selectedDate === new Date().toISOString().split('T')[0];
-    const hasOuraMetrics = metrics.some(m => 
-      m.name === "Sleep Quality" || m.name === "Readiness" || m.name === "Steps"
-    );
-    const hasAutoSyncedScores = scores.some(s => s.isAutoSynced);
-    
-    if (isToday && hasOuraMetrics && !hasAutoSyncedScores && !syncOuraMutation.isPending) {
-      syncOuraMutation.mutate(selectedDate);
-    }
-  }, [selectedDate, metrics, scores, syncOuraMutation.isPending]);
+  // Removed automatic Oura sync - users must manually sync
+  // useEffect(() => {
+  //   const isToday = selectedDate === new Date().toISOString().split('T')[0];
+  //   const hasOuraMetrics = metrics.some(m => 
+  //     m.name === "Sleep Quality" || m.name === "Readiness" || m.name === "Steps"
+  //   );
+  //   const hasAutoSyncedScores = scores.some(s => s.isAutoSynced);
+  //   
+  //   if (isToday && hasOuraMetrics && !hasAutoSyncedScores && !syncOuraMutation.isPending) {
+  //     syncOuraMutation.mutate(selectedDate);
+  //   }
+  // }, [selectedDate, metrics, scores, syncOuraMutation.isPending]);
 
   const updateScoreMutation = useMutation({
     mutationFn: async (data: { date: string; metricName: string; value: number }) => {
