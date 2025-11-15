@@ -78,11 +78,11 @@ export default function CalendarView({ selectedDate, onDateSelect }: CalendarVie
         clearTimeout(pressTimers.current[dateStr]);
       }
       
-      // Create new timer (reduced by 35% from 3s to ~2s)
+      // Create new timer (3 seconds)
       pressTimers.current[dateStr] = setTimeout(() => {
         handleLongPress(dateStr);
         delete pressTimers.current[dateStr];
-      }, 1950);
+      }, 3000);
     };
     
     const cancelPress = () => {
