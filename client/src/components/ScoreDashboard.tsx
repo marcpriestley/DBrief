@@ -66,18 +66,18 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
     },
   });
 
-  // Removed automatic Oura sync - users must manually sync
-  // useEffect(() => {
-  //   const isToday = selectedDate === new Date().toISOString().split('T')[0];
-  //   const hasOuraMetrics = metrics.some(m => 
-  //     m.name === "Sleep Quality" || m.name === "Readiness" || m.name === "Steps"
-  //   );
-  //   const hasAutoSyncedScores = scores.some(s => s.isAutoSynced);
-  //   
-  //   if (isToday && hasOuraMetrics && !hasAutoSyncedScores && !syncOuraMutation.isPending) {
-  //     syncOuraMutation.mutate(selectedDate);
-  //   }
-  // }, [selectedDate, metrics, scores, syncOuraMutation.isPending]);
+  // Automatic Oura sync on dashboard load for today's date
+  useEffect(() => {
+    const isToday = selectedDate === new Date().toISOString().split('T')[0];
+    const hasOuraMetrics = metrics.some(m => 
+      m.name === "Sleep Quality" || m.name === "Readiness"
+    );
+    const hasAutoSyncedScores = scores.some(s => s.isAutoSynced);
+    
+    if (isToday && hasOuraMetrics && !hasAutoSyncedScores && !syncOuraMutation.isPending) {
+      syncOuraMutation.mutate(selectedDate);
+    }
+  }, [selectedDate, metrics, scores, syncOuraMutation.isPending]);
 
   const updateScoreMutation = useMutation({
     mutationFn: async (data: { date: string; metricName: string; value: number }) => {
@@ -174,27 +174,21 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
   const handleSyncOura = () => {
     syncOuraMutation.mutate(selectedDate);
   };
-  
-  // Check if selected date is today (using same UTC-based method as dashboard initialization)
-  // Note: This matches the format used in dashboard.tsx line 16
-  const isToday = selectedDate === new Date().toISOString().split('T')[0];
 
   return (
     <>
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-lg font-semibold text-gray-900">Daily Scores</h2>
-        {!isToday && (
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={handleSyncOura}
-            disabled={syncOuraMutation.isPending}
-            data-testid="button-sync-oura"
-          >
-            <RefreshCw className={`w-4 h-4 mr-2 ${syncOuraMutation.isPending ? 'animate-spin' : ''}`} />
-            {syncOuraMutation.isPending ? "Syncing..." : "Sync Oura"}
-          </Button>
-        )}
+        <Button 
+          variant="outline" 
+          size="sm"
+          onClick={handleSyncOura}
+          disabled={syncOuraMutation.isPending}
+          data-testid="button-sync-oura"
+        >
+          <RefreshCw className={`w-4 h-4 mr-2 ${syncOuraMutation.isPending ? 'animate-spin' : ''}`} />
+          {syncOuraMutation.isPending ? "Syncing..." : "Sync Oura"}
+        </Button>
       </div>
       
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
