@@ -22,9 +22,12 @@ export default function TrendsEnhanced() {
     queryKey: ["/api/user-metrics"],
   });
 
-  const { data: allScores = [] } = useQuery<DailyScore[]>({
+  const { data: allScoresRaw = [] } = useQuery<DailyScore[]>({
     queryKey: ["/api/daily-scores"],
   });
+  
+  // Filter to show only user-input scores (exclude auto-synced data)
+  const allScores = allScoresRaw.filter(score => !score.isAutoSynced);
 
   // Process data for charts
   const processedData = () => {
