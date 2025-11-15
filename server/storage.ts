@@ -1,8 +1,9 @@
 import { 
-  users, journalEntries, dailyScores, userMetrics, streaks, aiInsights,
+  users, journalEntries, dailyScores, userMetrics, streaks, aiInsights, pushSubscriptions,
   type User, type InsertUser, type JournalEntry, type InsertJournalEntry,
   type DailyScore, type InsertDailyScore, type UserMetric, type InsertUserMetric,
-  type Streak, type InsertStreak, type AIInsight, type InsertAIInsight
+  type Streak, type InsertStreak, type AIInsight, type InsertAIInsight,
+  type PushSubscription, type InsertPushSubscription
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
@@ -12,6 +13,7 @@ export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  updateUserSettings(userId: number, settings: Partial<Pick<User, 'notificationsEnabled' | 'reminderTime' | 'timezone'>>): Promise<User | undefined>;
 
   // Journal entry methods
   getJournalEntry(id: number): Promise<JournalEntry | undefined>;
@@ -41,6 +43,12 @@ export interface IStorage {
   getActiveAIInsights(userId: number): Promise<AIInsight[]>;
   createAIInsight(insight: InsertAIInsight): Promise<AIInsight>;
   deactivateAIInsight(id: number): Promise<void>;
+
+  // Push subscription methods
+  getPushSubscriptions(userId: number): Promise<PushSubscription[]>;
+  createPushSubscription(subscription: InsertPushSubscription): Promise<PushSubscription>;
+  deletePushSubscription(endpoint: string): Promise<void>;
+  getAllUsersForReminder(time: string): Promise<Array<User & { subscriptions: PushSubscription[] }>>;
 }
 
 export class MemStorage implements IStorage {
@@ -50,6 +58,7 @@ export class MemStorage implements IStorage {
   private userMetrics: Map<number, UserMetric> = new Map();
   private streaks: Map<number, Streak> = new Map();
   private aiInsights: Map<number, AIInsight> = new Map();
+  private pushSubscriptions: Map<number, PushSubscription> = new Map();
 
   private currentUserId = 1;
   private currentJournalEntryId = 1;
@@ -57,6 +66,7 @@ export class MemStorage implements IStorage {
   private currentUserMetricId = 1;
   private currentStreakId = 1;
   private currentAIInsightId = 1;
+  private currentPushSubscriptionId = 1;
 
   constructor() {
     this.initializeDefaultData();
@@ -70,6 +80,9 @@ export class MemStorage implements IStorage {
       id: 1,
       username: "demo",
       password: "demo123",
+      notificationsEnabled: true,
+      reminderTime: "21:00",
+      timezone: "UTC",
     };
     this.users.set(1, defaultUser);
     this.currentUserId = 2;
@@ -311,6 +324,62 @@ export class MemStorage implements IStorage {
       this.aiInsights.set(id, insight);
     }
   }
+
+  async updateUserSettings(userId: number, settings: Partial<Pick<User, 'notificationsEnabled' | 'reminderTime' | 'timezone'>>): Promise<User | undefined> {
+    const user = this.users.get(userId);
+    if (user) {
+      Object.assign(user, settings);
+      this.users.set(userId, user);
+      return user;
+    }
+    return undefined;
+  }
+
+  async getPushSubscriptions(userId: number): Promise<PushSubscription[]> {
+    return Array.from(this.pushSubscriptions.values()).filter(sub => sub.userId === userId);
+  }
+
+  async createPushSubscription(subscription: InsertPushSubscription): Promise<PushSubscription> {
+    const existing = Array.from(this.pushSubscriptions.values()).find(
+      sub => sub.endpoint === subscription.endpoint
+    );
+    
+    if (existing) {
+      return existing;
+    }
+
+    const newSubscription: PushSubscription = {
+      ...subscription,
+      id: this.currentPushSubscriptionId++,
+      createdAt: new Date(),
+    };
+    this.pushSubscriptions.set(newSubscription.id, newSubscription);
+    return newSubscription;
+  }
+
+  async deletePushSubscription(endpoint: string): Promise<void> {
+    const subscription = Array.from(this.pushSubscriptions.entries()).find(
+      ([_, sub]) => sub.endpoint === endpoint
+    );
+    if (subscription) {
+      this.pushSubscriptions.delete(subscription[0]);
+    }
+  }
+
+  async getAllUsersForReminder(time: string): Promise<Array<User & { subscriptions: PushSubscription[] }>> {
+    const usersWithReminders: Array<User & { subscriptions: PushSubscription[] }> = [];
+    
+    for (const user of this.users.values()) {
+      if (user.notificationsEnabled && user.reminderTime === time) {
+        const subscriptions = await this.getPushSubscriptions(user.id);
+        if (subscriptions.length > 0) {
+          usersWithReminders.push({ ...user, subscriptions });
+        }
+      }
+    }
+    
+    return usersWithReminders;
+  }
 }
 
 // Database implementation remains the same but we'll use MemStorage for now
@@ -460,6 +529,53 @@ export class DatabaseStorage implements IStorage {
     await db.update(aiInsights)
       .set({ isActive: false })
       .where(eq(aiInsights.id, id));
+  }
+
+  async updateUserSettings(userId: number, settings: Partial<Pick<User, 'notificationsEnabled' | 'reminderTime' | 'timezone'>>): Promise<User | undefined> {
+    const [updated] = await db.update(users)
+      .set(settings)
+      .where(eq(users.id, userId))
+      .returning();
+    return updated || undefined;
+  }
+
+  async getPushSubscriptions(userId: number): Promise<PushSubscription[]> {
+    return await db.select().from(pushSubscriptions).where(eq(pushSubscriptions.userId, userId));
+  }
+
+  async createPushSubscription(subscription: InsertPushSubscription): Promise<PushSubscription> {
+    const [existing] = await db.select().from(pushSubscriptions)
+      .where(eq(pushSubscriptions.endpoint, subscription.endpoint));
+    
+    if (existing) {
+      return existing;
+    }
+
+    const [created] = await db.insert(pushSubscriptions).values(subscription).returning();
+    return created;
+  }
+
+  async deletePushSubscription(endpoint: string): Promise<void> {
+    await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, endpoint));
+  }
+
+  async getAllUsersForReminder(time: string): Promise<Array<User & { subscriptions: PushSubscription[] }>> {
+    const usersWithNotifs = await db.select().from(users)
+      .where(and(
+        eq(users.notificationsEnabled, true),
+        eq(users.reminderTime, time)
+      ));
+    
+    const usersWithSubscriptions: Array<User & { subscriptions: PushSubscription[] }> = [];
+    
+    for (const user of usersWithNotifs) {
+      const subs = await this.getPushSubscriptions(user.id);
+      if (subs.length > 0) {
+        usersWithSubscriptions.push({ ...user, subscriptions: subs });
+      }
+    }
+    
+    return usersWithSubscriptions;
   }
 }
 

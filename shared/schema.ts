@@ -7,6 +7,9 @@ export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
+  notificationsEnabled: boolean("notifications_enabled").default(true),
+  reminderTime: text("reminder_time").default("21:00"),
+  timezone: text("timezone").default("UTC"),
 });
 
 export const journalEntries = pgTable("journal_entries", {
@@ -54,6 +57,15 @@ export const aiInsights = pgTable("ai_insights", {
   isActive: boolean("is_active").default(true),
 });
 
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  endpoint: text("endpoint").notNull().unique(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const insertJournalEntrySchema = createInsertSchema(journalEntries).omit({
   id: true,
   createdAt: true,
@@ -76,6 +88,11 @@ export const insertAIInsightSchema = createInsertSchema(aiInsights).omit({
   createdAt: true,
 });
 
+export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
@@ -88,6 +105,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   userMetrics: many(userMetrics),
   streaks: many(streaks),
   aiInsights: many(aiInsights),
+  pushSubscriptions: many(pushSubscriptions),
 }));
 
 export const journalEntriesRelations = relations(journalEntries, ({ one }) => ({
@@ -125,6 +143,13 @@ export const aiInsightsRelations = relations(aiInsights, ({ one }) => ({
   }),
 }));
 
+export const pushSubscriptionsRelations = relations(pushSubscriptions, ({ one }) => ({
+  user: one(users, {
+    fields: [pushSubscriptions.userId],
+    references: [users.id],
+  }),
+}));
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type JournalEntry = typeof journalEntries.$inferSelect;
@@ -137,3 +162,5 @@ export type Streak = typeof streaks.$inferSelect;
 export type InsertStreak = z.infer<typeof insertStreakSchema>;
 export type AIInsight = typeof aiInsights.$inferSelect;
 export type InsertAIInsight = z.infer<typeof insertAIInsightSchema>;
+export type PushSubscription = typeof pushSubscriptions.$inferSelect;
+export type InsertPushSubscription = z.infer<typeof insertPushSubscriptionSchema>;
