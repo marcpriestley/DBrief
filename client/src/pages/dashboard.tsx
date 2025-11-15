@@ -118,7 +118,7 @@ export default function Dashboard() {
             </Button>
           </div>
           
-          <ScoreDashboard selectedDate={selectedDate} />
+          <ScoreDashboard />
         </section>
 
         {/* AI Insights */}

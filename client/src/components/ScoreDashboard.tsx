@@ -10,31 +10,27 @@ import type { DailyScore, UserMetric } from "@shared/schema";
 import { RefreshCw, Edit } from "lucide-react";
 import MetricTrendChart from "./MetricTrendChart";
 
-interface ScoreDashboardProps {
-  selectedDate: string;
-}
+interface ScoreDashboardProps {}
 
 type DialogMode = 'trend' | 'edit';
 
-export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
+export default function ScoreDashboard({}: ScoreDashboardProps) {
   const [selectedMetric, setSelectedMetric] = useState<UserMetric | null>(null);
   const [dialogMode, setDialogMode] = useState<DialogMode>('trend');
   const [scoreValue, setScoreValue] = useState<string>("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  
+  // Always use today's date for score dashboard
+  const today = new Date().toISOString().split('T')[0];
 
   const { data: metrics = [] } = useQuery<UserMetric[]>({
     queryKey: ["/api/user-metrics"],
   });
 
   const { data: scores = [] } = useQuery<DailyScore[]>({
-    queryKey: ["/api/daily-scores", selectedDate],
-    queryFn: () => fetch(`/api/daily-scores/${selectedDate}`).then(res => res.json()),
-  });
-
-  const { data: previousScores = [] } = useQuery<DailyScore[]>({
-    queryKey: ["/api/daily-scores", getPreviousDate(selectedDate)],
-    queryFn: () => fetch(`/api/daily-scores/${getPreviousDate(selectedDate)}`).then(res => res.json()),
+    queryKey: ["/api/daily-scores", today],
+    queryFn: () => fetch(`/api/daily-scores/${today}`).then(res => res.json()),
   });
 
   const { data: metricHistory = [] } = useQuery<DailyScore[]>({
@@ -68,26 +64,25 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
 
   // Automatic Oura sync on dashboard load for today's date
   useEffect(() => {
-    const isToday = selectedDate === new Date().toISOString().split('T')[0];
     const hasOuraMetrics = metrics.some(m => 
       m.name === "Sleep Quality" || m.name === "Readiness"
     );
     const hasAutoSyncedScores = scores.some(s => s.isAutoSynced);
     
-    if (isToday && hasOuraMetrics && !hasAutoSyncedScores && !syncOuraMutation.isPending) {
-      syncOuraMutation.mutate(selectedDate);
+    if (hasOuraMetrics && !hasAutoSyncedScores && !syncOuraMutation.isPending) {
+      syncOuraMutation.mutate(today);
     }
-  }, [selectedDate, metrics, scores, syncOuraMutation.isPending]);
+  }, [metrics, scores, syncOuraMutation.isPending, today]);
 
   const updateScoreMutation = useMutation({
     mutationFn: async (data: { date: string; metricName: string; value: number }) => {
       return apiRequest("POST", "/api/daily-scores", data);
     },
     onSuccess: (data, variables) => {
-      // Invalidate the specific date query to ensure UI updates
-      queryClient.invalidateQueries({ queryKey: ["/api/daily-scores", variables.date] });
-      // Also invalidate the previous date query for trend calculations
-      queryClient.invalidateQueries({ queryKey: ["/api/daily-scores", getPreviousDate(variables.date)] });
+      // Invalidate today's scores query to ensure UI updates
+      queryClient.invalidateQueries({ queryKey: ["/api/daily-scores", today] });
+      // Also invalidate streak query to show animation
+      queryClient.invalidateQueries({ queryKey: ["/api/streak"] });
       
       const metricName = selectedMetric?.name;
       toast({
@@ -109,27 +104,8 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
     },
   });
 
-  function getPreviousDate(date: string): string {
-    const d = new Date(date);
-    d.setDate(d.getDate() - 1);
-    return d.toISOString().split('T')[0];
-  }
-
   function getScoreForMetric(metricName: string): DailyScore | undefined {
     return scores.find(score => score.metricName === metricName);
-  }
-
-  function getPreviousScoreForMetric(metricName: string): DailyScore | undefined {
-    return previousScores.find(score => score.metricName === metricName);
-  }
-
-  function getTrendText(current: number | undefined, previous?: number): string {
-    if (current === undefined) return "Tap to add";
-    if (previous === undefined) return "No previous data";
-    const diff = current - previous;
-    if (diff > 0) return `+${diff} from yesterday`;
-    if (diff < 0) return `${diff} from yesterday`;
-    return "No change";
   }
 
   const handleMetricClick = (metric: UserMetric) => {
@@ -165,14 +141,14 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
     }
 
     updateScoreMutation.mutate({
-      date: selectedDate,
+      date: today,
       metricName: selectedMetric.name,
       value,
     });
   };
 
   const handleSyncOura = () => {
-    syncOuraMutation.mutate(selectedDate);
+    syncOuraMutation.mutate(today);
   };
 
   return (
@@ -194,7 +170,6 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
         {metrics.map((metric) => {
           const score = getScoreForMetric(metric.name);
-          const previousScore = getPreviousScoreForMetric(metric.name);
           const value = score?.value;
           const displayValue = value !== undefined ? value : "";
           const maxValue = metric.maxValue || 100;
@@ -205,6 +180,7 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
               key={metric.id} 
               onClick={() => handleMetricClick(metric)}
               className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-center cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
+              data-testid={`circle-${metric.name.toLowerCase().replace(/\s+/g, '-')}`}
             >
               <div className="relative w-16 h-16 mx-auto mb-3">
                 <div 
@@ -221,7 +197,7 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
               </div>
               <h3 className="text-sm font-medium text-gray-700">{metric.name}</h3>
               <p className="text-xs text-gray-500 mt-1">
-                {score?.isAutoSynced ? "Auto-synced" : getTrendText(value, previousScore?.value)}
+                {score?.isAutoSynced ? "Auto-synced" : (value !== undefined ? "Tap to edit" : "Tap to add")}
               </p>
             </div>
           );
@@ -238,7 +214,7 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
             <DialogDescription>
               {dialogMode === 'trend' 
                 ? `14-day trend for ${selectedMetric?.name}. Tap Edit to update today's score.`
-                : `Enter a score from 0 to ${selectedMetric?.maxValue || 100} for ${selectedMetric?.name} on ${selectedDate}.`
+                : `Enter a score from 0 to ${selectedMetric?.maxValue || 100} for ${selectedMetric?.name} for today.`
               }
             </DialogDescription>
           </DialogHeader>
@@ -249,7 +225,7 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
                 <MetricTrendChart 
                   metric={selectedMetric} 
                   history={metricHistory} 
-                  selectedDate={selectedDate}
+                  selectedDate={today}
                 />
                 <div className="flex justify-end">
                   <Button 
