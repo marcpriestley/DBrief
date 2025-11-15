@@ -89,64 +89,36 @@ export class MemStorage implements IStorage {
     });
     this.currentUserMetricId = 7;
 
-    // Create sample journal entries
-    const sampleEntries: JournalEntry[] = [
-      {
-        id: 1,
-        userId: 1,
-        date: today.toISOString().split('T')[0],
-        content: "Had a great day today! Started with morning exercise and felt energized throughout. Work was productive - finished the quarterly report and had a good team meeting.",
-        isVoiceEntry: false,
-        createdAt: today,
-      },
-      {
-        id: 2,
-        userId: 1,
-        date: new Date(today.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        content: "Feeling a bit overwhelmed with work deadlines. Had trouble sleeping last night. Need to focus on time management and stress reduction.",
-        isVoiceEntry: false,
-        createdAt: new Date(today.getTime() - 24 * 60 * 60 * 1000),
-      },
-    ];
+    // No sample journal entries - users start with blank slate
+    this.currentJournalEntryId = 1;
 
-    sampleEntries.forEach(entry => {
-      this.journalEntries.set(entry.id, entry);
-    });
-    this.currentJournalEntryId = 3;
-
-    // Create sample scores showing persistence
-    const todayStr = today.toISOString().split('T')[0];
+    // No sample scores for today - manual metrics remain blank until user inputs
+    // Oura metrics will auto-sync when app opens
+    // Keep one day of historical data for testing calendar long-press
     const yesterdayStr = new Date(today.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     
     const sampleScores: DailyScore[] = [
-      // Today's scores - these should persist
-      { id: 1, userId: 1, date: todayStr, metricName: "Happiness", value: 8, isAutoSynced: false },
-      { id: 2, userId: 1, date: todayStr, metricName: "Productivity", value: 7, isAutoSynced: false },
-      { id: 3, userId: 1, date: todayStr, metricName: "Energy", value: 7, isAutoSynced: false },
-      { id: 4, userId: 1, date: todayStr, metricName: "Nutrition", value: 9, isAutoSynced: false },
-      { id: 5, userId: 1, date: todayStr, metricName: "Steps", value: 8500, isAutoSynced: true },
-      
-      // Yesterday's scores
-      { id: 6, userId: 1, date: yesterdayStr, metricName: "Happiness", value: 7, isAutoSynced: false },
-      { id: 7, userId: 1, date: yesterdayStr, metricName: "Productivity", value: 8, isAutoSynced: false },
-      { id: 8, userId: 1, date: yesterdayStr, metricName: "Energy", value: 6, isAutoSynced: false },
-      { id: 9, userId: 1, date: yesterdayStr, metricName: "Nutrition", value: 8, isAutoSynced: false },
-      { id: 10, userId: 1, date: yesterdayStr, metricName: "Steps", value: 7200, isAutoSynced: true },
-      { id: 11, userId: 1, date: yesterdayStr, metricName: "Sleep Hours", value: 75, isAutoSynced: true },
+      // Yesterday's scores for testing calendar long-press
+      { id: 1, userId: 1, date: yesterdayStr, metricName: "Happiness", value: 7, isAutoSynced: false },
+      { id: 2, userId: 1, date: yesterdayStr, metricName: "Productivity", value: 8, isAutoSynced: false },
+      { id: 3, userId: 1, date: yesterdayStr, metricName: "Energy", value: 6, isAutoSynced: false },
+      { id: 4, userId: 1, date: yesterdayStr, metricName: "Nutrition", value: 8, isAutoSynced: false },
+      { id: 5, userId: 1, date: yesterdayStr, metricName: "Sleep Quality", value: 82, isAutoSynced: true },
+      { id: 6, userId: 1, date: yesterdayStr, metricName: "Readiness", value: 78, isAutoSynced: true },
     ];
 
     sampleScores.forEach(score => {
       this.dailyScores.set(score.id, score);
     });
-    this.currentDailyScoreId = 12;
+    this.currentDailyScoreId = 7;
 
-    // Create default streak
+    // Create default streak starting at 0
     const defaultStreak: Streak = {
       id: 1,
       userId: 1,
-      currentStreak: 7,
-      longestStreak: 12,
-      lastEntryDate: today.toISOString().split('T')[0],
+      currentStreak: 0,
+      longestStreak: 0,
+      lastEntryDate: null,
     };
     this.streaks.set(1, defaultStreak);
     this.currentStreakId = 2;
