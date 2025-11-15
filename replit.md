@@ -23,6 +23,12 @@ A comprehensive daily journaling app with voice recording, customizable metric t
 - **Health Tracking**: Oura Ring API integration for automatic health metrics syncing
 
 ## Recent Changes
+- **2025-11-15**: Fixed query issues and improved UX:
+  - Increased calendar long-press duration to 3 seconds (from ~2 seconds)
+  - Fixed JournalPanel to use custom queryFn for fetching entry by date (was using default fetcher incorrectly)
+  - Fixed VoiceRecordingModal to use custom queryFn for consistency
+  - Removed redundant "Scores for Selected Date" section since calendar long-press now shows this
+  - All three components (CalendarView, JournalPanel, VoiceRecordingModal) now properly fetch and display journal entries
 - **2025-11-14**: Fixed calendar long-press dialog and journal entry mutations:
   - Fixed calendar long-press dialog showing blank journal entries (added proper queryFn for date-specific fetch)
   - Fixed journal mutations to parse JSON response and update local state immediately
@@ -111,7 +117,7 @@ A comprehensive daily journaling app with voice recording, customizable metric t
 - **Error Handling**: Gracefully handles missing Oura data with informative error messages
 - **Metric History**: GET /api/metric-history/:metricName?days=14 endpoint for trend graphs
 - **Long-Press**: 
-  - Ref-based timer management with per-date timeout tracking to avoid memory leaks (1.95 second delay - reduced by 35%)
+  - Ref-based timer management with per-date timeout tracking to avoid memory leaks (3 second delay)
   - CSS prevents highlight box: select-none (NOT touch-none to allow scrolling), webkit-tap-highlight-color: transparent
   - Calendar remains scrollable while preventing text selection highlight
 - **Trend Dialog**: Two-mode dialog (trend/edit) with proper state management and query invalidation
@@ -128,11 +134,16 @@ A comprehensive daily journaling app with voice recording, customizable metric t
   - Mutations invalidate both list and specific date queries
   - useEffect updates textarea content when currentEntry changes
   - Saved content remains visible after save operation with no delay
-- **Calendar Dialog**:
-  - Long-press query uses custom queryFn to fetch journal entry by date
-  - Properly handles array query keys for cache management
+- **Query Architecture**:
+  - All three journal entry queries (CalendarView, JournalPanel, VoiceRecordingModal) use custom queryFn
+  - Custom queryFn required because default fetcher only uses queryKey[0], ignoring date parameter
+  - Pattern: `queryFn: async () => fetch(\`/api/journal-entries/${date}\`).then(res => res.json())`
+  - Properly handles array query keys `["/api/journal-entries", date]` for cache management
   - Returns null gracefully if date isn't set or request fails
+- **Calendar Dialog**:
+  - Long-press (3 seconds) shows dialog with journal entry and daily scores
   - Dialog displays journal content with whitespace-pre-wrap for proper formatting
+  - Removed redundant "Scores for Selected Date" section from main view
 
 ## Next Steps
 - Monitor Oura API rate limits and optimize sync frequency
