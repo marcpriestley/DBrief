@@ -26,6 +26,11 @@ export default function VoiceRecordingModal({
   
   const { data: currentEntry } = useQuery<JournalEntry | null>({
     queryKey: ["/api/journal-entries", selectedDate],
+    queryFn: async () => {
+      const response = await fetch(`/api/journal-entries/${selectedDate}`);
+      if (!response.ok) return null;
+      return response.json();
+    },
     enabled: isOpen,
   });
   

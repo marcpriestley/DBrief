@@ -23,6 +23,11 @@ export default function JournalPanel({ selectedDate, onVoiceRecord }: JournalPan
 
   const { data: currentEntry } = useQuery<JournalEntry | null>({
     queryKey: ["/api/journal-entries", selectedDate],
+    queryFn: async () => {
+      const response = await fetch(`/api/journal-entries/${selectedDate}`);
+      if (!response.ok) return null;
+      return response.json();
+    },
   });
 
   const { data: recentEntries = [] } = useQuery<JournalEntry[]>({
@@ -188,44 +193,6 @@ export default function JournalPanel({ selectedDate, onVoiceRecord }: JournalPan
           </div>
         </CardContent>
       </Card>
-
-      {/* Daily Scores for Selected Date */}
-      {dayScores.length > 0 && (
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center mb-4">
-              <TrendingUp className="h-5 w-5 text-primary mr-2" />
-              <h3 className="text-lg font-semibold text-gray-900">
-                Scores for {formatDate(new Date(selectedDate), 'MMM d, yyyy')}
-              </h3>
-            </div>
-            
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              {dayScores.map((score) => {
-                const metric = metrics.find(m => m.name === score.metricName);
-                const color = metric?.color || "#6B7280";
-                
-                return (
-                  <div key={score.id} className="bg-gray-50 rounded-lg p-3 text-center">
-                    <div 
-                      className="w-12 h-12 mx-auto mb-2 rounded-full flex items-center justify-center text-white font-semibold"
-                      style={{ backgroundColor: color }}
-                    >
-                      {score.value}
-                    </div>
-                    <p className="text-sm font-medium text-gray-700">{score.metricName}</p>
-                    {score.isAutoSynced && (
-                      <Badge variant="secondary" className="text-xs mt-1">
-                        Auto-synced
-                      </Badge>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Recent Entries */}
       <Card>
