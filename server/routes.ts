@@ -52,16 +52,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           isVoiceEntry: validatedData.isVoiceEntry,
         });
         
-        // Update streak
-        await updateUserStreak(userId, validatedData.date);
+        // Removed streak update from journal entries - now tracked by score inputs
         
         res.json(updatedEntry);
       } else {
         // Create new entry
         const entry = await storage.createJournalEntry(validatedData);
         
-        // Update streak
-        await updateUserStreak(userId, validatedData.date);
+        // Removed streak update from journal entries - now tracked by score inputs
         
         res.json(entry);
       }
@@ -105,6 +103,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         validatedData.metricName, 
         validatedData.value
       );
+      
+      // Update streak based on score inputs (only for user inputs, not auto-synced)
+      if (!validatedData.isAutoSynced) {
+        await updateUserStreak(userId, validatedData.date);
+      }
       
       res.json(score);
     } catch (error) {
