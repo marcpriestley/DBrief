@@ -1,14 +1,14 @@
 # DBrief - Daily Journaling App
 
-## Project Overview
-A comprehensive daily journaling app with voice recording, customizable metric tracking, and AI-powered insights. Built with React, TypeScript, Express, and PostgreSQL/in-memory storage.
+## Overview
+DBrief is a daily journaling application designed to help users track their well-being through journal entries, customizable metric tracking, and AI-powered insights. It integrates with health devices for automated data collection and provides trend visualizations to help users understand their patterns over time. The project aims to offer a comprehensive and intuitive platform for personal reflection and self-improvement.
 
 ## User Preferences
 - Score circles must always remain at the top of the main dashboard
 - Scores should persist until the next day, then reset to blank for new inputs
-- Integration with Oura Ring API for automated health data (Sleep Quality, Readiness only - Steps removed)
-- **Oura metrics auto-sync when app opens** - Sleep Quality and Readiness automatically populate
-- **Manual metrics remain blank until first input** - Happiness, Productivity, Energy, Nutrition start blank each day
+- Integration with Oura Ring API for automated health data (Sleep Quality, Readiness only)
+- Oura metrics auto-sync when app opens - Sleep Quality and Readiness automatically populate
+- Manual metrics remain blank until first input - Happiness, Productivity, Energy, Nutrition start blank each day
 - Once inputted, all scores persist and display for that date
 - Trend graphs should pop up when tapping metric circles
 - Journal entries and scores should display in a dialog when holding calendar dates (2 seconds)
@@ -17,175 +17,28 @@ A comprehensive daily journaling app with voice recording, customizable metric t
 - Duolingo-style streak tracking for user engagement based on score inputs (not journal entries)
 - Analytics/trends show only user-input data (auto-synced scores excluded)
 
-## Project Architecture
-- **Frontend**: React with TypeScript, Wouter for routing, TanStack Query for data fetching
-- **Backend**: Express server with Drizzle ORM
-- **Storage**: In-memory storage (MemStorage) with fallback from PostgreSQL due to database connection issues
-- **UI**: Shadcn/ui components with Tailwind CSS
-- **Voice**: Web Speech API for voice-to-text transcription
-- **AI**: OpenAI integration for journal insights and pattern analysis
-- **Health Tracking**: Oura Ring API integration for automatic health metrics syncing
+## System Architecture
+**Frontend**: React with TypeScript, Wouter for routing, and TanStack Query for data fetching.
+**Backend**: Express server utilizing Drizzle ORM.
+**Storage**: In-memory storage (MemStorage) with a PostgreSQL fallback (currently experiencing database connection issues).
+**UI/UX**: Built with Shadcn/ui components and styled using Tailwind CSS.
+**Voice**: Web Speech API for voice-to-text transcription.
+**AI**: OpenAI integration for generating journal insights and pattern analysis.
+**Health Tracking**: Oura Ring API integration for automatic health metrics synchronization (Sleep Quality, Readiness).
+**Feature Specifications**:
+- Voice recording with speech-to-text.
+- Calendar-based journal entry and score retrieval.
+- Customizable metric tracking with interactive score circles.
+- Interactive trend graph dialogs showing 14-day history, averages, and edit functionality.
+- Calendar long-press to view daily journal and scores.
+- Streak tracking for user engagement based on manual score inputs.
+- Multi-scale metric support (e.g., 0-10 for wellness, 0-100 for health).
+- Journal entries append with timestamps and preserve whitespace.
+- Score input flow simplified to two steps: tap circle to edit, then save.
+- AI Insights displayed at the bottom of the page.
+- Analytics filters to show only user-input scores, excluding auto-synced data.
 
-## Recent Changes
-- **2025-11-15**: Restored Oura auto-sync and refined behavior:
-  - **Oura metrics (Sleep Quality, Readiness) auto-sync** when opening the app
-  - **Manual metrics (Happiness, Productivity, Energy, Nutrition) remain blank** until user inputs them
-  - **Sync Oura button always visible** for manual refresh of Oura data
-  - Once any score is saved, it persists and displays for that date
-- **2025-11-15**: Changed streak tracking to score-based with celebration animation:
-  - **Reduced calendar long-press** from 3 seconds to 2 seconds for better UX
-  - **Changed streak tracking** from journal-entry-based to score-input-based:
-    - Streak increments when user inputs scores (not when writing journal entries)
-    - Auto-synced Oura scores do NOT count toward streak
-    - updateUserStreak moved from journal endpoint to daily-scores endpoint
-  - **Added Duolingo-style streak animation** with framer-motion:
-    - Flame icon shakes and scales when streak updates
-    - "+1 🔥" popup appears above streak badge
-    - Badge itself scales up and down
-  - **Analytics filtering**: Trends page now shows only user-input scores (excludes auto-synced Oura data)
-  - **Responsive headers**: Both dashboard and trends headers now wrap properly on mobile (flex-wrap, auto height)
-  - **Known limitation**: Date comparison uses UTC-based logic which may have edge cases at midnight in non-UTC timezones
-- **2025-11-15**: Fixed query issues and improved UX:
-  - Increased calendar long-press duration to 3 seconds (from ~2 seconds) [later reduced to 2 seconds]
-  - Fixed JournalPanel to use custom queryFn for fetching entry by date (was using default fetcher incorrectly)
-  - Fixed VoiceRecordingModal to use custom queryFn for consistency
-  - Removed redundant "Scores for Selected Date" section since calendar long-press now shows this
-  - All three components (CalendarView, JournalPanel, VoiceRecordingModal) now properly fetch and display journal entries
-- **2025-11-14**: Fixed calendar long-press dialog and journal entry mutations:
-  - Fixed calendar long-press dialog showing blank journal entries (added proper queryFn for date-specific fetch)
-  - Fixed journal mutations to parse JSON response and update local state immediately
-  - Applied same fix to VoiceRecordingModal for consistency
-  - Journal entries now properly append with timestamps and display correctly in calendar dialog
-- **2025-11-14**: Fixed calendar scrolling, long-press duration, and journal persistence:
-  - Fixed calendar scroll issue by removing `touch-none` class (allows scrolling while preventing highlight)
-  - Reduced long-press duration by 35% from 3 seconds to 1.95 seconds (~2 seconds)
-  - Fixed journal entries to persist in textarea after saving (immediate state update in onSuccess)
-- **2025-11-14**: Removed Steps metric and fixed journal/calendar UX issues:
-  - Completely removed Steps metric from application (no longer tracking or syncing)
-  - Fixed calendar long-press to prevent browser highlight box (added CSS to prevent text selection and tap highlight)
-  - Fixed journal entries to persist in textarea after saving (added specific date query invalidation)
-  - Only 6 metrics remain: Happiness, Productivity, Energy, Nutrition, Sleep Quality, Readiness
-- **2025-11-14**: Enhanced journal entry with timestamps and appending functionality:
-  - Changed calendar long-press duration from 500ms to 3 seconds for better UX
-  - Journal entries now append with timestamps for today's date
-  - Each new text or voice input adds a timestamped paragraph
-  - First entry of the day gets an initial timestamp
-  - Timestamps format: [HH:MM AM/PM]
-  - Whitespace preservation: ALL content saved exactly as typed, no trimming except for new content being added
-  - Added debug logging to Oura sync for troubleshooting
-  - VoiceRecordingModal query optimized to only fetch when modal is open
-- **2025-11-14**: Added interactive trend graphs and calendar long-press features:
-  - Removed Sleep Hours metric (only Sleep Quality, Readiness remain)
-  - Implemented trend graph dialog that opens when tapping metric circles:
-    - Shows 14-day line chart with historical data
-    - Displays current value, 7-day average, and comparison stats
-    - Includes "Edit Score" button to update values
-    - After saving, returns to updated trend view
-  - Added long-press functionality to calendar dates:
-    - Hold any calendar date for 3 seconds to view details
-    - Dialog shows journal entry and all daily scores for that date
-    - Score circles display with proper scaling and auto-sync indicators
-    - Implemented using ref-based timer management for stability
-- **2025-11-14**: Fully integrated Oura Ring API for automatic health metric syncing:
-  - Created Oura API service module (server/oura.ts) with support for multiple endpoints
-  - Added POST /api/oura/sync/:date endpoint for fetching and storing Oura data
-  - Implemented automatic sync on dashboard load for today's date
-  - Added manual "Sync Oura" button with loading state and toast notifications
-  - Syncs two key health metrics: Sleep Quality, Readiness
-  - Auto-synced scores display "Auto-synced" badge instead of trend comparison
-  - Changed "Recovery" metric to "Readiness" to match Oura terminology
-  - Updated metrics to support different scales (0-10 for wellness, 0-100 for health tracking)
-- **2025-06-30**: Fixed score persistence logic - scores now remain blank until inputted, then persist until next day
-- **2025-06-30**: Enhanced trends page with comprehensive analytics dashboard featuring:
-  - Multiple chart types: Line, Area, Bar, and Heat Map visualizations
-  - Extended time ranges: 1 Week to 1 Year analysis
-  - Statistical insights: averages, trends, consistency metrics, and goal progress
-  - Interactive metric selection and weekly/monthly comparisons
-- **2025-06-30**: Improved calendar integration to display scores alongside journal entries
-- **2025-06-30**: Enhanced health tracker integration with auto-sync indicators
-- **2025-06-30**: Fixed score circle display to show blank state correctly before input
-
-## Features Implemented
-- ✅ Voice recording with speech-to-text transcription
-- ✅ Calendar-based journal entry retrieval
-- ✅ Customizable metric tracking with score circles
-- ✅ AI-powered insights using OpenAI
-- ✅ Trends visualization with interactive charts
-- ✅ Streak tracking system
-- ✅ Oura Ring API integration with automatic syncing:
-  - Sleep Quality (0-100 scale)
-  - Readiness (0-100 scale, formerly "Recovery")
-- ✅ Manual and automatic health data synchronization
-- ✅ Multi-scale metric support (0-10 for wellness, 0-100 for health tracking)
-- ✅ Interactive trend graph dialogs:
-  - Tap metric circles to view 14-day trend charts
-  - Edit scores directly from trend view
-  - See current value, 7-day average, and trend direction
-- ✅ Calendar long-press feature:
-  - Hold calendar dates to view journal entry and daily scores in a dialog
-  - Timer-based detection with 3 second delay
-  - Displays all metrics with score circles and auto-sync indicators
-  - CSS prevents browser highlight box during long-press
-- ✅ Journal entry persistence:
-  - Saved entries remain visible in textarea after saving
-  - Specific date query invalidation ensures proper cache refresh
-
-## Technical Implementation Notes
-- **Oura API**: Uses v2 endpoints (daily_sleep, daily_readiness only)
-  - Debug logging tracks API responses
-  - Steps metric and daily_activity endpoint removed per user request
-- **Auto-sync**: Triggers once per day on dashboard load for today's date
-- **Concurrency**: Prevents multiple simultaneous sync operations
-- **Error Handling**: Gracefully handles missing Oura data with informative error messages
-- **Metric History**: GET /api/metric-history/:metricName?days=14 endpoint for trend graphs
-- **Long-Press**: 
-  - Ref-based timer management with per-date timeout tracking to avoid memory leaks (2 second delay)
-  - CSS prevents highlight box: select-none (NOT touch-none to allow scrolling), webkit-tap-highlight-color: transparent
-  - Calendar remains scrollable while preventing text selection highlight
-- **Trend Dialog**: Two-mode dialog (trend/edit) with proper state management and query invalidation
-- **Journal Timestamps**: 
-  - Automatic timestamping for all new entries, appending behavior for today's entries only
-  - Exact whitespace preservation: content saved as-is without trimming (except new content being added)
-  - Append detection via exact string comparison (no trimming during comparison)
-  - Today's appends: new content gets timestamp, existing content preserved exactly
-  - Past date edits: saved as-is with no modifications
-  - Voice modal: query enabled only when open to optimize performance
-- **Journal Persistence**:
-  - Mutations parse JSON response from backend and use it to update local state
-  - onSuccess callback immediately updates content and initialContent with data.content
-  - Mutations invalidate both list and specific date queries
-  - useEffect updates textarea content when currentEntry changes
-  - Saved content remains visible after save operation with no delay
-- **Query Architecture**:
-  - All three journal entry queries (CalendarView, JournalPanel, VoiceRecordingModal) use custom queryFn
-  - Custom queryFn required because default fetcher only uses queryKey[0], ignoring date parameter
-  - Pattern: `queryFn: async () => fetch(\`/api/journal-entries/${date}\`).then(res => res.json())`
-  - Properly handles array query keys `["/api/journal-entries", date]` for cache management
-  - Returns null gracefully if date isn't set or request fails
-- **Calendar Dialog**:
-  - Long-press (2 seconds) shows dialog with journal entry and daily scores
-  - Dialog displays journal content with whitespace-pre-wrap for proper formatting
-  - Removed redundant "Scores for Selected Date" section from main view
-- **Streak Tracking**:
-  - Tracks continuous days with score inputs (not journal entries)
-  - Only counts user-input scores (excludes auto-synced Oura data)
-  - Updates backend via updateUserStreak in daily-scores endpoint
-  - Frontend animation triggers on streak increment with framer-motion
-- **Auto-Sync Behavior**:
-  - Automatic Oura sync enabled when opening the app
-  - Oura metrics (Sleep Quality, Readiness) auto-populate for today
-  - Manual metrics (Happiness, Productivity, Energy, Nutrition) start blank for today
-  - Sync Oura button always available for manual refresh
-  - Once any score is saved (manual or auto), it persists for that date
-- **Analytics Filtering**:
-  - Trends page filters out scores where isAutoSynced === true
-  - Charts and statistics show only user-input data
-  - Provides accurate representation of user's manual tracking
-
-## Next Steps
-- Consider implementing local-date utility library to fix timezone edge cases at midnight (current UTC-based comparison may fail at day boundaries)
-- Monitor Oura API rate limits and optimize sync frequency
-- Add historical data backfill option for past dates
-- Consider adding more Oura metrics (HRV, body temperature, etc.)
-- Add visual feedback during long-press (progress indicator)
-- Implement keyboard shortcuts for accessibility
+## External Dependencies
+- **PostgreSQL**: Database for persistent storage (currently on fallback to in-memory).
+- **Oura Ring API**: For syncing Sleep Quality and Readiness metrics.
+- **OpenAI API**: For AI-powered journal insights and analysis.
