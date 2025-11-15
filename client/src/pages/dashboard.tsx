@@ -6,6 +6,7 @@ import JournalPanel from "@/components/JournalPanel";
 import AIInsights from "@/components/AIInsights";
 import VoiceRecordingModal from "@/components/VoiceRecordingModal";
 import CustomizeScoresModal from "@/components/CustomizeScoresModal";
+import SettingsModal from "@/components/SettingsModal";
 import { Button } from "@/components/ui/button";
 import { Settings, Plus, Flame, User, TrendingUp } from "lucide-react";
 import { Link } from "wouter";
@@ -17,6 +18,7 @@ export default function Dashboard() {
   );
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
   const [isCustomizeModalOpen, setIsCustomizeModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [previousStreak, setPreviousStreak] = useState<number>(0);
   const [showStreakAnimation, setShowStreakAnimation] = useState(false);
 
@@ -91,7 +93,12 @@ export default function Dashboard() {
                 </Button>
               </Link>
               
-              <Button variant="ghost" size="icon">
+              <Button 
+                variant="ghost" 
+                size="icon"
+                onClick={() => setIsSettingsModalOpen(true)}
+                data-testid="button-settings"
+              >
                 <Settings className="h-4 w-4" />
               </Button>
               
@@ -164,6 +171,11 @@ export default function Dashboard() {
       <CustomizeScoresModal
         isOpen={isCustomizeModalOpen}
         onClose={() => setIsCustomizeModalOpen(false)}
+      />
+
+      <SettingsModal
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
       />
     </div>
   );

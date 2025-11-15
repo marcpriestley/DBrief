@@ -3,10 +3,12 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { 
   insertJournalEntrySchema, insertDailyScoreSchema, 
-  insertUserMetricSchema, insertAIInsightSchema 
+  insertUserMetricSchema, insertAIInsightSchema,
+  insertPushSubscriptionSchema
 } from "@shared/schema";
 import OpenAI from "openai";
 import { getOuraDataForDate } from "./oura";
+import { sendPushNotification } from "./notifications";
 
 const openai = new OpenAI({ 
   apiKey: process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_ENV_VAR || "default_key" 
@@ -272,6 +274,130 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ message: "Failed to deactivate insight" });
+    }
+  });
+
+  // Push Notification Subscription Routes
+  app.post("/api/push/subscribe", async (req, res) => {
+    try {
+      const userId = 1; // Using default user for demo
+      const subscription = req.body;
+
+      // Validate subscription format
+      if (!subscription.endpoint || !subscription.keys?.p256dh || !subscription.keys?.auth) {
+        return res.status(400).json({ message: "Invalid subscription format" });
+      }
+
+      const savedSubscription = await storage.createPushSubscription({
+        userId,
+        endpoint: subscription.endpoint,
+        p256dh: subscription.keys.p256dh,
+        auth: subscription.keys.auth
+      });
+
+      res.json({ success: true, subscription: savedSubscription });
+    } catch (error) {
+      console.error("Push subscription error:", error);
+      res.status(500).json({ message: "Failed to save push subscription" });
+    }
+  });
+
+  app.delete("/api/push/unsubscribe", async (req, res) => {
+    try {
+      const { endpoint } = req.body;
+      
+      if (!endpoint) {
+        return res.status(400).json({ message: "Endpoint required" });
+      }
+
+      await storage.deletePushSubscription(endpoint);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete subscription" });
+    }
+  });
+
+  // User Settings Routes
+  app.get("/api/user/settings", async (req, res) => {
+    try {
+      const userId = 1;
+      const user = await storage.getUser(userId);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      res.json({
+        notificationsEnabled: user.notificationsEnabled,
+        reminderTime: user.reminderTime,
+        timezone: user.timezone
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch user settings" });
+    }
+  });
+
+  app.patch("/api/user/settings", async (req, res) => {
+    try {
+      const userId = 1;
+      const { notificationsEnabled, reminderTime, timezone } = req.body;
+
+      const updatedUser = await storage.updateUserSettings(userId, {
+        ...(notificationsEnabled !== undefined && { notificationsEnabled }),
+        ...(reminderTime !== undefined && { reminderTime }),
+        ...(timezone !== undefined && { timezone })
+      });
+
+      if (!updatedUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      res.json({
+        notificationsEnabled: updatedUser.notificationsEnabled,
+        reminderTime: updatedUser.reminderTime,
+        timezone: updatedUser.timezone
+      });
+    } catch (error) {
+      console.error("Settings update error:", error);
+      res.status(500).json({ message: "Failed to update settings" });
+    }
+  });
+
+  // Test notification endpoint (for debugging)
+  app.post("/api/push/test", async (req, res) => {
+    try {
+      const userId = 1;
+      const subscriptions = await storage.getPushSubscriptions(userId);
+
+      if (subscriptions.length === 0) {
+        return res.status(404).json({ message: "No push subscriptions found" });
+      }
+
+      const results = await Promise.all(
+        subscriptions.map(sub => 
+          sendPushNotification(
+            {
+              endpoint: sub.endpoint,
+              keys: { p256dh: sub.p256dh, auth: sub.auth }
+            },
+            {
+              title: '🧪 Test Notification',
+              body: 'This is a test notification from DBrief!',
+              url: '/'
+            }
+          )
+        )
+      );
+
+      const successCount = results.filter(Boolean).length;
+      res.json({ 
+        success: true, 
+        sent: successCount, 
+        total: subscriptions.length 
+      });
+    } catch (error) {
+      console.error("Test notification error:", error);
+      res.status(500).json({ message: "Failed to send test notification" });
     }
   });
 
