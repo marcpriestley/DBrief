@@ -7,12 +7,14 @@ A comprehensive daily journaling app with voice recording, customizable metric t
 - Score circles must always remain at the top of the main dashboard
 - Scores should persist until the next day, then reset to blank for new inputs
 - Integration with Oura Ring API for automated health data (Sleep Quality, Readiness only - Steps removed)
+- **Oura metrics auto-sync when app opens** - Sleep Quality and Readiness automatically populate
+- **Manual metrics remain blank until first input** - Happiness, Productivity, Energy, Nutrition start blank each day
+- Once inputted, all scores persist and display for that date
 - Trend graphs should pop up when tapping metric circles
 - Journal entries and scores should display in a dialog when holding calendar dates (2 seconds)
 - No highlight box during calendar long-press
 - Journal entries must persist in textarea after saving
 - Duolingo-style streak tracking for user engagement based on score inputs (not journal entries)
-- Today's scores remain blank until manually inputted (no automatic Oura syncing for current day)
 - Analytics/trends show only user-input data (auto-synced scores excluded)
 
 ## Project Architecture
@@ -25,10 +27,13 @@ A comprehensive daily journaling app with voice recording, customizable metric t
 - **Health Tracking**: Oura Ring API integration for automatic health metrics syncing
 
 ## Recent Changes
+- **2025-11-15**: Restored Oura auto-sync and refined behavior:
+  - **Oura metrics (Sleep Quality, Readiness) auto-sync** when opening the app
+  - **Manual metrics (Happiness, Productivity, Energy, Nutrition) remain blank** until user inputs them
+  - **Sync Oura button always visible** for manual refresh of Oura data
+  - Once any score is saved, it persists and displays for that date
 - **2025-11-15**: Changed streak tracking to score-based with celebration animation:
   - **Reduced calendar long-press** from 3 seconds to 2 seconds for better UX
-  - **Disabled automatic Oura sync** for today - scores remain blank until user manually inputs them
-  - **Sync Oura button hidden** for today's date to prevent auto-population of scores
   - **Changed streak tracking** from journal-entry-based to score-input-based:
     - Streak increments when user inputs scores (not when writing journal entries)
     - Auto-synced Oura scores do NOT count toward streak
@@ -167,10 +172,11 @@ A comprehensive daily journaling app with voice recording, customizable metric t
   - Updates backend via updateUserStreak in daily-scores endpoint
   - Frontend animation triggers on streak increment with framer-motion
 - **Auto-Sync Behavior**:
-  - Automatic Oura sync disabled for today's date
-  - Sync Oura button hidden when viewing current day
-  - Manual sync available for past dates only
-  - Ensures today's scores remain blank until user manually inputs them
+  - Automatic Oura sync enabled when opening the app
+  - Oura metrics (Sleep Quality, Readiness) auto-populate for today
+  - Manual metrics (Happiness, Productivity, Energy, Nutrition) start blank for today
+  - Sync Oura button always available for manual refresh
+  - Once any score is saved (manual or auto), it persists for that date
 - **Analytics Filtering**:
   - Trends page filters out scores where isAutoSynced === true
   - Charts and statistics show only user-input data
