@@ -470,9 +470,9 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async updateDailyScore(userId: number, date: string, metricName: string, value: number): Promise<DailyScore | undefined> {
+  async updateDailyScore(userId: number, date: string, metricName: string, value: number, isAutoSynced: boolean = false): Promise<DailyScore | undefined> {
     const [updated] = await db.update(dailyScores)
-      .set({ value })
+      .set({ value, isAutoSynced })
       .where(and(
         eq(dailyScores.userId, userId),
         eq(dailyScores.date, date),
@@ -482,8 +482,7 @@ export class DatabaseStorage implements IStorage {
     
     if (updated) return updated;
 
-    // If no existing score, create a new one
-    return await this.createDailyScore({ userId, date, metricName, value });
+    return await this.createDailyScore({ userId, date, metricName, value, isAutoSynced });
   }
 
   async getUserMetrics(userId: number): Promise<UserMetric[]> {
@@ -582,4 +581,4 @@ export class DatabaseStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();

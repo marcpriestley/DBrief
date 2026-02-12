@@ -26,7 +26,7 @@ DBrief is a daily journaling application designed to help users track their well
 **Frontend**: React with TypeScript, Wouter for routing, and TanStack Query for data fetching.
 **Backend**: Express server utilizing Drizzle ORM with express-session for authentication.
 **Authentication**: Session-based auth with email/password login/register. Social sign-in buttons (Google, Apple) are UI-ready.
-**Storage**: In-memory storage (MemStorage) with a PostgreSQL fallback.
+**Storage**: PostgreSQL database with Drizzle ORM for persistent storage.
 **UI/UX**: Built with Shadcn/ui components and styled using Tailwind CSS.
 **Voice**: Web Speech API for voice-to-text transcription.
 **AI**: OpenAI integration for generating journal insights, pattern analysis, and habit improvement suggestions.
@@ -71,3 +71,6 @@ DBrief is a daily journaling application designed to help users track their well
 - ✅ **Duolingo-Style Streak System**: Milestone celebrations at 3, 7, 14, 30, 50, 100, 365 days with animations and motivational messages
 - ✅ **StreakDisplay Component**: Dedicated streak component with animations, milestone popups, and progress tracking
 - ✅ **Capacitor Mobile Setup**: Configured Capacitor for iOS/Android app publishing. PWA manifest, safe area support, app icons, and build guide included.
+- ✅ **Persistent Database Storage**: Switched from in-memory to PostgreSQL. All user accounts, journal entries, scores, and streaks persist permanently.
+- ✅ **Persistent Sessions**: Sessions stored in PostgreSQL via connect-pg-simple. Users stay logged in across server restarts (30-day session cookies).
+- ✅ **Password Hashing**: User passwords hashed with bcrypt for security.

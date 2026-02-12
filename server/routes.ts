@@ -9,6 +9,7 @@ import {
 import OpenAI from "openai";
 import { getOuraDataForDate } from "./oura";
 import { sendPushNotification } from "./notifications";
+import bcrypt from "bcrypt";
 
 const openai = new OpenAI({ 
   apiKey: process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_ENV_VAR || "default_key" 
@@ -31,7 +32,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (existingUser) {
         return res.status(409).json({ message: "An account with this email already exists" });
       }
-      const user = await storage.createUser({ username, password });
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const user = await storage.createUser({ username, password: hashedPassword });
       
       // Initialize default metrics for new user
       const defaultMetrics = [
@@ -64,7 +66,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Email and password are required" });
       }
       const user = await storage.getUserByUsername(username);
-      if (!user || user.password !== password) {
+      if (!user) {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
+      const isValidPassword = await bcrypt.compare(password, user.password);
+      if (!isValidPassword) {
         return res.status(401).json({ message: "Invalid email or password" });
       }
       (req.session as any).userId = user.id;
@@ -103,9 +109,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Helper to get userId from session (falls back to 1 for demo)
   function getUserId(req: any): number {
-    return (req.session as any)?.userId || 1;
+    const userId = (req.session as any)?.userId;
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+    return userId;
   }
 
   // All Daily Scores (for trends page)

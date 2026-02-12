@@ -1,14 +1,23 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { startNotificationScheduler } from "./notifications";
+import { pool } from "./db";
+
+const PgSession = connectPgSimple(session);
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
 app.use(session({
+  store: new PgSession({
+    pool,
+    tableName: "user_sessions",
+    createTableIfMissing: true,
+  }),
   secret: process.env.SESSION_SECRET || "dbrief-session-secret-key",
   resave: false,
   saveUninitialized: false,
