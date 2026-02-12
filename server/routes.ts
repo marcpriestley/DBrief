@@ -17,10 +17,112 @@ const openai = new OpenAI({
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
 
+  // Authentication
+  app.post("/api/auth/register", async (req, res) => {
+    try {
+      const { username, password } = req.body;
+      if (!username || !password) {
+        return res.status(400).json({ message: "Email and password are required" });
+      }
+      if (password.length < 6) {
+        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      }
+      const existingUser = await storage.getUserByUsername(username);
+      if (existingUser) {
+        return res.status(409).json({ message: "An account with this email already exists" });
+      }
+      const user = await storage.createUser({ username, password });
+      
+      // Initialize default metrics for new user
+      const defaultMetrics = [
+        { userId: user.id, name: "Happiness", color: "#10B981", maxValue: 100, isDefault: true, isActive: true },
+        { userId: user.id, name: "Productivity", color: "#4F46E5", maxValue: 100, isDefault: true, isActive: true },
+        { userId: user.id, name: "Energy", color: "#F59E0B", maxValue: 100, isDefault: true, isActive: true },
+        { userId: user.id, name: "Nutrition", color: "#EC4899", maxValue: 100, isDefault: true, isActive: true },
+        { userId: user.id, name: "Sleep Quality", color: "#8B5CF6", maxValue: 100, isDefault: false, isActive: true },
+        { userId: user.id, name: "Readiness", color: "#EF4444", maxValue: 100, isDefault: false, isActive: true },
+      ];
+      for (const metric of defaultMetrics) {
+        await storage.createUserMetric(metric);
+      }
+      
+      // Initialize streak
+      await storage.createStreak({ userId: user.id, currentStreak: 0, longestStreak: 0, lastEntryDate: null });
+      
+      (req.session as any).userId = user.id;
+      res.json({ id: user.id, username: user.username });
+    } catch (error) {
+      console.error("Registration error:", error);
+      res.status(500).json({ message: "Failed to create account" });
+    }
+  });
+
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const { username, password } = req.body;
+      if (!username || !password) {
+        return res.status(400).json({ message: "Email and password are required" });
+      }
+      const user = await storage.getUserByUsername(username);
+      if (!user || user.password !== password) {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
+      (req.session as any).userId = user.id;
+      res.json({ id: user.id, username: user.username });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to sign in" });
+    }
+  });
+
+  app.get("/api/auth/me", async (req, res) => {
+    try {
+      const userId = (req.session as any)?.userId;
+      if (!userId) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      res.json({ id: user.id, username: user.username });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get user" });
+    }
+  });
+
+  app.post("/api/auth/logout", async (req, res) => {
+    try {
+      req.session.destroy((err) => {
+        if (err) {
+          return res.status(500).json({ message: "Failed to sign out" });
+        }
+        res.json({ success: true });
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to sign out" });
+    }
+  });
+
+  // Helper to get userId from session (falls back to 1 for demo)
+  function getUserId(req: any): number {
+    return (req.session as any)?.userId || 1;
+  }
+
+  // All Daily Scores (for trends page)
+  app.get("/api/daily-scores", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const scores = await storage.getDailyScoresByUser(userId);
+      res.json(scores);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch daily scores" });
+    }
+  });
+
   // Journal Entries
   app.get("/api/journal-entries", async (req, res) => {
     try {
-      const userId = 1; // Using default user for demo
+      const userId = getUserId(req);
       const entries = await storage.getJournalEntriesByUser(userId);
       res.json(entries);
     } catch (error) {
@@ -30,7 +132,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/journal-entries/:date", async (req, res) => {
     try {
-      const userId = 1;
+      const userId = getUserId(req);
       const { date } = req.params;
       const entry = await storage.getJournalEntryByDate(userId, date);
       res.json(entry || null);
@@ -41,7 +143,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/journal-entries", async (req, res) => {
     try {
-      const userId = 1;
+      const userId = getUserId(req);
       const validatedData = insertJournalEntrySchema.parse({ ...req.body, userId });
       
       // Check if entry exists for this date
@@ -73,7 +175,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Daily Scores
   app.get("/api/daily-scores/:date", async (req, res) => {
     try {
-      const userId = 1;
+      const userId = getUserId(req);
       const { date } = req.params;
       const scores = await storage.getDailyScoresByUserAndDate(userId, date);
       res.json(scores);
@@ -84,7 +186,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/metric-history/:metricName", async (req, res) => {
     try {
-      const userId = 1;
+      const userId = getUserId(req);
       const { metricName } = req.params;
       const days = parseInt(req.query.days as string) || 14;
       const history = await storage.getMetricHistory(userId, metricName, days);
@@ -96,7 +198,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/daily-scores", async (req, res) => {
     try {
-      const userId = 1;
+      const userId = getUserId(req);
       const validatedData = insertDailyScoreSchema.parse({ ...req.body, userId });
       
       const score = await storage.updateDailyScore(
@@ -120,7 +222,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // User Metrics
   app.get("/api/user-metrics", async (req, res) => {
     try {
-      const userId = 1;
+      const userId = getUserId(req);
       const metrics = await storage.getUserMetrics(userId);
       res.json(metrics);
     } catch (error) {
@@ -130,7 +232,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/user-metrics", async (req, res) => {
     try {
-      const userId = 1;
+      const userId = getUserId(req);
       const validatedData = insertUserMetricSchema.parse({ ...req.body, userId });
       const metric = await storage.createUserMetric(validatedData);
       res.json(metric);
@@ -158,7 +260,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Streaks
   app.get("/api/streak", async (req, res) => {
     try {
-      const userId = 1;
+      const userId = getUserId(req);
       const streak = await storage.getUserStreak(userId);
       res.json(streak || { currentStreak: 0, longestStreak: 0 });
     } catch (error) {
@@ -169,7 +271,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // AI Insights
   app.get("/api/ai-insights", async (req, res) => {
     try {
-      const userId = 1;
+      const userId = getUserId(req);
       const insights = await storage.getActiveAIInsights(userId);
       res.json(insights);
     } catch (error) {
@@ -179,41 +281,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/ai-insights/generate", async (req, res) => {
     try {
-      const userId = 1;
+      const userId = getUserId(req);
       
-      // Get recent journal entries and scores
       const entries = await storage.getJournalEntriesByUser(userId);
       const scores = await storage.getDailyScoresByUser(userId);
+      const streak = await storage.getUserStreak(userId);
       
-      if (entries.length === 0) {
+      if (entries.length === 0 && scores.length === 0) {
         return res.json({ insight: null });
       }
 
-      // Prepare data for AI analysis
-      const recentEntries = entries.slice(0, 7); // Last 7 entries
+      const recentEntries = entries.slice(0, 14);
       const recentScores = scores.filter(score => {
         const scoreDate = new Date(score.date);
-        const weekAgo = new Date();
-        weekAgo.setDate(weekAgo.getDate() - 7);
-        return scoreDate >= weekAgo;
+        const twoWeeksAgo = new Date();
+        twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+        return scoreDate >= twoWeeksAgo;
+      });
+
+      const scoresByDate: Record<string, Record<string, number>> = {};
+      recentScores.forEach(score => {
+        if (!scoresByDate[score.date]) scoresByDate[score.date] = {};
+        scoresByDate[score.date][score.metricName] = score.value;
       });
 
       const prompt = `
-        Analyze the following journal entries and daily scores to find meaningful patterns and correlations.
-        
-        Journal Entries:
-        ${recentEntries.map(entry => `${entry.date}: ${entry.content}`).join('\n')}
-        
-        Daily Scores:
-        ${recentScores.map(score => `${score.date} - ${score.metricName}: ${score.value}`).join('\n')}
-        
-        Provide a single, actionable insight about patterns you notice. Focus on correlations between journal content and scores.
-        Keep it encouraging and actionable. Also suggest 2-3 relevant tags.
-        
-        Respond in JSON format: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag3"] }
+You are a personal wellness coach analyzing a user's daily tracking data. All scores are on a 0-100 scale.
+
+JOURNAL ENTRIES (last 14 days):
+${recentEntries.length > 0 ? recentEntries.map(entry => `${entry.date}: ${entry.content}`).join('\n') : 'No journal entries yet.'}
+
+DAILY SCORES BY DATE (0-100 scale):
+${Object.entries(scoresByDate).map(([date, scores]) => 
+  `${date}: ${Object.entries(scores).map(([name, val]) => `${name}=${val}`).join(', ')}`
+).join('\n') || 'No scores yet.'}
+
+STREAK: ${streak?.currentStreak || 0} days (longest: ${streak?.longestStreak || 0})
+
+Analyze this data to provide ONE actionable insight that will help the user improve their habits and outcomes. Focus on:
+1. Correlations between different metrics (e.g., sleep affecting productivity)
+2. Patterns in journal entries that relate to score changes
+3. Specific, practical suggestions they can implement tomorrow
+4. Encouragement based on their streak and progress
+
+Keep the insight warm, specific, and actionable (2-3 sentences). Suggest 2-3 relevant tags.
+
+Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag3"] }
       `;
 
-      // the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
       const response = await openai.chat.completions.create({
         model: "gpt-4o",
         messages: [{ role: "user", content: prompt }],
@@ -243,7 +358,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Oura Integration
   app.post("/api/oura/sync/:date", async (req, res) => {
     try {
-      const userId = 1;
+      const userId = getUserId(req);
       const { date } = req.params;
       
       const ouraData = await getOuraDataForDate(date);
@@ -280,7 +395,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Push Notification Subscription Routes
   app.post("/api/push/subscribe", async (req, res) => {
     try {
-      const userId = 1; // Using default user for demo
+      const userId = getUserId(req);
       const subscription = req.body;
 
       // Validate subscription format
@@ -320,7 +435,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // User Settings Routes
   app.get("/api/user/settings", async (req, res) => {
     try {
-      const userId = 1;
+      const userId = getUserId(req);
       const user = await storage.getUser(userId);
       
       if (!user) {
@@ -339,7 +454,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/user/settings", async (req, res) => {
     try {
-      const userId = 1;
+      const userId = getUserId(req);
       const { notificationsEnabled, reminderTime, timezone } = req.body;
 
       const updatedUser = await storage.updateUserSettings(userId, {
@@ -366,7 +481,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Test notification endpoint (for debugging)
   app.post("/api/push/test", async (req, res) => {
     try {
-      const userId = 1;
+      const userId = getUserId(req);
       const subscriptions = await storage.getPushSubscriptions(userId);
 
       if (subscriptions.length === 0) {

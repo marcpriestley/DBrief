@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import ScoreDashboard from "@/components/ScoreDashboard";
 import CalendarView from "@/components/CalendarView";
 import JournalPanel from "@/components/JournalPanel";
@@ -7,10 +7,13 @@ import AIInsights from "@/components/AIInsights";
 import VoiceRecordingModal from "@/components/VoiceRecordingModal";
 import CustomizeScoresModal from "@/components/CustomizeScoresModal";
 import SettingsModal from "@/components/SettingsModal";
+import StreakDisplay from "@/components/StreakDisplay";
 import { Button } from "@/components/ui/button";
-import { Settings, Plus, Flame, User, TrendingUp } from "lucide-react";
+import { Settings, Plus, User, TrendingUp, LogOut } from "lucide-react";
 import { Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Dashboard() {
   const [selectedDate, setSelectedDate] = useState<string>(
@@ -19,27 +22,24 @@ export default function Dashboard() {
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
   const [isCustomizeModalOpen, setIsCustomizeModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
-  const [previousStreak, setPreviousStreak] = useState<number>(0);
-  const [showStreakAnimation, setShowStreakAnimation] = useState(false);
+  const { toast } = useToast();
 
   const { data: streak } = useQuery<any>({
     queryKey: ["/api/streak"],
   });
-  
-  // Detect streak changes and trigger animation
-  useEffect(() => {
-    if (streak?.currentStreak && previousStreak > 0 && streak.currentStreak > previousStreak) {
-      setShowStreakAnimation(true);
-      setTimeout(() => setShowStreakAnimation(false), 2000);
-    }
-    if (streak?.currentStreak) {
-      setPreviousStreak(streak.currentStreak);
-    }
-  }, [streak?.currentStreak]);
+
+  const logoutMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/auth/logout");
+    },
+    onSuccess: () => {
+      queryClient.clear();
+      window.location.href = "/";
+    },
+  });
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-wrap justify-between items-center h-auto md:h-16 py-3 md:py-0 gap-3">
@@ -51,41 +51,7 @@ export default function Dashboard() {
             </div>
             
             <div className="flex items-center space-x-4">
-              {streak && streak.currentStreak && (
-                <motion.div 
-                  className="flex items-center space-x-2 bg-amber-50 px-3 py-1 rounded-full relative"
-                  animate={showStreakAnimation ? { 
-                    scale: [1, 1.2, 1],
-                  } : {}}
-                  transition={{ duration: 0.5 }}
-                >
-                  <motion.div
-                    animate={showStreakAnimation ? {
-                      rotate: [0, -10, 10, -10, 10, 0],
-                      scale: [1, 1.2, 1.2, 1.2, 1.2, 1]
-                    } : {}}
-                    transition={{ duration: 0.6 }}
-                  >
-                    <Flame className="h-4 w-4 text-amber-500" />
-                  </motion.div>
-                  <span className="text-sm font-medium text-amber-700">
-                    {streak.currentStreak} day streak
-                  </span>
-                  <AnimatePresence>
-                    {showStreakAnimation && (
-                      <motion.div
-                        initial={{ opacity: 0, y: -10, scale: 0.5 }}
-                        animate={{ opacity: 1, y: -30, scale: 1.5 }}
-                        exit={{ opacity: 0, y: -40 }}
-                        transition={{ duration: 0.8 }}
-                        className="absolute -top-8 left-1/2 transform -translate-x-1/2 text-2xl font-bold text-amber-500"
-                      >
-                        +1 🔥
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </motion.div>
-              )}
+              <StreakDisplay streak={streak} />
               
               <Link href="/trends">
                 <Button variant="ghost" size="icon">
@@ -101,17 +67,21 @@ export default function Dashboard() {
               >
                 <Settings className="h-4 w-4" />
               </Button>
-              
-              <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
-                <User className="h-4 w-4 text-gray-600" />
-              </div>
+
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => logoutMutation.mutate()}
+                title="Sign out"
+              >
+                <LogOut className="h-4 w-4" />
+              </Button>
             </div>
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Score Dashboard */}
         <section className="mb-8">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-2xl font-semibold text-gray-900">Today's Scores</h2>
@@ -128,29 +98,23 @@ export default function Dashboard() {
           <ScoreDashboard />
         </section>
 
-        <div className="grid lg:grid-cols-3 gap-8 mb-8">
-          {/* Calendar View */}
-          <div className="lg:col-span-2">
-            <CalendarView 
-              selectedDate={selectedDate} 
-              onDateSelect={setSelectedDate} 
-            />
-          </div>
+        <section className="mb-8">
+          <JournalPanel 
+            selectedDate={selectedDate}
+            onVoiceRecord={() => setIsVoiceModalOpen(true)}
+          />
+        </section>
 
-          {/* Journal Panel */}
-          <div className="space-y-6">
-            <JournalPanel 
-              selectedDate={selectedDate}
-              onVoiceRecord={() => setIsVoiceModalOpen(true)}
-            />
-          </div>
-        </div>
+        <section className="mb-8">
+          <CalendarView 
+            selectedDate={selectedDate} 
+            onDateSelect={setSelectedDate} 
+          />
+        </section>
 
-        {/* AI Insights */}
         <AIInsights />
       </main>
 
-      {/* Floating Action Button */}
       <div className="fixed bottom-6 right-6">
         <Button 
           size="lg"
@@ -161,7 +125,6 @@ export default function Dashboard() {
         </Button>
       </div>
 
-      {/* Modals */}
       <VoiceRecordingModal 
         isOpen={isVoiceModalOpen}
         onClose={() => setIsVoiceModalOpen(false)}

@@ -1,16 +1,42 @@
 import { Switch, Route } from "wouter";
-import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient, getQueryFn } from "./lib/queryClient";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Dashboard from "@/pages/dashboard";
 import Trends from "@/pages/trends";
+import Welcome from "@/pages/welcome";
 import NotFound from "@/pages/not-found";
 
-function Router() {
+function AuthenticatedRouter() {
+  const { data: user, isLoading } = useQuery<any>({
+    queryKey: ["/api/auth/me"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
+    retry: false,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center mx-auto mb-3 animate-pulse">
+            <span className="text-white text-lg font-bold">D</span>
+          </div>
+          <p className="text-gray-500 text-sm">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Welcome />;
+  }
+
   return (
     <Switch>
       <Route path="/" component={Dashboard} />
+      <Route path="/dashboard" component={Dashboard} />
       <Route path="/trends" component={Trends} />
       <Route component={NotFound} />
     </Switch>
@@ -22,7 +48,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
-        <Router />
+        <AuthenticatedRouter />
       </TooltipProvider>
     </QueryClientProvider>
   );

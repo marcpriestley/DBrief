@@ -89,10 +89,10 @@ export class MemStorage implements IStorage {
 
     // Create default metrics with health tracking
     const defaultMetrics: UserMetric[] = [
-      { id: 1, userId: 1, name: "Happiness", color: "#10B981", maxValue: 10, isDefault: true, isActive: true },
-      { id: 2, userId: 1, name: "Productivity", color: "#4F46E5", maxValue: 10, isDefault: true, isActive: true },
-      { id: 3, userId: 1, name: "Energy", color: "#F59E0B", maxValue: 10, isDefault: true, isActive: true },
-      { id: 4, userId: 1, name: "Nutrition", color: "#EC4899", maxValue: 10, isDefault: true, isActive: true },
+      { id: 1, userId: 1, name: "Happiness", color: "#10B981", maxValue: 100, isDefault: true, isActive: true },
+      { id: 2, userId: 1, name: "Productivity", color: "#4F46E5", maxValue: 100, isDefault: true, isActive: true },
+      { id: 3, userId: 1, name: "Energy", color: "#F59E0B", maxValue: 100, isDefault: true, isActive: true },
+      { id: 4, userId: 1, name: "Nutrition", color: "#EC4899", maxValue: 100, isDefault: true, isActive: true },
       { id: 5, userId: 1, name: "Sleep Quality", color: "#8B5CF6", maxValue: 100, isDefault: false, isActive: true },
       { id: 6, userId: 1, name: "Readiness", color: "#EF4444", maxValue: 100, isDefault: false, isActive: true },
     ];
@@ -147,7 +147,13 @@ export class MemStorage implements IStorage {
 
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = this.currentUserId++;
-    const user: User = { ...insertUser, id };
+    const user: User = { 
+      ...insertUser, 
+      id,
+      notificationsEnabled: true,
+      reminderTime: "21:00",
+      timezone: "UTC",
+    };
     this.users.set(id, user);
     return user;
   }
@@ -369,7 +375,7 @@ export class MemStorage implements IStorage {
   async getAllUsersForReminder(time: string): Promise<Array<User & { subscriptions: PushSubscription[] }>> {
     const usersWithReminders: Array<User & { subscriptions: PushSubscription[] }> = [];
     
-    for (const user of this.users.values()) {
+    for (const user of Array.from(this.users.values())) {
       if (user.notificationsEnabled) {
         const subscriptions = await this.getPushSubscriptions(user.id);
         if (subscriptions.length > 0) {
