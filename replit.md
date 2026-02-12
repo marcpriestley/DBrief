@@ -70,3 +70,4 @@ DBrief is a daily journaling application designed to help users track their well
 - ✅ **Enhanced AI Insights**: Analyzes 14 days of scores + journal entries + streak data for habit improvement suggestions
 - ✅ **Duolingo-Style Streak System**: Milestone celebrations at 3, 7, 14, 30, 50, 100, 365 days with animations and motivational messages
 - ✅ **StreakDisplay Component**: Dedicated streak component with animations, milestone popups, and progress tracking
+- ✅ **Capacitor Mobile Setup**: Configured Capacitor for iOS/Android app publishing. PWA manifest, safe area support, app icons, and build guide included.
