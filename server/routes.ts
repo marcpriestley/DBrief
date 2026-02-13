@@ -295,6 +295,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         sortOrder: existing.length,
         isActive: true,
       });
+
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const todayGoals = await storage.getDailyGoals(userId, todayStr);
+      if (todayGoals.length > 0) {
+        const alreadyExists = todayGoals.some(g => g.goalTemplateId === template.id);
+        if (!alreadyExists) {
+          await storage.createDailyGoal({
+            userId,
+            date: todayStr,
+            goalTemplateId: template.id,
+            title: template.title,
+            completed: false,
+          });
+        }
+      }
+
       res.json(template);
     } catch (error) {
       res.status(500).json({ message: "Failed to create goal template" });

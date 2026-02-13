@@ -55,6 +55,7 @@ export interface IStorage {
 
   // Daily goals methods
   getDailyGoals(userId: number, date: string): Promise<DailyGoal[]>;
+  createDailyGoal(goal: InsertDailyGoal): Promise<DailyGoal>;
   getGoalsForDateRange(userId: number, startDate: string, endDate: string): Promise<DailyGoal[]>;
   ensureDailyGoals(userId: number, date: string): Promise<DailyGoal[]>;
   toggleDailyGoal(id: number, userId: number): Promise<DailyGoal | undefined>;
@@ -417,6 +418,7 @@ export class MemStorage implements IStorage {
   async updateGoalTemplate(_id: number, _userId: number, _updates: Partial<InsertGoalTemplate>): Promise<GoalTemplate | undefined> { return undefined; }
   async deleteGoalTemplate(_id: number, _userId: number): Promise<void> {}
   async getDailyGoals(_userId: number, _date: string): Promise<DailyGoal[]> { return []; }
+  async createDailyGoal(goal: InsertDailyGoal): Promise<DailyGoal> { return { ...goal, id: 0, completed: goal.completed ?? false } as DailyGoal; }
   async getGoalsForDateRange(_userId: number, _startDate: string, _endDate: string): Promise<DailyGoal[]> { return []; }
   async ensureDailyGoals(_userId: number, _date: string): Promise<DailyGoal[]> { return []; }
   async toggleDailyGoal(_id: number, _userId: number): Promise<DailyGoal | undefined> { return undefined; }
@@ -636,6 +638,11 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(dailyGoals.userId, userId), eq(dailyGoals.date, date)));
   }
 
+  async createDailyGoal(goal: InsertDailyGoal): Promise<DailyGoal> {
+    const [created] = await db.insert(dailyGoals).values(goal).returning();
+    return created;
+  }
+
   async getGoalsForDateRange(userId: number, startDate: string, endDate: string): Promise<DailyGoal[]> {
     const { gte, lte } = await import("drizzle-orm");
     return await db.select().from(dailyGoals)
@@ -649,6 +656,10 @@ export class DatabaseStorage implements IStorage {
   async ensureDailyGoals(userId: number, date: string): Promise<DailyGoal[]> {
     const existing = await this.getDailyGoals(userId, date);
     if (existing.length > 0) return existing;
+
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    if (date < todayStr) return [];
 
     const templates = await this.getGoalTemplates(userId);
     if (templates.length === 0) return [];

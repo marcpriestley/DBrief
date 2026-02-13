@@ -48,7 +48,8 @@ export default function GoalsSection({ selectedDate }: GoalsSectionProps) {
 
   const completedCount = goals.filter(g => g.completed).length;
   const totalGoals = goals.length;
-  const allComplete = totalGoals > 0 && completedCount === totalGoals;
+  const displayTotal = Math.max(MIN_VISIBLE_SLOTS, totalGoals);
+  const allComplete = totalGoals >= MIN_VISIBLE_SLOTS && completedCount === totalGoals;
   const blankSlotsNeeded = Math.max(0, MIN_VISIBLE_SLOTS - totalGoals);
 
   useEffect(() => {
@@ -168,11 +169,9 @@ export default function GoalsSection({ selectedDate }: GoalsSectionProps) {
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
           Daily Goals
-          {totalGoals > 0 && (
-            <span className="text-sm font-normal text-gray-500">
-              {completedCount}/{totalGoals}
-            </span>
-          )}
+          <span className="text-sm font-normal text-gray-500">
+            {completedCount}/{displayTotal}
+          </span>
         </h3>
         <Button
           variant="ghost"
@@ -185,16 +184,14 @@ export default function GoalsSection({ selectedDate }: GoalsSectionProps) {
         </Button>
       </div>
 
-      {totalGoals > 0 && (
-        <div className="w-full bg-gray-200 rounded-full h-1.5 mb-4">
-          <motion.div
-            className="h-1.5 rounded-full bg-primary"
-            initial={{ width: 0 }}
-            animate={{ width: `${(completedCount / totalGoals) * 100}%` }}
-            transition={{ duration: 0.3 }}
-          />
-        </div>
-      )}
+      <div className="w-full bg-gray-200 rounded-full h-1.5 mb-4">
+        <motion.div
+          className="h-1.5 rounded-full bg-primary"
+          initial={{ width: 0 }}
+          animate={{ width: `${(completedCount / displayTotal) * 100}%` }}
+          transition={{ duration: 0.3 }}
+        />
+      </div>
 
       <div className="space-y-2">
         {goals.map((goal, index) => {

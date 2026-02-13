@@ -116,7 +116,7 @@ export default function Dashboard() {
             </Button>
           </div>
           
-          <ScoreDashboard />
+          <ScoreDashboard selectedDate={selectedDate} />
         </section>
 
         <section className="mb-8 bg-white rounded-xl p-5 shadow-sm border border-gray-100">

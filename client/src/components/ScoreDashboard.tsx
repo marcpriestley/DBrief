@@ -10,11 +10,13 @@ import type { DailyScore, UserMetric } from "@shared/schema";
 import { RefreshCw, Edit } from "lucide-react";
 import MetricTrendChart from "./MetricTrendChart";
 
-interface ScoreDashboardProps {}
+interface ScoreDashboardProps {
+  selectedDate: string;
+}
 
 type DialogMode = 'trend' | 'edit';
 
-export default function ScoreDashboard({}: ScoreDashboardProps) {
+export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
   const [selectedMetric, setSelectedMetric] = useState<UserMetric | null>(null);
   const [dialogMode, setDialogMode] = useState<DialogMode>('trend');
   const [scoreValue, setScoreValue] = useState<string>("");
@@ -26,13 +28,15 @@ export default function ScoreDashboard({}: ScoreDashboardProps) {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   })();
 
+  const isToday = selectedDate === today;
+
   const { data: metrics = [] } = useQuery<UserMetric[]>({
     queryKey: ["/api/user-metrics"],
   });
 
   const { data: scores = [] } = useQuery<DailyScore[]>({
-    queryKey: ["/api/daily-scores", today],
-    queryFn: () => fetch(`/api/daily-scores/${today}`).then(res => res.json()),
+    queryKey: ["/api/daily-scores", selectedDate],
+    queryFn: () => fetch(`/api/daily-scores/${selectedDate}`).then(res => res.json()),
   });
 
   const { data: metricHistory = [] } = useQuery<DailyScore[]>({
@@ -64,8 +68,8 @@ export default function ScoreDashboard({}: ScoreDashboardProps) {
     },
   });
 
-  // Automatic Oura sync on dashboard load for today's date
   useEffect(() => {
+    if (!isToday) return;
     const hasOuraMetrics = metrics.some(m => 
       m.name === "Sleep Quality" || m.name === "Readiness"
     );
@@ -74,15 +78,14 @@ export default function ScoreDashboard({}: ScoreDashboardProps) {
     if (hasOuraMetrics && !hasAutoSyncedScores && !syncOuraMutation.isPending) {
       syncOuraMutation.mutate(today);
     }
-  }, [metrics, scores, syncOuraMutation.isPending, today]);
+  }, [metrics, scores, syncOuraMutation.isPending, today, isToday]);
 
   const updateScoreMutation = useMutation({
     mutationFn: async (data: { date: string; metricName: string; value: number }) => {
       return apiRequest("POST", "/api/daily-scores", data);
     },
     onSuccess: (data, variables) => {
-      // Invalidate today's scores query to ensure UI updates
-      queryClient.invalidateQueries({ queryKey: ["/api/daily-scores", today] });
+      queryClient.invalidateQueries({ queryKey: ["/api/daily-scores", selectedDate] });
       // Also invalidate streak query to show animation
       queryClient.invalidateQueries({ queryKey: ["/api/streak"] });
       
@@ -112,7 +115,7 @@ export default function ScoreDashboard({}: ScoreDashboardProps) {
 
   const handleMetricClick = (metric: UserMetric) => {
     setSelectedMetric(metric);
-    setDialogMode('edit');  // Open directly to edit mode
+    setDialogMode(isToday ? 'edit' : 'trend');
     const existingScore = getScoreForMetric(metric.name);
     setScoreValue(existingScore?.value?.toString() || "");
   };
@@ -128,7 +131,7 @@ export default function ScoreDashboard({}: ScoreDashboardProps) {
   };
 
   const handleSaveScore = () => {
-    if (!selectedMetric) return;
+    if (!selectedMetric || !isToday) return;
     
     const value = parseInt(scoreValue);
     const maxValue = selectedMetric.maxValue || 100;
@@ -156,17 +159,21 @@ export default function ScoreDashboard({}: ScoreDashboardProps) {
   return (
     <>
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-semibold text-gray-900">Daily Scores</h2>
-        <Button 
-          variant="outline" 
-          size="sm"
-          onClick={handleSyncOura}
-          disabled={syncOuraMutation.isPending}
-          data-testid="button-sync-oura"
-        >
-          <RefreshCw className={`w-4 h-4 mr-2 ${syncOuraMutation.isPending ? 'animate-spin' : ''}`} />
-          {syncOuraMutation.isPending ? "Syncing..." : "Sync Oura"}
-        </Button>
+        <h2 className="text-lg font-semibold text-gray-900">
+          {isToday ? "Daily Scores" : `Scores for ${new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
+        </h2>
+        {isToday && (
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={handleSyncOura}
+            disabled={syncOuraMutation.isPending}
+            data-testid="button-sync-oura"
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${syncOuraMutation.isPending ? 'animate-spin' : ''}`} />
+            {syncOuraMutation.isPending ? "Syncing..." : "Sync Oura"}
+          </Button>
+        )}
       </div>
       
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
@@ -205,7 +212,7 @@ export default function ScoreDashboard({}: ScoreDashboardProps) {
               </div>
               <h3 className="text-sm font-medium text-gray-700">{metric.name}</h3>
               <p className="text-xs text-gray-500 mt-1">
-                {score?.isAutoSynced ? "Auto-synced" : (value !== undefined ? "Tap to edit" : "Tap to add")}
+                {!isToday ? (value !== undefined ? "View trends" : "No data") : (score?.isAutoSynced ? "Auto-synced" : (value !== undefined ? "Tap to edit" : "Tap to add"))}
               </p>
             </div>
           );
@@ -235,15 +242,17 @@ export default function ScoreDashboard({}: ScoreDashboardProps) {
                   history={metricHistory} 
                   selectedDate={today}
                 />
-                <div className="flex justify-end">
-                  <Button 
-                    onClick={() => setDialogMode('edit')}
-                    data-testid="button-edit-score"
-                  >
-                    <Edit className="w-4 h-4 mr-2" />
-                    Edit Score
-                  </Button>
-                </div>
+                {isToday && (
+                  <div className="flex justify-end">
+                    <Button 
+                      onClick={() => setDialogMode('edit')}
+                      data-testid="button-edit-score"
+                    >
+                      <Edit className="w-4 h-4 mr-2" />
+                      Edit Score
+                    </Button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="space-y-4">
