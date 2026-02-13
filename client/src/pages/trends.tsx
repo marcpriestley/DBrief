@@ -8,7 +8,7 @@ import { CalendarDays, TrendingUp, Target, Activity, ArrowLeft, BarChart3, LineC
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { DailyScore, UserMetric, AIInsight } from "@shared/schema";
+import type { DailyScore, UserMetric, AIInsight, DailyGoal } from "@shared/schema";
 
 interface TrendData {
   date: string;
@@ -31,6 +31,19 @@ export default function TrendsEnhanced() {
 
   const { data: aiInsights = [] } = useQuery<AIInsight[]>({
     queryKey: ["/api/ai-insights"],
+  });
+
+  const goalsStartDate = (() => {
+    const days = timeRange === "all" ? 365 : parseInt(timeRange);
+    const d = new Date();
+    d.setDate(d.getDate() - days);
+    return d.toISOString().split('T')[0];
+  })();
+  const goalsEndDate = new Date().toISOString().split('T')[0];
+
+  const { data: goalsRange = [] } = useQuery<DailyGoal[]>({
+    queryKey: ["/api/daily-goals-range", goalsStartDate, goalsEndDate],
+    queryFn: () => fetch(`/api/daily-goals-range?startDate=${goalsStartDate}&endDate=${goalsEndDate}`).then(r => r.json()),
   });
   
   const allScores = allScoresRaw.filter(score => !score.isAutoSynced);
@@ -73,6 +86,14 @@ export default function TrendsEnhanced() {
         const score = allScores.find(s => s.date === date && s.metricName === metric.name);
         dayData[metric.name] = score?.value || 0;
       });
+
+      const dayGoals = goalsRange.filter(g => g.date === date);
+      if (dayGoals.length > 0) {
+        const completed = dayGoals.filter(g => g.completed).length;
+        dayData["Goals"] = Math.round((completed / dayGoals.length) * 100);
+      } else {
+        dayData["Goals"] = 0;
+      }
       
       return dayData;
     });
@@ -80,9 +101,12 @@ export default function TrendsEnhanced() {
     return trendData;
   };
 
+  const goalsVirtualMetric: UserMetric = { id: -1, userId: 0, name: "Goals", color: "#F97316", maxValue: 100, isDefault: false, isActive: true };
+  const allMetricsWithGoals = [...metrics, goalsVirtualMetric];
+
   const chartData = processedData();
   const displayMetrics = selectedMetrics.length > 0 
-    ? metrics.filter(m => selectedMetrics.includes(m.name))
+    ? allMetricsWithGoals.filter(m => selectedMetrics.includes(m.name))
     : metrics.slice(0, 3);
 
   const getMetricStats = (metricName: string) => {
@@ -287,7 +311,7 @@ export default function TrendsEnhanced() {
           <CardContent className="p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Select Metrics to Display</h3>
             <div className="flex flex-wrap gap-2">
-              {metrics.map((metric) => (
+              {allMetricsWithGoals.map((metric) => (
                 <Button
                   key={metric.id}
                   variant={selectedMetrics.includes(metric.name) ? "default" : "outline"}

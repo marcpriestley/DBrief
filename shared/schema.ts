@@ -57,6 +57,23 @@ export const aiInsights = pgTable("ai_insights", {
   isActive: boolean("is_active").default(true),
 });
 
+export const goalTemplates = pgTable("goal_templates", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  title: text("title").notNull(),
+  sortOrder: integer("sort_order").default(0),
+  isActive: boolean("is_active").default(true),
+});
+
+export const dailyGoals = pgTable("daily_goals", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  date: date("date").notNull(),
+  goalTemplateId: integer("goal_template_id").notNull(),
+  title: text("title").notNull(),
+  completed: boolean("completed").default(false),
+});
+
 export const pushSubscriptions = pgTable("push_subscriptions", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull(),
@@ -88,6 +105,14 @@ export const insertAIInsightSchema = createInsertSchema(aiInsights).omit({
   createdAt: true,
 });
 
+export const insertGoalTemplateSchema = createInsertSchema(goalTemplates).omit({
+  id: true,
+});
+
+export const insertDailyGoalSchema = createInsertSchema(dailyGoals).omit({
+  id: true,
+});
+
 export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions).omit({
   id: true,
   createdAt: true,
@@ -106,6 +131,26 @@ export const usersRelations = relations(users, ({ many }) => ({
   streaks: many(streaks),
   aiInsights: many(aiInsights),
   pushSubscriptions: many(pushSubscriptions),
+  goalTemplates: many(goalTemplates),
+  dailyGoals: many(dailyGoals),
+}));
+
+export const goalTemplatesRelations = relations(goalTemplates, ({ one }) => ({
+  user: one(users, {
+    fields: [goalTemplates.userId],
+    references: [users.id],
+  }),
+}));
+
+export const dailyGoalsRelations = relations(dailyGoals, ({ one }) => ({
+  user: one(users, {
+    fields: [dailyGoals.userId],
+    references: [users.id],
+  }),
+  template: one(goalTemplates, {
+    fields: [dailyGoals.goalTemplateId],
+    references: [goalTemplates.id],
+  }),
 }));
 
 export const journalEntriesRelations = relations(journalEntries, ({ one }) => ({
@@ -164,3 +209,7 @@ export type AIInsight = typeof aiInsights.$inferSelect;
 export type InsertAIInsight = z.infer<typeof insertAIInsightSchema>;
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
 export type InsertPushSubscription = z.infer<typeof insertPushSubscriptionSchema>;
+export type GoalTemplate = typeof goalTemplates.$inferSelect;
+export type InsertGoalTemplate = z.infer<typeof insertGoalTemplateSchema>;
+export type DailyGoal = typeof dailyGoals.$inferSelect;
+export type InsertDailyGoal = z.infer<typeof insertDailyGoalSchema>;

@@ -8,6 +8,7 @@ import VoiceRecordingModal from "@/components/VoiceRecordingModal";
 import CustomizeScoresModal from "@/components/CustomizeScoresModal";
 import SettingsModal from "@/components/SettingsModal";
 import StreakDisplay from "@/components/StreakDisplay";
+import GoalsSection from "@/components/GoalsSection";
 import { Button } from "@/components/ui/button";
 import { Settings, Plus, User, TrendingUp, LogOut } from "lucide-react";
 import { Link } from "wouter";
@@ -96,6 +97,10 @@ export default function Dashboard() {
           </div>
           
           <ScoreDashboard />
+        </section>
+
+        <section className="mb-8 bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+          <GoalsSection selectedDate={selectedDate} />
         </section>
 
         <section className="mb-8">

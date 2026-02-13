@@ -1,9 +1,11 @@
 import { 
   users, journalEntries, dailyScores, userMetrics, streaks, aiInsights, pushSubscriptions,
+  goalTemplates, dailyGoals,
   type User, type InsertUser, type JournalEntry, type InsertJournalEntry,
   type DailyScore, type InsertDailyScore, type UserMetric, type InsertUserMetric,
   type Streak, type InsertStreak, type AIInsight, type InsertAIInsight,
-  type PushSubscription, type InsertPushSubscription
+  type PushSubscription, type InsertPushSubscription,
+  type GoalTemplate, type InsertGoalTemplate, type DailyGoal, type InsertDailyGoal
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
@@ -43,6 +45,18 @@ export interface IStorage {
   getActiveAIInsights(userId: number): Promise<AIInsight[]>;
   createAIInsight(insight: InsertAIInsight): Promise<AIInsight>;
   deactivateAIInsight(id: number): Promise<void>;
+
+  // Goal template methods
+  getGoalTemplates(userId: number): Promise<GoalTemplate[]>;
+  createGoalTemplate(template: InsertGoalTemplate): Promise<GoalTemplate>;
+  updateGoalTemplate(id: number, userId: number, updates: Partial<InsertGoalTemplate>): Promise<GoalTemplate | undefined>;
+  deleteGoalTemplate(id: number, userId: number): Promise<void>;
+
+  // Daily goals methods
+  getDailyGoals(userId: number, date: string): Promise<DailyGoal[]>;
+  getGoalsForDateRange(userId: number, startDate: string, endDate: string): Promise<DailyGoal[]>;
+  ensureDailyGoals(userId: number, date: string): Promise<DailyGoal[]>;
+  toggleDailyGoal(id: number, userId: number): Promise<DailyGoal | undefined>;
 
   // Push subscription methods
   getPushSubscriptions(userId: number): Promise<PushSubscription[]>;
@@ -386,9 +400,18 @@ export class MemStorage implements IStorage {
     
     return usersWithReminders;
   }
+
+  async getGoalTemplates(_userId: number): Promise<GoalTemplate[]> { return []; }
+  async createGoalTemplate(t: InsertGoalTemplate): Promise<GoalTemplate> { return { ...t, id: 0, sortOrder: t.sortOrder ?? 0, isActive: t.isActive ?? true } as GoalTemplate; }
+  async updateGoalTemplate(_id: number, _userId: number, _updates: Partial<InsertGoalTemplate>): Promise<GoalTemplate | undefined> { return undefined; }
+  async deleteGoalTemplate(_id: number, _userId: number): Promise<void> {}
+  async getDailyGoals(_userId: number, _date: string): Promise<DailyGoal[]> { return []; }
+  async getGoalsForDateRange(_userId: number, _startDate: string, _endDate: string): Promise<DailyGoal[]> { return []; }
+  async ensureDailyGoals(_userId: number, _date: string): Promise<DailyGoal[]> { return []; }
+  async toggleDailyGoal(_id: number, _userId: number): Promise<DailyGoal | undefined> { return undefined; }
 }
 
-// Database implementation remains the same but we'll use MemStorage for now
+// Database implementation
 export class DatabaseStorage implements IStorage {
   async getUser(id: number): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
@@ -562,6 +585,78 @@ export class DatabaseStorage implements IStorage {
 
   async deletePushSubscription(endpoint: string): Promise<void> {
     await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, endpoint));
+  }
+
+  async getGoalTemplates(userId: number): Promise<GoalTemplate[]> {
+    return await db.select().from(goalTemplates)
+      .where(and(eq(goalTemplates.userId, userId), eq(goalTemplates.isActive, true)))
+      .orderBy(goalTemplates.sortOrder);
+  }
+
+  async createGoalTemplate(template: InsertGoalTemplate): Promise<GoalTemplate> {
+    const [created] = await db.insert(goalTemplates).values(template).returning();
+    return created;
+  }
+
+  async updateGoalTemplate(id: number, userId: number, updates: Partial<InsertGoalTemplate>): Promise<GoalTemplate | undefined> {
+    const [updated] = await db.update(goalTemplates)
+      .set(updates)
+      .where(and(eq(goalTemplates.id, id), eq(goalTemplates.userId, userId)))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteGoalTemplate(id: number, userId: number): Promise<void> {
+    await db.update(goalTemplates)
+      .set({ isActive: false })
+      .where(and(eq(goalTemplates.id, id), eq(goalTemplates.userId, userId)));
+  }
+
+  async getDailyGoals(userId: number, date: string): Promise<DailyGoal[]> {
+    return await db.select().from(dailyGoals)
+      .where(and(eq(dailyGoals.userId, userId), eq(dailyGoals.date, date)));
+  }
+
+  async getGoalsForDateRange(userId: number, startDate: string, endDate: string): Promise<DailyGoal[]> {
+    const { gte, lte } = await import("drizzle-orm");
+    return await db.select().from(dailyGoals)
+      .where(and(
+        eq(dailyGoals.userId, userId),
+        gte(dailyGoals.date, startDate),
+        lte(dailyGoals.date, endDate)
+      ));
+  }
+
+  async ensureDailyGoals(userId: number, date: string): Promise<DailyGoal[]> {
+    const existing = await this.getDailyGoals(userId, date);
+    if (existing.length > 0) return existing;
+
+    const templates = await this.getGoalTemplates(userId);
+    if (templates.length === 0) return [];
+
+    const newGoals: DailyGoal[] = [];
+    for (const template of templates) {
+      const [goal] = await db.insert(dailyGoals).values({
+        userId,
+        date,
+        goalTemplateId: template.id,
+        title: template.title,
+        completed: false,
+      }).returning();
+      newGoals.push(goal);
+    }
+    return newGoals;
+  }
+
+  async toggleDailyGoal(id: number, userId: number): Promise<DailyGoal | undefined> {
+    const [existing] = await db.select().from(dailyGoals)
+      .where(and(eq(dailyGoals.id, id), eq(dailyGoals.userId, userId)));
+    if (!existing) return undefined;
+    const [updated] = await db.update(dailyGoals)
+      .set({ completed: !existing.completed })
+      .where(and(eq(dailyGoals.id, id), eq(dailyGoals.userId, userId)))
+      .returning();
+    return updated;
   }
 
   async getAllUsersForReminder(time: string): Promise<Array<User & { subscriptions: PushSubscription[] }>> {

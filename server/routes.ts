@@ -51,6 +51,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Initialize streak
       await storage.createStreak({ userId: user.id, currentStreak: 0, longestStreak: 0, lastEntryDate: null });
       
+      // Initialize default goal templates
+      const defaultGoals = [
+        { userId: user.id, title: "Make my bed", sortOrder: 0, isActive: true },
+        { userId: user.id, title: "Drink 8 glasses of water", sortOrder: 1, isActive: true },
+        { userId: user.id, title: "30 minutes of exercise", sortOrder: 2, isActive: true },
+      ];
+      for (const goal of defaultGoals) {
+        await storage.createGoalTemplate(goal);
+      }
+      
       (req.session as any).userId = user.id;
       res.json({ id: user.id, username: user.username });
     } catch (error) {
@@ -263,6 +273,98 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(metric);
     } catch (error) {
       res.status(400).json({ message: "Failed to update user metric" });
+    }
+  });
+
+  // Goal Templates
+  app.get("/api/goal-templates", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const templates = await storage.getGoalTemplates(userId);
+      res.json(templates);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch goal templates" });
+    }
+  });
+
+  app.post("/api/goal-templates", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { title } = req.body;
+      if (!title) return res.status(400).json({ message: "Title is required" });
+      const existing = await storage.getGoalTemplates(userId);
+      const template = await storage.createGoalTemplate({
+        userId,
+        title,
+        sortOrder: existing.length,
+        isActive: true,
+      });
+      res.json(template);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to create goal template" });
+    }
+  });
+
+  app.put("/api/goal-templates/:id", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { id } = req.params;
+      const { title } = req.body;
+      if (!title || typeof title !== "string" || !title.trim()) {
+        return res.status(400).json({ message: "Title is required" });
+      }
+      const updated = await storage.updateGoalTemplate(parseInt(id), userId, { title: title.trim() });
+      if (!updated) return res.status(404).json({ message: "Goal template not found" });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update goal template" });
+    }
+  });
+
+  app.delete("/api/goal-templates/:id", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { id } = req.params;
+      await storage.deleteGoalTemplate(parseInt(id), userId);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete goal template" });
+    }
+  });
+
+  // Daily Goals
+  app.get("/api/daily-goals/:date", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { date } = req.params;
+      const goals = await storage.ensureDailyGoals(userId, date);
+      res.json(goals);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch daily goals" });
+    }
+  });
+
+  app.post("/api/daily-goals/:id/toggle", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { id } = req.params;
+      const updated = await storage.toggleDailyGoal(parseInt(id), userId);
+      if (!updated) return res.status(404).json({ message: "Goal not found" });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to toggle goal" });
+    }
+  });
+
+  app.get("/api/daily-goals-range", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { startDate, endDate } = req.query;
+      if (!startDate || !endDate) return res.status(400).json({ message: "startDate and endDate required" });
+      const goals = await storage.getGoalsForDateRange(userId, startDate as string, endDate as string);
+      res.json(goals);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch goals range" });
     }
   });
 

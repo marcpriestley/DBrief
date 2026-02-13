@@ -61,7 +61,14 @@ DBrief is a daily journaling application designed to help users track their well
 - **express-session**: For session-based authentication.
 - **react-icons**: For social sign-in button icons (Google, Apple).
 
-## Recent Updates (Feb 12, 2026)
+## Recent Updates (Feb 13, 2026)
+- ✅ **Daily Goals System**: Goal templates with daily instances, one-tap toggle completion, inline editing, add/delete functionality
+- ✅ **Goals Celebration Animation**: Confetti + party popper animation with haptic feedback when all daily goals complete
+- ✅ **Goals on Trends Page**: Goals completion percentage (0-100) trackable as a metric on the Trends page
+- ✅ **Secure Goals API**: User ownership checks on all goal template update/delete and daily goal toggle operations
+- ✅ **Default Goals**: "Make my bed" (first), "Drink 8 glasses of water", "30 minutes of exercise" for new users
+
+## Previous Updates (Feb 12, 2026)
 - ✅ **Welcome/Auth Page**: New users see login/register page with email+password and Google/Apple sign-in buttons
 - ✅ **Session-Based Authentication**: express-session for user sessions, auth routes for register/login/logout/me
 - ✅ **Dashboard Layout Reorganized**: Scores → Journal → Calendar → AI Insights (top to bottom)
