@@ -9,8 +9,9 @@ import CustomizeScoresModal from "@/components/CustomizeScoresModal";
 import SettingsModal from "@/components/SettingsModal";
 import StreakDisplay from "@/components/StreakDisplay";
 import GoalsSection from "@/components/GoalsSection";
+import MoodCheckinModal from "@/components/MoodCheckinModal";
 import { Button } from "@/components/ui/button";
-import { Settings, Plus, User, TrendingUp, LogOut } from "lucide-react";
+import { Settings, Plus, User, TrendingUp, LogOut, Smile } from "lucide-react";
 import { Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -23,7 +24,16 @@ export default function Dashboard() {
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
   const [isCustomizeModalOpen, setIsCustomizeModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isMoodCheckinOpen, setIsMoodCheckinOpen] = useState(false);
   const { toast } = useToast();
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("mood") === "checkin") {
+      setIsMoodCheckinOpen(true);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
 
   const { data: streak } = useQuery<any>({
     queryKey: ["/api/streak"],
@@ -54,6 +64,15 @@ export default function Dashboard() {
             <div className="flex items-center space-x-4">
               <StreakDisplay streak={streak} />
               
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsMoodCheckinOpen(true)}
+                title="Mood Check-in"
+              >
+                <Smile className="h-4 w-4" />
+              </Button>
+
               <Link href="/trends">
                 <Button variant="ghost" size="icon">
                   <TrendingUp className="h-4 w-4" />
@@ -144,6 +163,11 @@ export default function Dashboard() {
       <SettingsModal
         isOpen={isSettingsModalOpen}
         onClose={() => setIsSettingsModalOpen(false)}
+      />
+
+      <MoodCheckinModal
+        open={isMoodCheckinOpen}
+        onClose={() => setIsMoodCheckinOpen(false)}
       />
     </div>
   );

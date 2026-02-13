@@ -66,7 +66,14 @@ DBrief is a daily journaling application designed to help users track their well
 - ✅ **Goals Celebration Animation**: Confetti + party popper animation with haptic feedback when all daily goals complete
 - ✅ **Goals on Trends Page**: Goals completion percentage (0-100) trackable as a metric on the Trends page
 - ✅ **Secure Goals API**: User ownership checks on all goal template update/delete and daily goal toggle operations
-- ✅ **Default Goals**: "Make my bed" (first), "Drink 8 glasses of water", "30 minutes of exercise" for new users
+- ✅ **Default Goals**: "Make my bed" as the only default goal; GoalsSection shows 2 blank placeholder slots for users to fill
+- ✅ **File Attachments**: Journal entries support file attachments (images, PDFs, docs) up to 10MB via Replit object storage with presigned URL upload flow
+- ✅ **Mood Check-in System**: Slider-based mood check-in modal (0-100 scale) with time-of-day labels (morning/afternoon/evening), accessible from dashboard header Smile icon
+- ✅ **Mood Deep-Linking**: ?mood=checkin URL parameter opens mood check-in modal automatically (for push notification deep links)
+- ✅ **Mood on Trends Page**: Mood check-in data averaged daily and displayed as a virtual "Mood" metric on the Trends page
+- ✅ **Three Daily Mood Notifications**: Push notifications at 8am, 1pm, and 9pm (user's local time) for mood check-ins
+- ✅ **Notification Permission Helper**: Settings modal shows browser notification permission status with step-by-step instructions to unblock if denied
+- ✅ **Mood Check-in Reminders Info**: Settings modal displays info about the three daily mood check-in times
 
 ## Previous Updates (Feb 12, 2026)
 - ✅ **Welcome/Auth Page**: New users see login/register page with email+password and Google/Apple sign-in buttons

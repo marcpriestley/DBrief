@@ -74,6 +74,26 @@ export const dailyGoals = pgTable("daily_goals", {
   completed: boolean("completed").default(false),
 });
 
+export const journalAttachments = pgTable("journal_attachments", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  journalEntryId: integer("journal_entry_id").notNull(),
+  objectPath: text("object_path").notNull(),
+  filename: text("filename").notNull(),
+  contentType: text("content_type").notNull(),
+  size: integer("size").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const moodCheckins = pgTable("mood_checkins", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  date: date("date").notNull(),
+  value: integer("value").notNull(),
+  label: text("label"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const pushSubscriptions = pgTable("push_subscriptions", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull(),
@@ -111,6 +131,16 @@ export const insertGoalTemplateSchema = createInsertSchema(goalTemplates).omit({
 
 export const insertDailyGoalSchema = createInsertSchema(dailyGoals).omit({
   id: true,
+});
+
+export const insertJournalAttachmentSchema = createInsertSchema(journalAttachments).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertMoodCheckinSchema = createInsertSchema(moodCheckins).omit({
+  id: true,
+  createdAt: true,
 });
 
 export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions).omit({
@@ -188,6 +218,24 @@ export const aiInsightsRelations = relations(aiInsights, ({ one }) => ({
   }),
 }));
 
+export const journalAttachmentsRelations = relations(journalAttachments, ({ one }) => ({
+  user: one(users, {
+    fields: [journalAttachments.userId],
+    references: [users.id],
+  }),
+  journalEntry: one(journalEntries, {
+    fields: [journalAttachments.journalEntryId],
+    references: [journalEntries.id],
+  }),
+}));
+
+export const moodCheckinsRelations = relations(moodCheckins, ({ one }) => ({
+  user: one(users, {
+    fields: [moodCheckins.userId],
+    references: [users.id],
+  }),
+}));
+
 export const pushSubscriptionsRelations = relations(pushSubscriptions, ({ one }) => ({
   user: one(users, {
     fields: [pushSubscriptions.userId],
@@ -213,3 +261,7 @@ export type GoalTemplate = typeof goalTemplates.$inferSelect;
 export type InsertGoalTemplate = z.infer<typeof insertGoalTemplateSchema>;
 export type DailyGoal = typeof dailyGoals.$inferSelect;
 export type InsertDailyGoal = z.infer<typeof insertDailyGoalSchema>;
+export type JournalAttachment = typeof journalAttachments.$inferSelect;
+export type InsertJournalAttachment = z.infer<typeof insertJournalAttachmentSchema>;
+export type MoodCheckin = typeof moodCheckins.$inferSelect;
+export type InsertMoodCheckin = z.infer<typeof insertMoodCheckinSchema>;

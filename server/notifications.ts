@@ -2,8 +2,14 @@ import webPush from 'web-push';
 import cron from 'node-cron';
 import { storage } from './storage';
 
-// Track last reminder sent date per user (in-memory, resets on server restart)
 const lastReminderSentDate = new Map<number, string>();
+const lastMoodReminderSent = new Map<string, boolean>();
+
+const MOOD_CHECKIN_TIMES = [
+  { hour: 8, minute: 0, label: "morning", title: "Good Morning!", body: "How are you feeling this morning? Take a moment to check in." },
+  { hour: 13, minute: 0, label: "afternoon", title: "Afternoon Check-in", body: "How's your afternoon going? Log your mood." },
+  { hour: 21, minute: 0, label: "evening", title: "Evening Reflection", body: "How was your day? Take a moment to reflect on your mood." },
+];
 
 // Check if VAPID keys are configured and valid
 let isNotificationsEnabled = !!(
@@ -151,19 +157,66 @@ export async function sendDailyReminders() {
   }
 }
 
-// Schedule daily reminders to run every minute (checks if any user's reminder time matches)
+export async function sendMoodCheckinReminders() {
+  const now = new Date();
+  const allUsers = await storage.getAllUsersForReminder("");
+
+  for (const user of allUsers) {
+    if (!user.timezone || user.notificationsEnabled === false) continue;
+
+    try {
+      const userTimeStr = now.toLocaleString('en-US', {
+        timeZone: user.timezone,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      });
+      const userDateStr = now.toLocaleDateString('en-CA', { timeZone: user.timezone });
+      const [currentHourStr, currentMinuteStr] = userTimeStr.split(':');
+      const currentHour = parseInt(currentHourStr, 10);
+      const currentMinute = parseInt(currentMinuteStr, 10);
+
+      for (const checkinTime of MOOD_CHECKIN_TIMES) {
+        if (checkinTime.hour === currentHour && checkinTime.minute === currentMinute) {
+          const key = `${user.id}-${userDateStr}-${checkinTime.label}`;
+          if (lastMoodReminderSent.get(key)) continue;
+
+          const payload: PushNotificationPayload = {
+            title: checkinTime.title,
+            body: checkinTime.body,
+            icon: '/icon-192.png',
+            url: '/dashboard?mood=checkin',
+            tag: `mood-${checkinTime.label}-${user.id}`
+          };
+
+          for (const subscription of user.subscriptions) {
+            await sendPushNotification(
+              { endpoint: subscription.endpoint, keys: { p256dh: subscription.p256dh, auth: subscription.auth } },
+              payload
+            );
+          }
+
+          lastMoodReminderSent.set(key, true);
+        }
+      }
+    } catch (error) {
+      console.error(`[Mood Reminders] Error processing user ${user.id}:`, error);
+    }
+  }
+}
+
 export function startNotificationScheduler() {
   if (!isNotificationsEnabled) {
     console.log('[Notification Scheduler] Disabled - VAPID keys not configured');
     return;
   }
 
-  // Run every minute
   cron.schedule('* * * * *', async () => {
     try {
       await sendDailyReminders();
+      await sendMoodCheckinReminders();
     } catch (error) {
-      console.error('Error sending daily reminders:', error);
+      console.error('Error sending reminders:', error);
     }
   });
 

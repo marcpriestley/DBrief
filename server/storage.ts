@@ -1,11 +1,12 @@
 import { 
   users, journalEntries, dailyScores, userMetrics, streaks, aiInsights, pushSubscriptions,
-  goalTemplates, dailyGoals,
+  goalTemplates, dailyGoals, journalAttachments, moodCheckins,
   type User, type InsertUser, type JournalEntry, type InsertJournalEntry,
   type DailyScore, type InsertDailyScore, type UserMetric, type InsertUserMetric,
   type Streak, type InsertStreak, type AIInsight, type InsertAIInsight,
   type PushSubscription, type InsertPushSubscription,
-  type GoalTemplate, type InsertGoalTemplate, type DailyGoal, type InsertDailyGoal
+  type GoalTemplate, type InsertGoalTemplate, type DailyGoal, type InsertDailyGoal,
+  type JournalAttachment, type InsertJournalAttachment, type MoodCheckin, type InsertMoodCheckin
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
@@ -57,6 +58,16 @@ export interface IStorage {
   getGoalsForDateRange(userId: number, startDate: string, endDate: string): Promise<DailyGoal[]>;
   ensureDailyGoals(userId: number, date: string): Promise<DailyGoal[]>;
   toggleDailyGoal(id: number, userId: number): Promise<DailyGoal | undefined>;
+
+  // Journal attachment methods
+  getAttachmentsByEntry(journalEntryId: number): Promise<JournalAttachment[]>;
+  createAttachment(attachment: InsertJournalAttachment): Promise<JournalAttachment>;
+  deleteAttachment(id: number, userId: number): Promise<void>;
+
+  // Mood check-in methods
+  createMoodCheckin(checkin: InsertMoodCheckin): Promise<MoodCheckin>;
+  getMoodCheckinsByDate(userId: number, date: string): Promise<MoodCheckin[]>;
+  getMoodCheckinsForDateRange(userId: number, startDate: string, endDate: string): Promise<MoodCheckin[]>;
 
   // Push subscription methods
   getPushSubscriptions(userId: number): Promise<PushSubscription[]>;
@@ -409,6 +420,14 @@ export class MemStorage implements IStorage {
   async getGoalsForDateRange(_userId: number, _startDate: string, _endDate: string): Promise<DailyGoal[]> { return []; }
   async ensureDailyGoals(_userId: number, _date: string): Promise<DailyGoal[]> { return []; }
   async toggleDailyGoal(_id: number, _userId: number): Promise<DailyGoal | undefined> { return undefined; }
+
+  async getAttachmentsByEntry(_journalEntryId: number): Promise<JournalAttachment[]> { return []; }
+  async createAttachment(a: InsertJournalAttachment): Promise<JournalAttachment> { return { ...a, id: 0, createdAt: new Date() } as JournalAttachment; }
+  async deleteAttachment(_id: number, _userId: number): Promise<void> {}
+
+  async createMoodCheckin(c: InsertMoodCheckin): Promise<MoodCheckin> { return { ...c, id: 0, createdAt: new Date(), label: c.label ?? null } as MoodCheckin; }
+  async getMoodCheckinsByDate(_userId: number, _date: string): Promise<MoodCheckin[]> { return []; }
+  async getMoodCheckinsForDateRange(_userId: number, _startDate: string, _endDate: string): Promise<MoodCheckin[]> { return []; }
 }
 
 // Database implementation
@@ -657,6 +676,41 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(dailyGoals.id, id), eq(dailyGoals.userId, userId)))
       .returning();
     return updated;
+  }
+
+  async getAttachmentsByEntry(journalEntryId: number): Promise<JournalAttachment[]> {
+    return await db.select().from(journalAttachments)
+      .where(eq(journalAttachments.journalEntryId, journalEntryId));
+  }
+
+  async createAttachment(attachment: InsertJournalAttachment): Promise<JournalAttachment> {
+    const [created] = await db.insert(journalAttachments).values(attachment).returning();
+    return created;
+  }
+
+  async deleteAttachment(id: number, userId: number): Promise<void> {
+    await db.delete(journalAttachments)
+      .where(and(eq(journalAttachments.id, id), eq(journalAttachments.userId, userId)));
+  }
+
+  async createMoodCheckin(checkin: InsertMoodCheckin): Promise<MoodCheckin> {
+    const [created] = await db.insert(moodCheckins).values(checkin).returning();
+    return created;
+  }
+
+  async getMoodCheckinsByDate(userId: number, date: string): Promise<MoodCheckin[]> {
+    return await db.select().from(moodCheckins)
+      .where(and(eq(moodCheckins.userId, userId), eq(moodCheckins.date, date)));
+  }
+
+  async getMoodCheckinsForDateRange(userId: number, startDate: string, endDate: string): Promise<MoodCheckin[]> {
+    const { gte, lte } = await import("drizzle-orm");
+    return await db.select().from(moodCheckins)
+      .where(and(
+        eq(moodCheckins.userId, userId),
+        gte(moodCheckins.date, startDate),
+        lte(moodCheckins.date, endDate)
+      ));
   }
 
   async getAllUsersForReminder(time: string): Promise<Array<User & { subscriptions: PushSubscription[] }>> {

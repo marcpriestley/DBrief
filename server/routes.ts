@@ -10,6 +10,7 @@ import OpenAI from "openai";
 import { getOuraDataForDate } from "./oura";
 import { sendPushNotification } from "./notifications";
 import bcrypt from "bcrypt";
+import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 
 const openai = new OpenAI({ 
   apiKey: process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_ENV_VAR || "default_key" 
@@ -17,6 +18,8 @@ const openai = new OpenAI({
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
+
+  registerObjectStorageRoutes(app);
 
   // Authentication
   app.post("/api/auth/register", async (req, res) => {
@@ -51,15 +54,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Initialize streak
       await storage.createStreak({ userId: user.id, currentStreak: 0, longestStreak: 0, lastEntryDate: null });
       
-      // Initialize default goal templates
-      const defaultGoals = [
-        { userId: user.id, title: "Make my bed", sortOrder: 0, isActive: true },
-        { userId: user.id, title: "Drink 8 glasses of water", sortOrder: 1, isActive: true },
-        { userId: user.id, title: "30 minutes of exercise", sortOrder: 2, isActive: true },
-      ];
-      for (const goal of defaultGoals) {
-        await storage.createGoalTemplate(goal);
-      }
+      // Initialize default goal template - "Make my bed" is always the first default
+      await storage.createGoalTemplate({ userId: user.id, title: "Make my bed", sortOrder: 0, isActive: true });
       
       (req.session as any).userId = user.id;
       res.json({ id: user.id, username: user.username });
@@ -365,6 +361,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(goals);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch goals range" });
+    }
+  });
+
+  // Journal Attachments
+  app.get("/api/journal-attachments/:entryId", async (req, res) => {
+    try {
+      const { entryId } = req.params;
+      const attachments = await storage.getAttachmentsByEntry(parseInt(entryId));
+      res.json(attachments);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch attachments" });
+    }
+  });
+
+  app.post("/api/journal-attachments", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { journalEntryId, objectPath, filename, contentType, size } = req.body;
+      if (!journalEntryId || !objectPath || !filename) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+      const attachment = await storage.createAttachment({
+        userId,
+        journalEntryId,
+        objectPath,
+        filename,
+        contentType: contentType || "application/octet-stream",
+        size: size || 0,
+      });
+      res.json(attachment);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to save attachment" });
+    }
+  });
+
+  app.delete("/api/journal-attachments/:id", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { id } = req.params;
+      await storage.deleteAttachment(parseInt(id), userId);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete attachment" });
+    }
+  });
+
+  // Mood Check-ins
+  app.post("/api/mood-checkins", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { value, label } = req.body;
+      if (value === undefined || value < 0 || value > 100) {
+        return res.status(400).json({ message: "Value must be between 0 and 100" });
+      }
+      const today = new Date().toISOString().split('T')[0];
+      const checkin = await storage.createMoodCheckin({
+        userId,
+        date: today,
+        value,
+        label: label || null,
+      });
+      res.json(checkin);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to save mood check-in" });
+    }
+  });
+
+  app.get("/api/mood-checkins/:date", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { date } = req.params;
+      const checkins = await storage.getMoodCheckinsByDate(userId, date);
+      res.json(checkins);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch mood check-ins" });
+    }
+  });
+
+  app.get("/api/mood-checkins-range", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { startDate, endDate } = req.query;
+      if (!startDate || !endDate) return res.status(400).json({ message: "startDate and endDate required" });
+      const checkins = await storage.getMoodCheckinsForDateRange(userId, startDate as string, endDate as string);
+      res.json(checkins);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch mood check-ins" });
     }
   });
 

@@ -11,6 +11,8 @@ interface GoalsSectionProps {
   selectedDate: string;
 }
 
+const MIN_VISIBLE_SLOTS = 3;
+
 function triggerHaptic() {
   if (navigator.vibrate) {
     navigator.vibrate([50, 30, 50]);
@@ -29,6 +31,7 @@ export default function GoalsSection({ selectedDate }: GoalsSectionProps) {
   const [newGoalTitle, setNewGoalTitle] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editTitle, setEditTitle] = useState("");
+  const [placeholderValues, setPlaceholderValues] = useState<Record<number, string>>({});
   const [showCelebration, setShowCelebration] = useState(false);
   const [prevCompletedCount, setPrevCompletedCount] = useState<number>(-1);
   const addInputRef = useRef<HTMLInputElement>(null);
@@ -45,6 +48,7 @@ export default function GoalsSection({ selectedDate }: GoalsSectionProps) {
   const completedCount = goals.filter(g => g.completed).length;
   const totalGoals = goals.length;
   const allComplete = totalGoals > 0 && completedCount === totalGoals;
+  const blankSlotsNeeded = Math.max(0, MIN_VISIBLE_SLOTS - totalGoals);
 
   useEffect(() => {
     if (prevCompletedCount >= 0 && allComplete && completedCount > prevCompletedCount) {
@@ -82,6 +86,7 @@ export default function GoalsSection({ selectedDate }: GoalsSectionProps) {
       queryClient.invalidateQueries({ queryKey: ["/api/daily-goals", selectedDate] });
       setNewGoalTitle("");
       setShowAddInput(false);
+      setPlaceholderValues({});
     },
   });
 
@@ -107,9 +112,27 @@ export default function GoalsSection({ selectedDate }: GoalsSectionProps) {
     },
   });
 
+  const handleEditKeyDown = (e: React.KeyboardEvent, templateId: number) => {
+    if (e.key === "Enter" && editTitle.trim()) {
+      updateTemplateMutation.mutate({ id: templateId, title: editTitle.trim() });
+    }
+    if (e.key === "Escape") setEditingId(null);
+  };
+
   const handleAddGoal = () => {
     if (!newGoalTitle.trim()) return;
     addTemplateMutation.mutate(newGoalTitle.trim());
+  };
+
+  const handlePlaceholderSubmit = (slotIndex: number) => {
+    const title = placeholderValues[slotIndex]?.trim();
+    if (!title) return;
+    addTemplateMutation.mutate(title);
+    setPlaceholderValues(prev => {
+      const next = { ...prev };
+      delete next[slotIndex];
+      return next;
+    });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -117,11 +140,15 @@ export default function GoalsSection({ selectedDate }: GoalsSectionProps) {
     if (e.key === "Escape") { setShowAddInput(false); setNewGoalTitle(""); }
   };
 
-  const handleEditKeyDown = (e: React.KeyboardEvent, templateId: number) => {
-    if (e.key === "Enter" && editTitle.trim()) {
-      updateTemplateMutation.mutate({ id: templateId, title: editTitle.trim() });
+  const handlePlaceholderKeyDown = (e: React.KeyboardEvent, slotIndex: number) => {
+    if (e.key === "Enter") handlePlaceholderSubmit(slotIndex);
+    if (e.key === "Escape") {
+      setPlaceholderValues(prev => {
+        const next = { ...prev };
+        delete next[slotIndex];
+        return next;
+      });
     }
-    if (e.key === "Escape") setEditingId(null);
   };
 
   const confettiColors = ["#F59E0B", "#10B981", "#8B5CF6", "#EC4899", "#3B82F6", "#EF4444"];
@@ -161,16 +188,14 @@ export default function GoalsSection({ selectedDate }: GoalsSectionProps) {
 
       <div className="space-y-2">
         {goals.map((goal, index) => {
-          const template = templates.find(t => t.id === goal.goalTemplateId);
           const isEditing = editingId === goal.goalTemplateId;
-
           return (
             <motion.div
               key={goal.id}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.05 }}
-              className={`flex items-center gap-3 p-3 rounded-lg border transition-all ${
+              className={`group flex items-center gap-3 p-3 rounded-lg border transition-all ${
                 goal.completed
                   ? "bg-green-50 border-green-200"
                   : "bg-white border-gray-100 hover:border-gray-200"
@@ -220,20 +245,20 @@ export default function GoalsSection({ selectedDate }: GoalsSectionProps) {
                 </span>
               )}
 
-              {!isEditing && template && (
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
+              {!isEditing && (
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button
                     onClick={() => {
                       setEditingId(goal.goalTemplateId);
                       setEditTitle(goal.title);
                     }}
-                    className="p-1 text-gray-400 hover:text-gray-600"
+                    className="p-1 text-gray-300 hover:text-gray-600"
                   >
                     <Edit2 className="h-3 w-3" />
                   </button>
                   <button
                     onClick={() => deleteTemplateMutation.mutate(goal.goalTemplateId)}
-                    className="p-1 text-gray-400 hover:text-red-500"
+                    className="p-1 text-gray-300 hover:text-red-500"
                   >
                     <Trash2 className="h-3 w-3" />
                   </button>
@@ -243,14 +268,30 @@ export default function GoalsSection({ selectedDate }: GoalsSectionProps) {
           );
         })}
 
+        {!isLoading && Array.from({ length: blankSlotsNeeded }).map((_, i) => (
+          <motion.div
+            key={`placeholder-${i}`}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: (totalGoals + i) * 0.05 }}
+            className="flex items-center gap-3 p-3 rounded-lg border border-dashed border-gray-200 bg-gray-50/50"
+          >
+            <div className="flex-shrink-0 w-6 h-6 rounded-full border-2 border-gray-200" />
+            <Input
+              value={placeholderValues[i] || ""}
+              onChange={(e) => setPlaceholderValues(prev => ({ ...prev, [i]: e.target.value }))}
+              onKeyDown={(e) => handlePlaceholderKeyDown(e, i)}
+              onBlur={() => {
+                if (placeholderValues[i]?.trim()) handlePlaceholderSubmit(i);
+              }}
+              placeholder={`Add goal ${totalGoals + i + 1}...`}
+              className="flex-1 h-7 text-sm border-none bg-transparent shadow-none focus-visible:ring-0 placeholder:text-gray-300"
+            />
+          </motion.div>
+        ))}
+
         {isLoading && (
           <div className="text-center py-4 text-gray-400 text-sm">Loading goals...</div>
-        )}
-
-        {!isLoading && totalGoals === 0 && !showAddInput && (
-          <div className="text-center py-4 text-gray-400 text-sm">
-            No goals set. Tap "Add" to create your first daily goal.
-          </div>
         )}
       </div>
 

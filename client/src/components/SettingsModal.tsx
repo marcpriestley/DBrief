@@ -13,7 +13,61 @@ import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Bell, BellOff } from "lucide-react";
+import { Bell, BellOff, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+
+function NotificationPermissionHelper() {
+  const [permissionState, setPermissionState] = useState<NotificationPermission | "unsupported">("default");
+
+  useEffect(() => {
+    if (!("Notification" in window)) {
+      setPermissionState("unsupported");
+    } else {
+      setPermissionState(Notification.permission);
+    }
+  }, []);
+
+  if (permissionState === "granted") {
+    return (
+      <Alert className="border-green-200 bg-green-50">
+        <CheckCircle2 className="h-4 w-4 text-green-600" />
+        <AlertDescription className="text-green-800 text-sm">
+          Notifications are enabled in your browser. You're all set!
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  if (permissionState === "denied") {
+    return (
+      <Alert className="border-orange-200 bg-orange-50">
+        <AlertCircle className="h-4 w-4 text-orange-600" />
+        <AlertDescription className="text-orange-800 text-sm">
+          Notifications are blocked in your browser. To enable them:
+          <ol className="list-decimal ml-4 mt-1 space-y-0.5 text-xs">
+            <li>Click the lock/info icon in your browser's address bar</li>
+            <li>Find "Notifications" in the site settings</li>
+            <li>Change it from "Block" to "Allow"</li>
+            <li>Refresh this page</li>
+          </ol>
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  if (permissionState === "unsupported") {
+    return (
+      <Alert className="border-gray-200 bg-gray-50">
+        <AlertCircle className="h-4 w-4 text-gray-500" />
+        <AlertDescription className="text-gray-700 text-sm">
+          Push notifications are not supported in this browser.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  return null;
+}
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -202,7 +256,17 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               </div>
             )}
 
-            {/* Save Button */}
+            {notificationsEnabled && (
+              <NotificationPermissionHelper />
+            )}
+
+            <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+              <p className="text-sm font-medium text-gray-700">Mood Check-in Reminders</p>
+              <p className="text-xs text-gray-500">
+                When notifications are enabled, you'll receive three daily mood check-ins at 8:00 AM, 1:00 PM, and 9:00 PM (your local time).
+              </p>
+            </div>
+
             <div className="flex justify-end gap-2 pt-4">
               <Button
                 variant="outline"

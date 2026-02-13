@@ -8,7 +8,7 @@ import { CalendarDays, TrendingUp, Target, Activity, ArrowLeft, BarChart3, LineC
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { DailyScore, UserMetric, AIInsight, DailyGoal } from "@shared/schema";
+import type { DailyScore, UserMetric, AIInsight, DailyGoal, MoodCheckin } from "@shared/schema";
 
 interface TrendData {
   date: string;
@@ -44,6 +44,11 @@ export default function TrendsEnhanced() {
   const { data: goalsRange = [] } = useQuery<DailyGoal[]>({
     queryKey: ["/api/daily-goals-range", goalsStartDate, goalsEndDate],
     queryFn: () => fetch(`/api/daily-goals-range?startDate=${goalsStartDate}&endDate=${goalsEndDate}`).then(r => r.json()),
+  });
+
+  const { data: moodCheckins = [] } = useQuery<MoodCheckin[]>({
+    queryKey: ["/api/mood-checkins-range", goalsStartDate, goalsEndDate],
+    queryFn: () => fetch(`/api/mood-checkins-range?startDate=${goalsStartDate}&endDate=${goalsEndDate}`).then(r => r.json()),
   });
   
   const allScores = allScoresRaw.filter(score => !score.isAutoSynced);
@@ -94,6 +99,13 @@ export default function TrendsEnhanced() {
       } else {
         dayData["Goals"] = 0;
       }
+
+      const dayMoods = moodCheckins.filter(c => c.date === date);
+      if (dayMoods.length > 0) {
+        dayData["Mood"] = Math.round(dayMoods.reduce((sum, c) => sum + c.value, 0) / dayMoods.length);
+      } else {
+        dayData["Mood"] = 0;
+      }
       
       return dayData;
     });
@@ -102,7 +114,8 @@ export default function TrendsEnhanced() {
   };
 
   const goalsVirtualMetric: UserMetric = { id: -1, userId: 0, name: "Goals", color: "#F97316", maxValue: 100, isDefault: false, isActive: true };
-  const allMetricsWithGoals = [...metrics, goalsVirtualMetric];
+  const moodVirtualMetric: UserMetric = { id: -2, userId: 0, name: "Mood", color: "#EC4899", maxValue: 100, isDefault: false, isActive: true };
+  const allMetricsWithGoals = [...metrics, goalsVirtualMetric, moodVirtualMetric];
 
   const chartData = processedData();
   const displayMetrics = selectedMetrics.length > 0 
