@@ -32,6 +32,7 @@ export default function GoalsSection({ selectedDate }: GoalsSectionProps) {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [placeholderValues, setPlaceholderValues] = useState<Record<number, string>>({});
+  const [submittingPlaceholder, setSubmittingPlaceholder] = useState<number | null>(null);
   const [showCelebration, setShowCelebration] = useState(false);
   const [prevCompletedCount, setPrevCompletedCount] = useState<number>(-1);
   const addInputRef = useRef<HTMLInputElement>(null);
@@ -51,13 +52,13 @@ export default function GoalsSection({ selectedDate }: GoalsSectionProps) {
   const blankSlotsNeeded = Math.max(0, MIN_VISIBLE_SLOTS - totalGoals);
 
   useEffect(() => {
-    if (prevCompletedCount >= 0 && allComplete && completedCount > prevCompletedCount) {
+    if (prevCompletedCount >= 0 && completedCount > prevCompletedCount && allComplete && totalGoals >= 3) {
       setShowCelebration(true);
       triggerCelebrationHaptic();
       setTimeout(() => setShowCelebration(false), 3000);
     }
     setPrevCompletedCount(completedCount);
-  }, [completedCount, allComplete]);
+  }, [completedCount, allComplete, totalGoals]);
 
   useEffect(() => {
     if (showAddInput && addInputRef.current) {
@@ -86,7 +87,17 @@ export default function GoalsSection({ selectedDate }: GoalsSectionProps) {
       queryClient.invalidateQueries({ queryKey: ["/api/daily-goals", selectedDate] });
       setNewGoalTitle("");
       setShowAddInput(false);
-      setPlaceholderValues({});
+      if (submittingPlaceholder !== null) {
+        setPlaceholderValues(prev => {
+          const next = { ...prev };
+          delete next[submittingPlaceholder];
+          return next;
+        });
+      }
+      setSubmittingPlaceholder(null);
+    },
+    onError: () => {
+      setSubmittingPlaceholder(null);
     },
   });
 
@@ -126,13 +137,9 @@ export default function GoalsSection({ selectedDate }: GoalsSectionProps) {
 
   const handlePlaceholderSubmit = (slotIndex: number) => {
     const title = placeholderValues[slotIndex]?.trim();
-    if (!title) return;
+    if (!title || submittingPlaceholder === slotIndex || addTemplateMutation.isPending) return;
+    setSubmittingPlaceholder(slotIndex);
     addTemplateMutation.mutate(title);
-    setPlaceholderValues(prev => {
-      const next = { ...prev };
-      delete next[slotIndex];
-      return next;
-    });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -141,7 +148,10 @@ export default function GoalsSection({ selectedDate }: GoalsSectionProps) {
   };
 
   const handlePlaceholderKeyDown = (e: React.KeyboardEvent, slotIndex: number) => {
-    if (e.key === "Enter") handlePlaceholderSubmit(slotIndex);
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handlePlaceholderSubmit(slotIndex);
+    }
     if (e.key === "Escape") {
       setPlaceholderValues(prev => {
         const next = { ...prev };
@@ -281,9 +291,7 @@ export default function GoalsSection({ selectedDate }: GoalsSectionProps) {
               value={placeholderValues[i] || ""}
               onChange={(e) => setPlaceholderValues(prev => ({ ...prev, [i]: e.target.value }))}
               onKeyDown={(e) => handlePlaceholderKeyDown(e, i)}
-              onBlur={() => {
-                if (placeholderValues[i]?.trim()) handlePlaceholderSubmit(i);
-              }}
+              disabled={submittingPlaceholder === i}
               placeholder={`Add goal ${totalGoals + i + 1}...`}
               className="flex-1 h-7 text-sm border-none bg-transparent shadow-none focus-visible:ring-0 placeholder:text-gray-300"
             />

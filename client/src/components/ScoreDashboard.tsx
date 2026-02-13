@@ -21,8 +21,10 @@ export default function ScoreDashboard({}: ScoreDashboardProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
-  // Always use today's date for score dashboard
-  const today = new Date().toISOString().split('T')[0];
+  const today = (() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  })();
 
   const { data: metrics = [] } = useQuery<UserMetric[]>({
     queryKey: ["/api/user-metrics"],
@@ -186,13 +188,19 @@ export default function ScoreDashboard({}: ScoreDashboardProps) {
                 <div 
                   className="w-full h-full rounded-full"
                   style={{
-                    background: `conic-gradient(from 0deg, ${metric.color} ${percentage}%, #E5E7EB ${percentage}%)`
+                    background: value !== undefined
+                      ? `conic-gradient(from 0deg, ${metric.color} ${percentage}%, #E5E7EB ${percentage}%)`
+                      : '#F3F4F6'
                   }}
                 />
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-lg font-semibold text-gray-900">
-                    {displayValue}
-                  </span>
+                  {value !== undefined ? (
+                    <span className="text-lg font-semibold text-gray-900">
+                      {value}
+                    </span>
+                  ) : (
+                    <span className="text-sm text-gray-400">--</span>
+                  )}
                 </div>
               </div>
               <h3 className="text-sm font-medium text-gray-700">{metric.name}</h3>
