@@ -115,7 +115,7 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
 
   const handleMetricClick = (metric: UserMetric) => {
     setSelectedMetric(metric);
-    setDialogMode(isToday ? 'edit' : 'trend');
+    setDialogMode('edit');
     const existingScore = getScoreForMetric(metric.name);
     setScoreValue(existingScore?.value?.toString() || "");
   };
@@ -131,7 +131,7 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
   };
 
   const handleSaveScore = () => {
-    if (!selectedMetric || !isToday) return;
+    if (!selectedMetric) return;
     
     const value = parseInt(scoreValue);
     const maxValue = selectedMetric.maxValue || 100;
@@ -146,7 +146,7 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
     }
 
     updateScoreMutation.mutate({
-      date: today,
+      date: selectedDate,
       metricName: selectedMetric.name,
       value,
     });
@@ -212,7 +212,7 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
               </div>
               <h3 className="text-sm font-medium text-gray-700">{metric.name}</h3>
               <p className="text-xs text-gray-500 mt-1">
-                {!isToday ? (value !== undefined ? "View trends" : "No data") : (score?.isAutoSynced ? "Auto-synced" : (value !== undefined ? "Tap to edit" : "Tap to add"))}
+                {score?.isAutoSynced ? "Auto-synced" : (value !== undefined ? "Tap to edit" : "Tap to add")}
               </p>
             </div>
           );
@@ -228,8 +228,8 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
             </DialogTitle>
             <DialogDescription>
               {dialogMode === 'trend' 
-                ? `14-day trend for ${selectedMetric?.name}. Tap Edit to update today's score.`
-                : `Enter a score from 0 to ${selectedMetric?.maxValue || 100} for ${selectedMetric?.name} for today.`
+                ? `14-day trend for ${selectedMetric?.name}. Tap Edit to update the score.`
+                : `Enter a score from 0 to ${selectedMetric?.maxValue || 100} for ${selectedMetric?.name}.`
               }
             </DialogDescription>
           </DialogHeader>
@@ -242,17 +242,15 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
                   history={metricHistory} 
                   selectedDate={today}
                 />
-                {isToday && (
-                  <div className="flex justify-end">
-                    <Button 
-                      onClick={() => setDialogMode('edit')}
-                      data-testid="button-edit-score"
-                    >
-                      <Edit className="w-4 h-4 mr-2" />
-                      Edit Score
-                    </Button>
-                  </div>
-                )}
+                <div className="flex justify-end">
+                  <Button 
+                    onClick={() => setDialogMode('edit')}
+                    data-testid="button-edit-score"
+                  >
+                    <Edit className="w-4 h-4 mr-2" />
+                    Edit Score
+                  </Button>
+                </div>
               </div>
             ) : (
               <div className="space-y-4">

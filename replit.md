@@ -70,7 +70,9 @@ DBrief is a daily journaling application designed to help users track their well
 - ✅ **Goals Counter**: Always shows minimum 0/3 counter; progress bar denominator uses max(3, totalGoals)
 - ✅ **Goals Auto-Create**: New goal templates automatically create daily goal entries for today so they can be toggled immediately
 - ✅ **Past Date Protection**: ensureDailyGoals only creates goals for today/future, not for past dates
-- ✅ **Date-Aware Scores**: ScoreDashboard shows scores for selected calendar date; past dates show blank if no data saved; editing only allowed for today
+- ✅ **Date-Aware Scores**: ScoreDashboard shows scores for selected calendar date; past dates show blank if no data saved
+- ✅ **Retrospective Editing**: Users can input scores and journal entries for any past date by selecting it on the calendar
+- ✅ **Journal Display**: Only shows entries for the selected date; saved entries split by timestamp and displayed newest-first
 - ✅ **File Attachments**: Journal entries support file attachments (images, PDFs, docs) up to 10MB via Replit object storage with presigned URL upload flow
 - ✅ **Mood Check-in System**: Slider-based mood check-in modal (0-100 scale) with time-of-day labels (morning/afternoon/evening), accessible from dashboard header Smile icon
 - ✅ **Mood Deep-Linking**: ?mood=checkin URL parameter opens mood check-in modal automatically (for push notification deep links)

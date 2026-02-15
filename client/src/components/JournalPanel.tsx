@@ -1,10 +1,9 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Mic, Paperclip, Keyboard, Save, TrendingUp, X, FileText, Image, File as FileIcon, Loader2 } from "lucide-react";
+import { Mic, Paperclip, Save, X, FileText, Image, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { formatDate } from "@/lib/dateUtils";
@@ -41,10 +40,6 @@ export default function JournalPanel({ selectedDate, onVoiceRecord }: JournalPan
       if (!response.ok) return null;
       return response.json();
     },
-  });
-
-  const { data: recentEntries = [] } = useQuery<JournalEntry[]>({
-    queryKey: ["/api/journal-entries"],
   });
 
   const { data: dayScores = [] } = useQuery<DailyScore[]>({
@@ -131,24 +126,19 @@ export default function JournalPanel({ selectedDate, onVoiceRecord }: JournalPan
       return;
     }
 
-    const today = new Date().toISOString().split('T')[0];
-    const isToday = selectedDate === today;
     let finalContent = content;
+    const timestamp = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 
-    if (isToday) {
-      if (initialContent && content.startsWith(initialContent)) {
-        const afterInitial = content.substring(initialContent.length);
-        const newContent = afterInitial.trim();
-        if (newContent) {
-          const timestamp = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-          finalContent = `${initialContent}\n\n[${timestamp}]\n${newContent}`;
-        } else {
-          finalContent = initialContent;
-        }
-      } else if (!initialContent) {
-        const timestamp = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-        finalContent = `[${timestamp}]\n${content.trim()}`;
+    if (initialContent && content.startsWith(initialContent)) {
+      const afterInitial = content.substring(initialContent.length);
+      const newContent = afterInitial.trim();
+      if (newContent) {
+        finalContent = `${initialContent}\n\n[${timestamp}]\n${newContent}`;
+      } else {
+        finalContent = initialContent;
       }
+    } else if (!initialContent) {
+      finalContent = `[${timestamp}]\n${content.trim()}`;
     }
 
     saveEntryMutation.mutate({ content: finalContent, date: selectedDate, isVoiceEntry: false });
@@ -172,14 +162,6 @@ export default function JournalPanel({ selectedDate, onVoiceRecord }: JournalPan
 
     await uploadFile(file);
     e.target.value = "";
-  };
-
-  const handleEntryClick = (entry: JournalEntry) => {
-    setContent(entry.content);
-  };
-
-  const getPreview = (text: string): string => {
-    return text.length > 100 ? text.substring(0, 100) + "..." : text;
   };
 
   return (
@@ -286,56 +268,24 @@ export default function JournalPanel({ selectedDate, onVoiceRecord }: JournalPan
         </CardContent>
       </Card>
 
-      <Card>
-        <CardContent className="p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Entries</h3>
-
-          <div className="space-y-3">
-            {recentEntries.slice(0, 5).map((entry) => (
-              <div
-                key={entry.id}
-                onClick={() => handleEntryClick(entry)}
-                className="p-3 border border-gray-100 rounded-lg hover:bg-gray-50 cursor-pointer transition-all duration-200 hover:shadow-sm hover:-translate-y-0.5"
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-900">
-                    {formatDate(new Date(entry.date), 'MMM d, yyyy')}
-                  </span>
-                  <Badge variant="secondary" className="text-xs">
-                    {entry.isVoiceEntry ? (
-                      <>
-                        <Mic className="h-3 w-3 mr-1" />
-                        Voice
-                      </>
-                    ) : (
-                      <>
-                        <Keyboard className="h-3 w-3 mr-1" />
-                        Text
-                      </>
-                    )}
-                  </Badge>
-                </div>
-                <p className="text-sm text-gray-600 line-clamp-2">
-                  {getPreview(entry.content)}
-                </p>
-              </div>
-            ))}
-
-            {recentEntries.length === 0 && (
-              <div className="text-center py-8 text-gray-500">
-                <p>No journal entries yet.</p>
-                <p className="text-sm">Start writing to see your entries here!</p>
-              </div>
-            )}
-          </div>
-
-          {recentEntries.length > 5 && (
-            <Button variant="ghost" className="w-full mt-4 text-primary hover:text-primary/80">
-              View All Entries
-            </Button>
-          )}
-        </CardContent>
-      </Card>
+      {currentEntry && (
+        <Card>
+          <CardContent className="p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Saved Entries</h3>
+            <div className="space-y-3">
+              {(() => {
+                const sections = currentEntry.content.split(/(?=\[[\d]{1,2}:[\d]{2}\s*(?:AM|PM)\])/i).filter(s => s.trim());
+                const reversed = [...sections].reverse();
+                return reversed.map((section, i) => (
+                  <div key={i} className="p-3 border border-gray-100 rounded-lg bg-gray-50/50">
+                    <p className="text-sm text-gray-800 whitespace-pre-wrap">{section.trim()}</p>
+                  </div>
+                ));
+              })()}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </>
   );
 }

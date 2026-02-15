@@ -9,7 +9,7 @@ import {
   type JournalAttachment, type InsertJournalAttachment, type MoodCheckin, type InsertMoodCheckin
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 
 export interface IStorage {
   // User methods
@@ -455,7 +455,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getJournalEntriesByUser(userId: number): Promise<JournalEntry[]> {
-    return await db.select().from(journalEntries).where(eq(journalEntries.userId, userId));
+    return await db.select().from(journalEntries)
+      .where(eq(journalEntries.userId, userId))
+      .orderBy(desc(journalEntries.date));
   }
 
   async getJournalEntryByDate(userId: number, date: string): Promise<JournalEntry | undefined> {
