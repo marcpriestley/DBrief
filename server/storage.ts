@@ -70,6 +70,9 @@ export interface IStorage {
   getMoodCheckinsByDate(userId: number, date: string): Promise<MoodCheckin[]>;
   getMoodCheckinsForDateRange(userId: number, startDate: string, endDate: string): Promise<MoodCheckin[]>;
 
+  // Calendar data methods
+  getDatesWithData(userId: number): Promise<string[]>;
+
   // Push subscription methods
   getPushSubscriptions(userId: number): Promise<PushSubscription[]>;
   createPushSubscription(subscription: InsertPushSubscription): Promise<PushSubscription>;
@@ -430,6 +433,7 @@ export class MemStorage implements IStorage {
   async createMoodCheckin(c: InsertMoodCheckin): Promise<MoodCheckin> { return { ...c, id: 0, createdAt: new Date(), label: c.label ?? null } as MoodCheckin; }
   async getMoodCheckinsByDate(_userId: number, _date: string): Promise<MoodCheckin[]> { return []; }
   async getMoodCheckinsForDateRange(_userId: number, _startDate: string, _endDate: string): Promise<MoodCheckin[]> { return []; }
+  async getDatesWithData(_userId: number): Promise<string[]> { return []; }
 }
 
 // Database implementation
@@ -633,6 +637,15 @@ export class DatabaseStorage implements IStorage {
     await db.update(goalTemplates)
       .set({ isActive: false })
       .where(and(eq(goalTemplates.id, id), eq(goalTemplates.userId, userId)));
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const { gte } = await import("drizzle-orm");
+    await db.delete(dailyGoals)
+      .where(and(
+        eq(dailyGoals.userId, userId),
+        eq(dailyGoals.goalTemplateId, id),
+        gte(dailyGoals.date, todayStr)
+      ));
   }
 
   async getDailyGoals(userId: number, date: string): Promise<DailyGoal[]> {
@@ -657,17 +670,20 @@ export class DatabaseStorage implements IStorage {
 
   async ensureDailyGoals(userId: number, date: string): Promise<DailyGoal[]> {
     const existing = await this.getDailyGoals(userId, date);
-    if (existing.length > 0) return existing;
 
     const now = new Date();
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    if (date < todayStr) return [];
+    if (date < todayStr) return existing;
 
     const templates = await this.getGoalTemplates(userId);
-    if (templates.length === 0) return [];
+    if (templates.length === 0) return existing;
+
+    const existingTemplateIds = new Set(existing.map(g => g.goalTemplateId));
+    const missingTemplates = templates.filter(t => !existingTemplateIds.has(t.id));
+    if (missingTemplates.length === 0) return existing;
 
     const newGoals: DailyGoal[] = [];
-    for (const template of templates) {
+    for (const template of missingTemplates) {
       const [goal] = await db.insert(dailyGoals).values({
         userId,
         date,
@@ -677,7 +693,7 @@ export class DatabaseStorage implements IStorage {
       }).returning();
       newGoals.push(goal);
     }
-    return newGoals;
+    return [...existing, ...newGoals];
   }
 
   async toggleDailyGoal(id: number, userId: number): Promise<DailyGoal | undefined> {
@@ -724,6 +740,24 @@ export class DatabaseStorage implements IStorage {
         gte(moodCheckins.date, startDate),
         lte(moodCheckins.date, endDate)
       ));
+  }
+
+  async getDatesWithData(userId: number): Promise<string[]> {
+    const journalDates = await db.selectDistinct({ date: journalEntries.date })
+      .from(journalEntries)
+      .where(eq(journalEntries.userId, userId));
+    const scoreDates = await db.selectDistinct({ date: dailyScores.date })
+      .from(dailyScores)
+      .where(eq(dailyScores.userId, userId));
+    const moodDates = await db.selectDistinct({ date: moodCheckins.date })
+      .from(moodCheckins)
+      .where(eq(moodCheckins.userId, userId));
+
+    const allDates = new Set<string>();
+    for (const r of journalDates) allDates.add(r.date);
+    for (const r of scoreDates) allDates.add(r.date);
+    for (const r of moodDates) allDates.add(r.date);
+    return Array.from(allDates);
   }
 
   async getAllUsersForReminder(time: string): Promise<Array<User & { subscriptions: PushSubscription[] }>> {

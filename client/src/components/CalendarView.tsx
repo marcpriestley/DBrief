@@ -17,8 +17,8 @@ export default function CalendarView({ selectedDate, onDateSelect }: CalendarVie
   const [longPressDate, setLongPressDate] = useState<string | null>(null);
   const pressTimers = useRef<Record<string, NodeJS.Timeout>>({});
 
-  const { data: journalEntries = [] } = useQuery<JournalEntry[]>({
-    queryKey: ["/api/journal-entries"],
+  const { data: datesWithData = [] } = useQuery<string[]>({
+    queryKey: ["/api/dates-with-data"],
   });
 
   const { data: longPressEntry } = useQuery<JournalEntry | null>({
@@ -45,8 +45,9 @@ export default function CalendarView({ selectedDate, onDateSelect }: CalendarVie
   const calendarDays = getCalendarDays(currentMonth);
   const today = new Date().toISOString().split('T')[0];
 
-  const hasEntryForDate = (date: string): boolean => {
-    return journalEntries.some(entry => entry.date === date);
+  const datesSet = new Set(datesWithData);
+  const hasDataForDate = (date: string): boolean => {
+    return datesSet.has(date);
   };
 
   const navigateMonth = (direction: 'prev' | 'next') => {
@@ -141,7 +142,7 @@ export default function CalendarView({ selectedDate, onDateSelect }: CalendarVie
             const dateStr = day ? day.toISOString().split('T')[0] : '';
             const isToday = dateStr === today;
             const isSelected = dateStr === selectedDate;
-            const hasEntry = day && hasEntryForDate(dateStr);
+            const hasEntry = day && hasDataForDate(dateStr);
             const isCurrentMonth = day && day.getMonth() === currentMonth.getMonth();
 
             return (
@@ -185,7 +186,7 @@ export default function CalendarView({ selectedDate, onDateSelect }: CalendarVie
         <div className="mt-4 flex items-center justify-center space-x-4 text-xs text-gray-500">
           <div className="flex items-center space-x-1">
             <div className="w-2 h-2 bg-emerald-500 rounded-full" />
-            <span>Journal Entry</span>
+            <span>Has Data</span>
           </div>
           <div className="flex items-center space-x-1">
             <div className="w-2 h-2 bg-primary rounded-full" />

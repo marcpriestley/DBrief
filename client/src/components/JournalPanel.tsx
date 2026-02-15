@@ -106,6 +106,7 @@ export default function JournalPanel({ selectedDate, onVoiceRecord }: JournalPan
       setInitialContent(data.content);
       queryClient.invalidateQueries({ queryKey: ["/api/journal-entries"] });
       queryClient.invalidateQueries({ queryKey: ["/api/journal-entries", variables.date] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dates-with-data"] });
       queryClient.invalidateQueries({ queryKey: ["/api/streak"] });
       toast({ title: "Entry saved", description: "Your journal entry has been saved successfully." });
     },

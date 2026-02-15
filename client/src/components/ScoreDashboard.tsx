@@ -86,7 +86,7 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
     },
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/daily-scores", selectedDate] });
-      // Also invalidate streak query to show animation
+      queryClient.invalidateQueries({ queryKey: ["/api/dates-with-data"] });
       queryClient.invalidateQueries({ queryKey: ["/api/streak"] });
       
       const metricName = selectedMetric?.name;

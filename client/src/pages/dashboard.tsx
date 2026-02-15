@@ -11,17 +11,21 @@ import StreakDisplay from "@/components/StreakDisplay";
 import GoalsSection from "@/components/GoalsSection";
 import MoodCheckinModal from "@/components/MoodCheckinModal";
 import { Button } from "@/components/ui/button";
-import { Settings, Plus, User, TrendingUp, LogOut, Smile } from "lucide-react";
+import { Settings, Plus, User, TrendingUp, LogOut, Smile, CalendarCheck } from "lucide-react";
 import { Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
+function getTodayStr() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
 export default function Dashboard() {
-  const [selectedDate, setSelectedDate] = useState<string>(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-  });
+  const [selectedDate, setSelectedDate] = useState<string>(getTodayStr);
+  const todayStr = getTodayStr();
+  const isViewingToday = selectedDate === todayStr;
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
   const [isCustomizeModalOpen, setIsCustomizeModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
@@ -103,9 +107,28 @@ export default function Dashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {!isViewingToday && (
+          <div className="mb-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSelectedDate(todayStr)}
+              className="text-primary border-primary/30 hover:bg-primary/5"
+            >
+              <CalendarCheck className="h-4 w-4 mr-1.5" />
+              Back to Today
+            </Button>
+          </div>
+        )}
+
         <section className="mb-8">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-semibold text-gray-900">Today's Scores</h2>
+            <h2 className="text-2xl font-semibold text-gray-900">
+              {isViewingToday
+                ? "Today's Scores"
+                : new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+              }
+            </h2>
             <Button 
               variant="ghost" 
               className="text-primary hover:text-primary/80"

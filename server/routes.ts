@@ -123,6 +123,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return userId;
   }
 
+  app.get("/api/dates-with-data", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const dates = await storage.getDatesWithData(userId);
+      res.json(dates);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch dates with data" });
+    }
+  });
+
   // All Daily Scores (for trends page)
   app.get("/api/daily-scores", async (req, res) => {
     try {
@@ -299,17 +309,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const now = new Date();
       const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       const todayGoals = await storage.getDailyGoals(userId, todayStr);
-      if (todayGoals.length > 0) {
-        const alreadyExists = todayGoals.some(g => g.goalTemplateId === template.id);
-        if (!alreadyExists) {
-          await storage.createDailyGoal({
-            userId,
-            date: todayStr,
-            goalTemplateId: template.id,
-            title: template.title,
-            completed: false,
-          });
-        }
+      const alreadyExists = todayGoals.some(g => g.goalTemplateId === template.id);
+      if (!alreadyExists) {
+        await storage.createDailyGoal({
+          userId,
+          date: todayStr,
+          goalTemplateId: template.id,
+          title: template.title,
+          completed: false,
+        });
       }
 
       res.json(template);

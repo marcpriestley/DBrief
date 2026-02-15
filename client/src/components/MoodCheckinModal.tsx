@@ -62,6 +62,7 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
     onSuccess: () => {
       toast({ title: "Mood logged", description: `Your ${timeLabels[timeOfDay].toLowerCase()} has been saved.` });
       queryClient.invalidateQueries({ queryKey: ["/api/mood-checkins"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dates-with-data"] });
       onClose();
       setMoodValue(50);
     },
