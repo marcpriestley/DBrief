@@ -61,7 +61,12 @@ DBrief is a daily journaling application designed to help users track their well
 - **express-session**: For session-based authentication.
 - **react-icons**: For social sign-in button icons (Google, Apple).
 
-## Recent Updates (Feb 13, 2026)
+## Recent Updates (Feb 15, 2026)
+- ✅ **Back to Today Button**: Dashboard shows a "Back to Today" button when viewing a past date; section header displays selected date name
+- ✅ **Goals Deduplication Fix**: ensureDailyGoals now checks per-template before creating; always creates daily goal when new template added; deleteGoalTemplate removes today/future daily goals
+- ✅ **Calendar Data Dots**: Calendar dots now show for any input type (scores, journal entries, mood check-ins) via `/api/dates-with-data` endpoint
+
+## Previous Updates (Feb 13, 2026)
 - ✅ **Daily Goals System**: Goal templates with daily instances, one-tap toggle completion, inline editing, add/delete functionality
 - ✅ **Goals Celebration Animation**: Confetti + party popper animation with haptic feedback when all daily goals complete (requires 3+ goals all completed)
 - ✅ **Goals on Trends Page**: Goals completion percentage (0-100) trackable as a metric on the Trends page
