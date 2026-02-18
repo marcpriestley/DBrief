@@ -35,9 +35,28 @@ interface OuraReadinessData {
   }>;
 }
 
+interface OuraActivityData {
+  data: Array<{
+    day: string;
+    score: number;
+    active_calories: number;
+    steps: number;
+    equivalent_walking_distance: number;
+    contributors: {
+      meet_daily_targets: number;
+      move_every_hour: number;
+      recovery_time: number;
+      stay_active: number;
+      training_frequency: number;
+      training_volume: number;
+    };
+  }>;
+}
+
 export interface OuraData {
   sleepScore?: number;
   readinessScore?: number;
+  activityScore?: number;
 }
 
 async function fetchOuraData(endpoint: string, startDate: string, endDate: string): Promise<any> {
@@ -65,9 +84,10 @@ async function fetchOuraData(endpoint: string, startDate: string, endDate: strin
 
 export async function getOuraDataForDate(date: string): Promise<OuraData> {
   try {
-    const [sleepScoreData, readinessData] = await Promise.all([
+    const [sleepScoreData, readinessData, activityData] = await Promise.all([
       fetchOuraData("daily_sleep", date, date) as Promise<OuraSleepScoreData>,
       fetchOuraData("daily_readiness", date, date) as Promise<OuraReadinessData>,
+      fetchOuraData("daily_activity", date, date) as Promise<OuraActivityData>,
     ]);
 
     const result: OuraData = {};
@@ -81,6 +101,11 @@ export async function getOuraDataForDate(date: string): Promise<OuraData> {
     if (readinessData.data && readinessData.data.length > 0) {
       result.readinessScore = readinessData.data[0].score;
       console.log(`[Oura Sync ${date}] Readiness score: ${result.readinessScore}`);
+    }
+
+    if (activityData.data && activityData.data.length > 0) {
+      result.activityScore = activityData.data[0].score;
+      console.log(`[Oura Sync ${date}] Activity score: ${result.activityScore}`);
     }
 
     return result;

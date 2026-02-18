@@ -48,6 +48,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         { userId: user.id, name: "Nutrition", color: "#EC4899", maxValue: 100, isDefault: true, isActive: true },
         { userId: user.id, name: "Sleep Quality", color: "#8B5CF6", maxValue: 100, isDefault: false, isActive: true },
         { userId: user.id, name: "Readiness", color: "#EF4444", maxValue: 100, isDefault: false, isActive: true },
+        { userId: user.id, name: "Activity", color: "#06B6D4", maxValue: 100, isDefault: false, isActive: true },
       ];
       for (const metric of defaultMetrics) {
         await storage.createUserMetric(metric);
@@ -269,17 +270,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/user-metrics/:id", async (req, res) => {
     try {
+      const userId = getUserId(req);
       const { id } = req.params;
-      const updates = req.body;
-      const metric = await storage.updateUserMetric(parseInt(id), updates);
-      
-      if (!metric) {
+      const metricId = parseInt(id);
+      const { name, color } = req.body;
+
+      const existingMetrics = await storage.getUserMetrics(userId);
+      const existingMetric = existingMetrics.find(m => m.id === metricId);
+      if (!existingMetric) {
         return res.status(404).json({ message: "Metric not found" });
       }
-      
+
+      const updates: any = {};
+      if (color) updates.color = color;
+
+      if (name && name !== existingMetric.name) {
+        updates.name = name;
+        const { eq: eqOp, and: andOp } = await import("drizzle-orm");
+        const { db } = await import("./db");
+        const { dailyScores } = await import("@shared/schema");
+        await db.update(dailyScores)
+          .set({ metricName: name })
+          .where(andOp(eqOp(dailyScores.userId, userId), eqOp(dailyScores.metricName, existingMetric.name)));
+      }
+
+      const metric = await storage.updateUserMetric(metricId, updates);
       res.json(metric);
     } catch (error) {
       res.status(400).json({ message: "Failed to update user metric" });
+    }
+  });
+
+  app.delete("/api/user-metrics/:id", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { id } = req.params;
+      await storage.deleteUserMetric(parseInt(id), userId);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete metric" });
     }
   });
 
@@ -617,6 +646,11 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
       if (ouraData.readinessScore !== undefined) {
         const readiness = await storage.updateDailyScore(userId, date, "Readiness", ouraData.readinessScore, true);
         updatedScores.push(readiness);
+      }
+
+      if (ouraData.activityScore !== undefined) {
+        const activity = await storage.updateDailyScore(userId, date, "Activity", ouraData.activityScore, true);
+        updatedScores.push(activity);
       }
       
       res.json({ success: true, data: ouraData, updatedScores });

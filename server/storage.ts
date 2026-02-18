@@ -36,6 +36,7 @@ export interface IStorage {
   getUserMetrics(userId: number): Promise<UserMetric[]>;
   createUserMetric(metric: InsertUserMetric): Promise<UserMetric>;
   updateUserMetric(id: number, metric: Partial<InsertUserMetric>): Promise<UserMetric | undefined>;
+  deleteUserMetric(id: number, userId: number): Promise<void>;
 
   // Streak methods
   getUserStreak(userId: number): Promise<Streak | undefined>;
@@ -306,6 +307,14 @@ export class MemStorage implements IStorage {
     return undefined;
   }
 
+  async deleteUserMetric(id: number, _userId: number): Promise<void> {
+    const metric = this.userMetrics.get(id);
+    if (metric) {
+      metric.isActive = false;
+      this.userMetrics.set(id, metric);
+    }
+  }
+
   async getUserStreak(userId: number): Promise<Streak | undefined> {
     return Array.from(this.streaks.values()).find(streak => streak.userId === userId);
   }
@@ -550,6 +559,12 @@ export class DatabaseStorage implements IStorage {
       .where(eq(userMetrics.id, id))
       .returning();
     return updated || undefined;
+  }
+
+  async deleteUserMetric(id: number, userId: number): Promise<void> {
+    await db.update(userMetrics)
+      .set({ isActive: false })
+      .where(and(eq(userMetrics.id, id), eq(userMetrics.userId, userId)));
   }
 
   async getUserStreak(userId: number): Promise<Streak | undefined> {

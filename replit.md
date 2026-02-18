@@ -66,6 +66,8 @@ DBrief is a daily journaling application designed to help users track their well
 - ✅ **AI Insights Streak Gate**: Requires 7-day minimum streak to unlock; locked state shows progress bar with flame icon
 - ✅ **Recurring Goals**: goal_templates has `recurring` boolean; only recurring templates auto-create daily goals; "Make my bed" is recurring by default
 - ✅ **Chat Integration**: OpenAI chat routes registered with authentication; conversations and messages tables created
+- ✅ **Oura Activity Score**: Added Activity score from Oura daily_activity endpoint; auto-syncs alongside Sleep Quality and Readiness
+- ✅ **Customizable Metrics**: All metrics fully editable (rename, recolor, delete). Add new custom metrics anytime. Soft-delete preserves historical scores. Renaming updates all existing daily_scores. User ownership enforced on all metric operations.
 
 ## Previous Updates (Feb 15, 2026)
 - ✅ **Back to Today Button**: Dashboard shows a "Back to Today" button when viewing a past date; section header displays selected date name
