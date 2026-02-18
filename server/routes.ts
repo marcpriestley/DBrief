@@ -11,9 +11,11 @@ import { getOuraDataForDate } from "./oura";
 import { sendPushNotification } from "./notifications";
 import bcrypt from "bcrypt";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
+import { registerChatRoutes } from "./replit_integrations/chat/routes";
 
 const openai = new OpenAI({ 
-  apiKey: process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_ENV_VAR || "default_key" 
+  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -54,8 +56,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Initialize streak
       await storage.createStreak({ userId: user.id, currentStreak: 0, longestStreak: 0, lastEntryDate: null });
       
-      // Initialize default goal template - "Make my bed" is always the first default
-      await storage.createGoalTemplate({ userId: user.id, title: "Make my bed", sortOrder: 0, isActive: true });
+      await storage.createGoalTemplate({ userId: user.id, title: "Make my bed", sortOrder: 0, isActive: true, recurring: true });
       
       (req.session as any).userId = user.id;
       res.json({ id: user.id, username: user.username });
@@ -502,21 +503,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = getUserId(req);
       
-      const entries = await storage.getJournalEntriesByUser(userId);
-      const scores = await storage.getDailyScoresByUser(userId);
       const streak = await storage.getUserStreak(userId);
       
-      if (entries.length === 0 && scores.length === 0) {
-        return res.json({ insight: null });
+      if ((streak?.currentStreak || 0) < 7) {
+        return res.json({ insight: null, needsStreak: true, currentStreak: streak?.currentStreak || 0 });
       }
+      
+      const entries = await storage.getJournalEntriesByUser(userId);
+      const scores = await storage.getDailyScoresByUser(userId);
+      
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-      const recentEntries = entries.slice(0, 14);
-      const recentScores = scores.filter(score => {
-        const scoreDate = new Date(score.date);
-        const twoWeeksAgo = new Date();
-        twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
-        return scoreDate >= twoWeeksAgo;
-      });
+      const recentEntries = entries.filter(e => e.date >= fourteenDaysAgo);
+      const recentScores = scores.filter(s => s.date >= fourteenDaysAgo);
 
       const scoresByDate: Record<string, Record<string, number>> = {};
       recentScores.forEach(score => {
@@ -524,29 +525,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
         scoresByDate[score.date][score.metricName] = score.value;
       });
 
-      const prompt = `
-You are a personal wellness coach analyzing a user's daily tracking data. All scores are on a 0-100 scale.
+      const moodCheckins = await storage.getMoodCheckinsForDateRange(userId, fourteenDaysAgo, todayStr);
+      const moodByDate: Record<string, number[]> = {};
+      moodCheckins.forEach(m => {
+        if (!moodByDate[m.date]) moodByDate[m.date] = [];
+        moodByDate[m.date].push(m.value);
+      });
+
+      const goals = await storage.getGoalsForDateRange(userId, fourteenDaysAgo, todayStr);
+      const goalsByDate: Record<string, { total: number; completed: number }> = {};
+      goals.forEach(g => {
+        if (!goalsByDate[g.date]) goalsByDate[g.date] = { total: 0, completed: 0 };
+        goalsByDate[g.date].total++;
+        if (g.completed) goalsByDate[g.date].completed++;
+      });
+
+      const prompt = `You are an experienced data analyst and wellbeing coach. Analyze the user's daily tracking data below. All scores are on a 0-100 scale.
 
 JOURNAL ENTRIES (last 14 days):
 ${recentEntries.length > 0 ? recentEntries.map(entry => `${entry.date}: ${entry.content}`).join('\n') : 'No journal entries yet.'}
 
 DAILY SCORES BY DATE (0-100 scale):
-${Object.entries(scoresByDate).map(([date, scores]) => 
-  `${date}: ${Object.entries(scores).map(([name, val]) => `${name}=${val}`).join(', ')}`
+${Object.entries(scoresByDate).map(([date, s]) => 
+  `${date}: ${Object.entries(s).map(([name, val]) => `${name}=${val}`).join(', ')}`
 ).join('\n') || 'No scores yet.'}
+
+MOOD CHECK-INS BY DATE (0-100 scale, daily averages):
+${Object.entries(moodByDate).map(([date, vals]) => 
+  `${date}: avg=${Math.round(vals.reduce((a, b) => a + b, 0) / vals.length)} (${vals.length} check-ins)`
+).join('\n') || 'No mood check-ins yet.'}
+
+GOALS COMPLETION BY DATE:
+${Object.entries(goalsByDate).map(([date, g]) => 
+  `${date}: ${g.completed}/${g.total} completed (${Math.round(g.completed / g.total * 100)}%)`
+).join('\n') || 'No goals data yet.'}
 
 STREAK: ${streak?.currentStreak || 0} days (longest: ${streak?.longestStreak || 0})
 
-Analyze this data to provide ONE actionable insight that will help the user improve their habits and outcomes. Focus on:
-1. Correlations between different metrics (e.g., sleep affecting productivity)
-2. Patterns in journal entries that relate to score changes
-3. Specific, practical suggestions they can implement tomorrow
-4. Encouragement based on their streak and progress
+As a data analyst and wellbeing coach, provide ONE deep, actionable insight. Focus on:
+1. Cross-metric correlations (e.g., how sleep quality relates to mood, productivity, or goal completion)
+2. Patterns in journal sentiment that correlate with score fluctuations
+3. Goal completion trends and their relationship to overall wellbeing
+4. One specific, practical recommendation they can implement immediately
+5. Acknowledge their streak commitment warmly
 
-Keep the insight warm, specific, and actionable (2-3 sentences). Suggest 2-3 relevant tags.
+Keep the insight specific to THEIR data (reference actual numbers and dates when relevant). 2-4 sentences. Suggest 2-3 tags.
 
-Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag3"] }
-      `;
+Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag3"] }`;
 
       const response = await openai.chat.completions.create({
         model: "gpt-4o",
@@ -776,6 +801,8 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
       console.error("Failed to update streak:", error);
     }
   }
+
+  registerChatRoutes(app);
 
   return httpServer;
 }

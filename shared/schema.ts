@@ -63,6 +63,7 @@ export const goalTemplates = pgTable("goal_templates", {
   title: text("title").notNull(),
   sortOrder: integer("sort_order").default(0),
   isActive: boolean("is_active").default(true),
+  recurring: boolean("recurring").default(false),
 });
 
 export const dailyGoals = pgTable("daily_goals", {
@@ -265,3 +266,5 @@ export type JournalAttachment = typeof journalAttachments.$inferSelect;
 export type InsertJournalAttachment = z.infer<typeof insertJournalAttachmentSchema>;
 export type MoodCheckin = typeof moodCheckins.$inferSelect;
 export type InsertMoodCheckin = z.infer<typeof insertMoodCheckinSchema>;
+
+export * from "./models/chat";

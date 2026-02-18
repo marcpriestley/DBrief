@@ -676,10 +676,11 @@ export class DatabaseStorage implements IStorage {
     if (date < todayStr) return existing;
 
     const templates = await this.getGoalTemplates(userId);
-    if (templates.length === 0) return existing;
+    const recurringTemplates = templates.filter(t => t.recurring);
+    if (recurringTemplates.length === 0) return existing;
 
     const existingTemplateIds = new Set(existing.map(g => g.goalTemplateId));
-    const missingTemplates = templates.filter(t => !existingTemplateIds.has(t.id));
+    const missingTemplates = recurringTemplates.filter(t => !existingTemplateIds.has(t.id));
     if (missingTemplates.length === 0) return existing;
 
     const newGoals: DailyGoal[] = [];
