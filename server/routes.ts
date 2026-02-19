@@ -40,20 +40,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const hashedPassword = await bcrypt.hash(password, 10);
       const user = await storage.createUser({ username, password: hashedPassword });
       
-      // Initialize default metrics for new user
-      const defaultMetrics = [
-        { userId: user.id, name: "Happiness", color: "#10B981", maxValue: 100, isDefault: true, isActive: true },
-        { userId: user.id, name: "Productivity", color: "#4F46E5", maxValue: 100, isDefault: true, isActive: true },
-        { userId: user.id, name: "Energy", color: "#F59E0B", maxValue: 100, isDefault: true, isActive: true },
-        { userId: user.id, name: "Nutrition", color: "#EC4899", maxValue: 100, isDefault: true, isActive: true },
-        { userId: user.id, name: "Sleep Quality", color: "#8B5CF6", maxValue: 100, isDefault: false, isActive: true },
-        { userId: user.id, name: "Readiness", color: "#EF4444", maxValue: 100, isDefault: false, isActive: true },
-        { userId: user.id, name: "Activity", color: "#06B6D4", maxValue: 100, isDefault: false, isActive: true },
-      ];
-      for (const metric of defaultMetrics) {
-        await storage.createUserMetric(metric);
-      }
-      
       // Initialize streak
       await storage.createStreak({ userId: user.id, currentStreak: 0, longestStreak: 0, lastEntryDate: null });
       
@@ -629,6 +615,10 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
   });
 
   // Oura Integration
+  app.get("/api/oura/status", async (req, res) => {
+    res.json({ configured: !!process.env.OURA_ACCESS_TOKEN });
+  });
+
   app.post("/api/oura/sync/:date", async (req, res) => {
     try {
       const userId = getUserId(req);
@@ -636,6 +626,21 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
       
       const ouraData = await getOuraDataForDate(date);
       
+      const existingMetrics = await storage.getUserMetrics(userId);
+      const metricNames = new Set(existingMetrics.filter(m => m.isActive).map(m => m.name));
+
+      const ouraMetricsToCreate = [
+        { name: "Sleep Quality", color: "#8B5CF6", hasData: ouraData.sleepScore !== undefined },
+        { name: "Readiness", color: "#EF4444", hasData: ouraData.readinessScore !== undefined },
+        { name: "Activity", color: "#06B6D4", hasData: ouraData.activityScore !== undefined },
+      ];
+
+      for (const m of ouraMetricsToCreate) {
+        if (m.hasData && !metricNames.has(m.name)) {
+          await storage.createUserMetric({ userId, name: m.name, color: m.color, maxValue: 100, isDefault: false, isActive: true });
+        }
+      }
+
       const updatedScores = [];
       
       if (ouraData.sleepScore !== undefined) {

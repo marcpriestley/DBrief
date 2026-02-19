@@ -46,7 +46,8 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
 
   const { data: scores = [] } = useQuery<DailyScore[]>({
     queryKey: ["/api/daily-scores", selectedDate],
-    queryFn: () => fetch(`/api/daily-scores/${selectedDate}`).then(res => res.json()),
+    queryFn: () => fetch(`/api/daily-scores/${selectedDate}`, { credentials: "include" }).then(res => res.json()),
+    staleTime: 0,
   });
 
   const { data: metricHistory = [] } = useQuery<DailyScore[]>({
@@ -58,12 +59,17 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
     enabled: !!selectedMetric,
   });
 
+  const { data: ouraStatus } = useQuery<{ configured: boolean }>({
+    queryKey: ["/api/oura/status"],
+  });
+
   const syncOuraMutation = useMutation({
     mutationFn: async (date: string) => {
       return apiRequest("POST", `/api/oura/sync/${date}`, {});
     },
     onSuccess: (data, date) => {
       queryClient.invalidateQueries({ queryKey: ["/api/daily-scores", date] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user-metrics"] });
       toast({
         title: "Oura data synced",
         description: "Your Oura ring data has been updated successfully.",
@@ -79,16 +85,13 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
   });
 
   useEffect(() => {
-    if (!isToday) return;
-    const hasOuraMetrics = metrics.some(m => 
-      m.name === "Sleep Quality" || m.name === "Readiness" || m.name === "Activity"
-    );
+    if (!isToday || !ouraStatus?.configured) return;
     const hasAutoSyncedScores = scores.some(s => s.isAutoSynced);
     
-    if (hasOuraMetrics && !hasAutoSyncedScores && !syncOuraMutation.isPending) {
+    if (!hasAutoSyncedScores && !syncOuraMutation.isPending) {
       syncOuraMutation.mutate(today);
     }
-  }, [metrics, scores, syncOuraMutation.isPending, today, isToday]);
+  }, [ouraStatus, scores, syncOuraMutation.isPending, today, isToday]);
 
   const updateScoreMutation = useMutation({
     mutationFn: async (data: { date: string; metricName: string; value: number }) => {
@@ -264,7 +267,7 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
             <Settings className="w-4 h-4 mr-1" />
             Manage
           </Button>
-          {isToday && (
+          {isToday && ouraStatus?.configured && (
             <Button 
               variant="outline" 
               size="sm"
@@ -278,6 +281,16 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
         </div>
       </div>
       
+      {metrics.filter(m => m.isActive).length === 0 && (
+        <div className="text-center py-8 bg-white rounded-xl shadow-sm border border-gray-100">
+          <p className="text-gray-500 mb-3">No metrics set up yet</p>
+          <Button variant="outline" size="sm" onClick={handleOpenManage}>
+            <Plus className="w-4 h-4 mr-1" />
+            Add Your First Metric
+          </Button>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
         {metrics.filter(m => m.isActive).map((metric) => {
           const score = getScoreForMetric(metric.name);

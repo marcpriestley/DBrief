@@ -5,13 +5,12 @@ import CalendarView from "@/components/CalendarView";
 import JournalPanel from "@/components/JournalPanel";
 import AIInsights from "@/components/AIInsights";
 import VoiceRecordingModal from "@/components/VoiceRecordingModal";
-import CustomizeScoresModal from "@/components/CustomizeScoresModal";
 import SettingsModal from "@/components/SettingsModal";
 import StreakDisplay from "@/components/StreakDisplay";
 import GoalsSection from "@/components/GoalsSection";
 import MoodCheckinModal from "@/components/MoodCheckinModal";
 import { Button } from "@/components/ui/button";
-import { Settings, Plus, User, TrendingUp, LogOut, Smile, CalendarCheck } from "lucide-react";
+import { Settings, Plus, TrendingUp, LogOut, Smile, CalendarCheck } from "lucide-react";
 import { Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -27,7 +26,6 @@ export default function Dashboard() {
   const todayStr = getTodayStr();
   const isViewingToday = selectedDate === todayStr;
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
-  const [isCustomizeModalOpen, setIsCustomizeModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isMoodCheckinOpen, setIsMoodCheckinOpen] = useState(false);
   const { toast } = useToast();
@@ -122,23 +120,6 @@ export default function Dashboard() {
         )}
 
         <section className="mb-8">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-semibold text-gray-900">
-              {isViewingToday
-                ? "Today's Scores"
-                : new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
-              }
-            </h2>
-            <Button 
-              variant="ghost" 
-              className="text-primary hover:text-primary/80"
-              onClick={() => setIsCustomizeModalOpen(true)}
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              Customize
-            </Button>
-          </div>
-          
           <ScoreDashboard selectedDate={selectedDate} />
         </section>
 
@@ -177,11 +158,6 @@ export default function Dashboard() {
         isOpen={isVoiceModalOpen}
         onClose={() => setIsVoiceModalOpen(false)}
         selectedDate={selectedDate}
-      />
-
-      <CustomizeScoresModal
-        isOpen={isCustomizeModalOpen}
-        onClose={() => setIsCustomizeModalOpen(false)}
       />
 
       <SettingsModal

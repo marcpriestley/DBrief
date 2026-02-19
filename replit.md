@@ -61,7 +61,13 @@ DBrief is a daily journaling application designed to help users track their well
 - **express-session**: For session-based authentication.
 - **react-icons**: For social sign-in button icons (Google, Apple).
 
-## Recent Updates (Feb 18, 2026)
+## Recent Updates (Feb 19, 2026)
+- ✅ **Score Carryover Fix**: Daily scores no longer show stale cached values from previous days; staleTime:0 forces fresh data on each load
+- ✅ **Consolidated Metric Management**: Removed duplicate "Customize" button; single "Manage" button handles all metric operations (add, edit, delete)
+- ✅ **No Default Metrics**: New users start with zero metrics and add their own; no pre-populated defaults (Happiness, Productivity, etc.)
+- ✅ **Oura Auto-Create Metrics**: Oura sync automatically creates Sleep Quality, Readiness, and Activity metrics if user doesn't have them; /api/oura/status endpoint checks if Oura token is configured; Sync Oura button only shows when configured
+
+## Previous Updates (Feb 18, 2026)
 - ✅ **AI Insights Rebuilt**: Uses Replit AI integration (AI_INTEGRATIONS_OPENAI_API_KEY/BASE_URL), analyzes scores + mood + journal + goals as data analyst & wellbeing coach
 - ✅ **AI Insights Streak Gate**: Requires 7-day minimum streak to unlock; locked state shows progress bar with flame icon
 - ✅ **Recurring Goals**: goal_templates has `recurring` boolean; only recurring templates auto-create daily goals; "Make my bed" is recurring by default
