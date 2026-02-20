@@ -59,12 +59,27 @@ Node.js is a tool that runs the build scripts for your app.
 CocoaPods is a tool that manages code libraries for iOS apps. You need it for Capacitor to work.
 
 1. Open **Terminal** (if it's not already open)
-2. Type this command and press Enter:
+2. Try this command first:
    ```
    sudo gem install cocoapods
    ```
-3. It will ask for your Mac's password — type it in (you won't see the characters as you type, that's normal) and press Enter
+   It will ask for your Mac's password — type it in (you won't see the characters as you type, that's normal) and press Enter.
+
+3. **If that gives an error**, use Homebrew instead. First install Homebrew (if you don't have it):
+   ```
+   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+   ```
+   Then install CocoaPods with Homebrew:
+   ```
+   brew install cocoapods
+   ```
+
 4. Wait for it to finish installing
+5. To verify it worked, type:
+   ```
+   pod --version
+   ```
+   You should see a version number. If you do, it's working!
 
 ---
 
