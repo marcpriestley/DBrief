@@ -164,16 +164,22 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       const registration = await navigator.serviceWorker.register('/sw.js');
       await navigator.serviceWorker.ready;
 
+      // Fetch VAPID public key from server
+      const vapidRes = await fetch('/api/push/vapid-public-key', { credentials: "include" });
+      if (!vapidRes.ok) throw new Error('Push notifications not available');
+      const { publicKey } = await vapidRes.json();
+
       // Subscribe to push notifications
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(import.meta.env.VITE_VAPID_PUBLIC_KEY || '')
+        applicationServerKey: urlBase64ToUint8Array(publicKey)
       });
 
       // Send subscription to backend
       await fetch('/api/push/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(subscription)
       });
 

@@ -8,7 +8,7 @@ import {
 } from "@shared/schema";
 import OpenAI from "openai";
 import { getOuraDataForDate } from "./oura";
-import { sendPushNotification } from "./notifications";
+import { sendPushNotification, getVapidPublicKey } from "./notifications";
 import bcrypt from "bcrypt";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { registerChatRoutes } from "./replit_integrations/chat/routes";
@@ -673,6 +673,15 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
     } catch (error) {
       res.status(500).json({ message: "Failed to deactivate insight" });
     }
+  });
+
+  // VAPID Public Key endpoint
+  app.get("/api/push/vapid-public-key", (_req, res) => {
+    const key = getVapidPublicKey();
+    if (!key) {
+      return res.status(503).json({ message: "Push notifications not configured" });
+    }
+    res.json({ publicKey: key });
   });
 
   // Push Notification Subscription Routes

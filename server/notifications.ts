@@ -18,14 +18,31 @@ let isNotificationsEnabled = !!(
   process.env.VAPID_PRIVATE_KEY
 );
 
+let currentVapidPublicKey = '';
+
 // Configure web-push with VAPID keys if available
 if (isNotificationsEnabled) {
   try {
-    webPush.setVapidDetails(
-      `mailto:${process.env.VAPID_EMAIL}`,
-      process.env.VAPID_PUBLIC_KEY!,
-      process.env.VAPID_PRIVATE_KEY!
-    );
+    const vapidEmail = process.env.VAPID_EMAIL!.startsWith('mailto:')
+      ? process.env.VAPID_EMAIL!
+      : `mailto:${process.env.VAPID_EMAIL}`;
+    const vapidPublicKey = process.env.VAPID_PUBLIC_KEY!.replace(/[^A-Za-z0-9_\-]/g, '');
+    const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY!.replace(/[^A-Za-z0-9_\-]/g, '');
+    console.log(`[Notifications] VAPID public key length: ${vapidPublicKey.length}`);
+
+    if (vapidPublicKey.length !== 87) {
+      console.log(`[Notifications] VAPID public key has invalid length (${vapidPublicKey.length}, expected 87). Generating fresh keys...`);
+      const freshKeys = webPush.generateVAPIDKeys();
+      console.log(`[Notifications] Generated fresh VAPID keys. Public key: ${freshKeys.publicKey.substring(0, 10)}...`);
+      console.log(`[Notifications] To persist, update VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY secrets with:`);
+      console.log(`[Notifications] PUBLIC: ${freshKeys.publicKey}`);
+      console.log(`[Notifications] PRIVATE: ${freshKeys.privateKey}`);
+      webPush.setVapidDetails(vapidEmail, freshKeys.publicKey, freshKeys.privateKey);
+      currentVapidPublicKey = freshKeys.publicKey;
+    } else {
+      webPush.setVapidDetails(vapidEmail, vapidPublicKey, vapidPrivateKey);
+      currentVapidPublicKey = vapidPublicKey;
+    }
     console.log('[Notifications] VAPID keys configured successfully');
   } catch (error) {
     console.error('[Notifications] Failed to configure VAPID keys:', error);
@@ -35,6 +52,10 @@ if (isNotificationsEnabled) {
 } else {
   console.log('[Notifications] VAPID keys not configured - push notifications disabled');
   console.log('[Notifications] Set VAPID_EMAIL, VAPID_PUBLIC_KEY, and VAPID_PRIVATE_KEY to enable');
+}
+
+export function getVapidPublicKey(): string {
+  return currentVapidPublicKey;
 }
 
 export interface PushNotificationPayload {
