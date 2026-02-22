@@ -36,7 +36,7 @@ export default function JournalPanel({ selectedDate, onVoiceRecord }: JournalPan
   const { data: currentEntry } = useQuery<JournalEntry | null>({
     queryKey: ["/api/journal-entries", selectedDate],
     queryFn: async () => {
-      const response = await fetch(`/api/journal-entries/${selectedDate}`);
+      const response = await fetch(`/api/journal-entries/${selectedDate}`, { credentials: "include" });
       if (!response.ok) return null;
       return response.json();
     },
@@ -54,7 +54,7 @@ export default function JournalPanel({ selectedDate, onVoiceRecord }: JournalPan
     queryKey: ["/api/journal-attachments", currentEntry?.id],
     queryFn: async () => {
       if (!currentEntry?.id) return [];
-      const response = await fetch(`/api/journal-attachments/${currentEntry.id}`);
+      const response = await fetch(`/api/journal-attachments/${currentEntry.id}`, { credentials: "include" });
       if (!response.ok) return [];
       return response.json();
     },

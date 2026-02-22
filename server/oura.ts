@@ -104,8 +104,15 @@ export async function getOuraDataForDate(date: string): Promise<OuraData> {
     }
 
     if (activityData.data && activityData.data.length > 0) {
-      result.activityScore = activityData.data[0].score;
-      console.log(`[Oura Sync ${date}] Activity score: ${result.activityScore}`);
+      const activity = activityData.data[0];
+      if (activity.score !== null && activity.score !== undefined) {
+        result.activityScore = activity.score;
+        console.log(`[Oura Sync ${date}] Activity score: ${result.activityScore}`);
+      } else {
+        console.log(`[Oura Sync ${date}] Activity data exists but score is null (still being calculated)`);
+      }
+    } else {
+      console.log(`[Oura Sync ${date}] No activity data available yet for this date`);
     }
 
     return result;

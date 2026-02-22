@@ -43,12 +43,12 @@ export default function TrendsEnhanced() {
 
   const { data: goalsRange = [] } = useQuery<DailyGoal[]>({
     queryKey: ["/api/daily-goals-range", goalsStartDate, goalsEndDate],
-    queryFn: () => fetch(`/api/daily-goals-range?startDate=${goalsStartDate}&endDate=${goalsEndDate}`).then(r => r.json()),
+    queryFn: () => fetch(`/api/daily-goals-range?startDate=${goalsStartDate}&endDate=${goalsEndDate}`, { credentials: "include" }).then(r => r.json()),
   });
 
   const { data: moodCheckins = [] } = useQuery<MoodCheckin[]>({
     queryKey: ["/api/mood-checkins-range", goalsStartDate, goalsEndDate],
-    queryFn: () => fetch(`/api/mood-checkins-range?startDate=${goalsStartDate}&endDate=${goalsEndDate}`).then(r => r.json()),
+    queryFn: () => fetch(`/api/mood-checkins-range?startDate=${goalsStartDate}&endDate=${goalsEndDate}`, { credentials: "include" }).then(r => r.json()),
   });
   
   const allScores = allScoresRaw.filter(score => !score.isAutoSynced);

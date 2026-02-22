@@ -39,7 +39,7 @@ export default function GoalsSection({ selectedDate }: GoalsSectionProps) {
 
   const { data: goals = [], isLoading } = useQuery<DailyGoal[]>({
     queryKey: ["/api/daily-goals", selectedDate],
-    queryFn: () => fetch(`/api/daily-goals/${selectedDate}`).then(r => r.json()),
+    queryFn: () => fetch(`/api/daily-goals/${selectedDate}`, { credentials: "include" }).then(r => r.json()),
   });
 
   const { data: templates = [] } = useQuery<GoalTemplate[]>({
@@ -210,7 +210,8 @@ export default function GoalsSection({ selectedDate }: GoalsSectionProps) {
             >
               <button
                 onClick={() => toggleMutation.mutate(goal.id)}
-                className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+                onTouchEnd={(e) => { e.preventDefault(); toggleMutation.mutate(goal.id); }}
+                className={`flex-shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all touch-manipulation ${
                   goal.completed
                     ? "bg-green-500 border-green-500"
                     : "border-gray-300 hover:border-primary"

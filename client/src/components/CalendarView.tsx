@@ -25,7 +25,7 @@ export default function CalendarView({ selectedDate, onDateSelect }: CalendarVie
     queryKey: ["/api/journal-entries", longPressDate],
     queryFn: async () => {
       if (!longPressDate) return null;
-      const response = await fetch(`/api/journal-entries/${longPressDate}`);
+      const response = await fetch(`/api/journal-entries/${longPressDate}`, { credentials: "include" });
       if (!response.ok) return null;
       return response.json();
     },
@@ -34,7 +34,7 @@ export default function CalendarView({ selectedDate, onDateSelect }: CalendarVie
 
   const { data: longPressScores = [] } = useQuery<DailyScore[]>({
     queryKey: ["/api/daily-scores", longPressDate],
-    queryFn: () => fetch(`/api/daily-scores/${longPressDate}`).then(res => res.json()),
+    queryFn: () => fetch(`/api/daily-scores/${longPressDate}`, { credentials: "include" }).then(res => res.json()),
     enabled: !!longPressDate,
   });
 
