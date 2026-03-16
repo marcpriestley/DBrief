@@ -1,9 +1,8 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { MessageCircle, Send, CheckCircle, Loader2, RotateCcw } from "lucide-react";
+import { MessageCircle, Send, CheckCircle, Loader2, RotateCcw, Mic, MicOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
@@ -30,22 +29,85 @@ interface DebriefPanelProps {
   selectedDate: string;
 }
 
+function useInlineVoice() {
+  const [isListening, setIsListening] = useState(false);
+  const [interimText, setInterimText] = useState("");
+  const recognitionRef = useRef<any>(null);
+  const accumulatedRef = useRef("");
+
+  const isSupported =
+    typeof window !== "undefined" &&
+    ("webkitSpeechRecognition" in window || "SpeechRecognition" in window);
+
+  const start = useCallback(
+    (onFinal: (text: string) => void) => {
+      if (!isSupported) return;
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognition = new SR();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = "en-US";
+
+      accumulatedRef.current = "";
+
+      recognition.onstart = () => setIsListening(true);
+
+      recognition.onresult = (e: any) => {
+        let finalChunk = "";
+        let interim = "";
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          const t = e.results[i][0].transcript;
+          if (e.results[i].isFinal) {
+            finalChunk += t;
+          } else {
+            interim += t;
+          }
+        }
+        if (finalChunk) {
+          accumulatedRef.current += (accumulatedRef.current ? " " : "") + finalChunk.trim();
+          onFinal(accumulatedRef.current);
+        }
+        setInterimText(interim);
+      };
+
+      recognition.onerror = () => setIsListening(false);
+      recognition.onend = () => {
+        setIsListening(false);
+        setInterimText("");
+      };
+
+      recognitionRef.current = recognition;
+      try {
+        recognition.start();
+      } catch {}
+    },
+    [isSupported],
+  );
+
+  const stop = useCallback(() => {
+    recognitionRef.current?.stop();
+    setInterimText("");
+  }, []);
+
+  return { isListening, interimText, isSupported, start, stop };
+}
+
 export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const [userInput, setUserInput] = useState("");
   const [streamingContent, setStreamingContent] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const voice = useInlineVoice();
 
   const { data: debrief, isLoading } = useQuery<Debrief | null>({
     queryKey: ["/api/debriefs", selectedDate],
     queryFn: async () => {
       const response = await fetch(`/api/debriefs/${selectedDate}`, { credentials: "include" });
       if (!response.ok) return null;
-      const data = await response.json();
-      return data;
+      return response.json();
     },
     staleTime: 5 * 60 * 1000,
   });
@@ -77,19 +139,20 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     },
   });
 
-  const handleSendMessage = async () => {
-    if (!userInput.trim() || !debrief || isStreaming) return;
+  const sendMessage = async (text: string) => {
+    if (!text.trim() || !debrief || isStreaming) return;
 
-    const messageText = userInput.trim();
     setUserInput("");
     setIsStreaming(true);
     setStreamingContent("");
+
+    if (voice.isListening) voice.stop();
 
     const optimisticMsg: DebriefMessage = {
       id: Date.now(),
       debriefId: debrief.id,
       role: "user",
-      content: messageText,
+      content: text.trim(),
       createdAt: new Date().toISOString(),
     };
 
@@ -103,7 +166,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ content: messageText }),
+        body: JSON.stringify({ content: text.trim() }),
       });
 
       if (!response.ok) throw new Error("Failed to send");
@@ -125,9 +188,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
           if (line.startsWith("data: ")) {
             try {
               const data = JSON.parse(line.slice(6));
-              if (data.done) {
-                break;
-              }
+              if (data.done) break;
               if (data.content) {
                 accumulated += data.content;
                 setStreamingContent(accumulated);
@@ -146,16 +207,35 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     }
   };
 
+  const handleSend = () => sendMessage(userInput);
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter") {
       e.preventDefault();
-      handleSendMessage();
+      handleSend();
+    }
+  };
+
+  const handleMicToggle = () => {
+    if (voice.isListening) {
+      voice.stop();
+    } else {
+      setUserInput("");
+      voice.start((finalText) => {
+        setUserInput(finalText);
+      });
     }
   };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [debrief?.messages, streamingContent]);
+
+  useEffect(() => {
+    if (!voice.isListening && !isStreaming) {
+      inputRef.current?.focus();
+    }
+  }, [voice.isListening, isStreaming, debrief?.messages]);
 
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
@@ -185,7 +265,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
             </h3>
             <p className="text-sm text-muted-foreground mb-5 max-w-xs mx-auto">
               {isToday
-                ? "A quick guided reflection on your day. Takes about 2 minutes."
+                ? "A quick guided reflection on your day. Talk or type — whatever feels natural."
                 : "Reflect on this day with a guided conversation."
               }
             </p>
@@ -258,6 +338,10 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
       </Card>
     );
   }
+
+  const displayInput = voice.isListening && voice.interimText
+    ? userInput + (userInput ? " " : "") + voice.interimText
+    : userInput;
 
   return (
     <Card className="border-0 shadow-md bg-gradient-to-br from-slate-50 to-white">
@@ -335,26 +419,54 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
         </div>
 
         <div className="px-4 pb-4 pt-2">
-          <div className="flex items-end gap-2 bg-muted/50 rounded-xl border border-border/50 p-2">
-            <Textarea
-              ref={textareaRef}
-              value={userInput}
+          {voice.isListening && (
+            <div className="flex items-center gap-2 mb-2 px-2">
+              <div className="flex items-center gap-1">
+                <span className="w-1 h-3 bg-red-500 rounded-full animate-pulse" />
+                <span className="w-1 h-4 bg-red-500 rounded-full animate-pulse" style={{ animationDelay: "150ms" }} />
+                <span className="w-1 h-2.5 bg-red-500 rounded-full animate-pulse" style={{ animationDelay: "300ms" }} />
+                <span className="w-1 h-3.5 bg-red-500 rounded-full animate-pulse" style={{ animationDelay: "100ms" }} />
+              </div>
+              <span className="text-xs text-red-500 font-medium">Listening...</span>
+            </div>
+          )}
+          <div className="flex items-center gap-2 bg-muted/50 rounded-xl border border-border/50 p-2">
+            {voice.isSupported && (
+              <button
+                onClick={handleMicToggle}
+                disabled={isStreaming}
+                className={`h-8 w-8 rounded-lg shrink-0 flex items-center justify-center transition-all ${
+                  voice.isListening
+                    ? "bg-red-500 text-white shadow-sm shadow-red-200"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                } ${isStreaming ? "opacity-40 cursor-not-allowed" : ""}`}
+                aria-label={voice.isListening ? "Stop listening" : "Start voice input"}
+              >
+                {voice.isListening ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
+              </button>
+            )}
+            <input
+              ref={inputRef}
+              type="text"
+              value={displayInput}
               onChange={(e) => setUserInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Type your response..."
-              className="min-h-[40px] max-h-[120px] resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-sm p-1"
-              rows={1}
+              placeholder={voice.isListening ? "Listening — speak freely..." : "Type or tap the mic to talk..."}
+              className="flex-1 min-w-0 bg-transparent border-0 outline-none text-sm placeholder:text-muted-foreground/60 text-foreground p-1"
               disabled={isStreaming}
             />
             <Button
               size="icon"
-              onClick={handleSendMessage}
+              onClick={handleSend}
               disabled={!userInput.trim() || isStreaming}
               className="h-8 w-8 rounded-lg shrink-0"
             >
               <Send className="h-3.5 w-3.5" />
             </Button>
           </div>
+          <p className="text-[10px] text-muted-foreground/50 text-center mt-1.5">
+            Press Enter to send
+          </p>
         </div>
       </CardContent>
     </Card>
