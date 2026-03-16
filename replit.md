@@ -19,8 +19,9 @@ DBrief is a daily journaling application with AI-driven conversational debriefs 
 - Duolingo-style streak tracking with milestones (3, 7, 14, 30, 50, 100, 365 days), animations, and motivational messages
 - Analytics/trends show only user-input data (auto-synced scores excluded)
 - Trends page supports 7 day, 30 day, 6 month, and lifetime timelines
-- **Daily reminders at 9pm (UTC) by default** - customizable time in settings
+- **Two daily reminders** (morning at 9 AM, evening at 9 PM by default) - both customizable in settings
 - **Notifications enabled by default** - can be turned off in settings modal
+- **Data encryption at rest** - journal entries, debrief messages, and summaries encrypted with AES-256-GCM
 
 ## System Architecture
 **Frontend**: React with TypeScript, Wouter for routing, and TanStack Query for data fetching.
@@ -62,11 +63,13 @@ DBrief is a daily journaling application with AI-driven conversational debriefs 
 - **react-icons**: For social sign-in button icons (Google, Apple).
 
 ## Recent Updates (Mar 16, 2026 - Latest)
+- **Data Encryption at Rest**: AES-256-GCM encryption for all sensitive user data (journal entries, debrief messages, debrief summaries). Encryption key stored as ENCRYPTION_KEY env secret. Graceful fallback for pre-existing unencrypted data.
+- **Two Daily Reminders**: Users can set two customizable notification times (morning + evening, defaults 9 AM and 9 PM). Contextual notification messages based on time of day. Schema field `reminderTime2` added.
 - **Apple Health Integration**: Replaced Oura Ring API with Apple Health (HealthKit via Capacitor). Server accepts health data via `POST /api/health/sync` from native client. Sleep Quality, Readiness, and Activity auto-sync on iOS.
 - **Visual Polish**: Complete redesign of all components for professional, cohesive look. SVG ring charts replace conic-gradient circles. Refined card layouts, tighter spacing, consistent typography across ScoreDashboard, Trends, Welcome, Settings, Mood Check-in, and Streak Display.
 - **Trends Page Redesign**: Matches main app design system — sticky blurred header, max-w-2xl layout, area chart gradient fills, compact metric filter pills, refined AI insights section.
 - **Welcome Page Refresh**: Cleaner auth page with subtle design, proper card styling, matching color system.
-- **Settings Enhancement**: Added Apple Health info section, compact notification controls, refined layout.
+- **Settings Enhancement**: Added Apple Health info section, two-time notification controls, refined layout.
 
 ## Previous Updates (Mar 16, 2026)
 - ✅ **Rosebud-Inspired Redesign**: Journal feature replaced with AI-driven conversational debrief system

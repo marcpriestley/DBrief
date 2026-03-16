@@ -72,6 +72,7 @@ interface SettingsModalProps {
 interface UserSettings {
   notificationsEnabled: boolean;
   reminderTime: string;
+  reminderTime2: string;
   timezone: string;
 }
 
@@ -85,12 +86,14 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   });
 
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [reminderTime, setReminderTime] = useState("21:00");
+  const [reminderTime, setReminderTime] = useState("09:00");
+  const [reminderTime2, setReminderTime2] = useState("21:00");
 
   useEffect(() => {
     if (settings) {
       setNotificationsEnabled(settings.notificationsEnabled);
       setReminderTime(settings.reminderTime);
+      setReminderTime2(settings.reminderTime2);
     }
   }, [settings]);
 
@@ -109,7 +112,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
   const handleSave = () => {
     const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    updateSettingsMutation.mutate({ notificationsEnabled, reminderTime, timezone: userTimezone });
+    updateSettingsMutation.mutate({ notificationsEnabled, reminderTime, reminderTime2, timezone: userTimezone });
   };
 
   const handleToggleNotifications = async (enabled: boolean) => {
@@ -201,15 +204,27 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             </div>
 
             {notificationsEnabled && (
-              <div className="space-y-2">
-                <Label htmlFor="reminderTime" className="text-xs">Reminder Time</Label>
-                <Input
-                  id="reminderTime"
-                  type="time"
-                  value={reminderTime}
-                  onChange={(e) => setReminderTime(e.target.value)}
-                  className="h-9"
-                />
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="reminderTime" className="text-xs">Morning Reminder</Label>
+                  <Input
+                    id="reminderTime"
+                    type="time"
+                    value={reminderTime}
+                    onChange={(e) => setReminderTime(e.target.value)}
+                    className="h-9"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="reminderTime2" className="text-xs">Evening Reminder</Label>
+                  <Input
+                    id="reminderTime2"
+                    type="time"
+                    value={reminderTime2}
+                    onChange={(e) => setReminderTime2(e.target.value)}
+                    className="h-9"
+                  />
+                </div>
               </div>
             )}
 

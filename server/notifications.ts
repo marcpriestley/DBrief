@@ -2,7 +2,7 @@ import webPush from 'web-push';
 import cron from 'node-cron';
 import { storage } from './storage';
 
-const lastReminderSentDate = new Map<number, string>();
+const lastReminderSentDate = new Map<string, string>();
 const lastMoodReminderSent = new Map<string, boolean>();
 
 const MOOD_CHECKIN_TIMES = [
@@ -106,18 +106,13 @@ export async function sendPushNotification(
 export async function sendDailyReminders() {
   const now = new Date();
   
-  // Get all users with notifications enabled who have subscriptions
-  const allUsers = await storage.getAllUsersForReminder(""); // Get all users regardless of time
-  
-  console.log(`[Daily Reminders] Checking ${allUsers.length} users with active subscriptions`);
+  const allUsers = await storage.getAllUsersForReminder("");
   
   for (const user of allUsers) {
-    // Skip if user has no reminder time set
-    if (!user.reminderTime || !user.timezone) continue;
+    if (!user.timezone) continue;
     
     try {
-      // Get current date and time in user's timezone
-      const userDateStr = now.toLocaleDateString('en-CA', { timeZone: user.timezone }); // YYYY-MM-DD format
+      const userDateStr = now.toLocaleDateString('en-CA', { timeZone: user.timezone });
       const userTimeStr = now.toLocaleString('en-US', {
         timeZone: user.timezone,
         hour: '2-digit',
@@ -125,55 +120,49 @@ export async function sendDailyReminders() {
         hour12: false
       });
       
-      // Check if we already sent a reminder today (prevents DST duplicate sends)
-      const lastSent = lastReminderSentDate.get(user.id);
-      if (lastSent === userDateStr) {
-        continue; // Already sent today
-      }
-      
-      // Parse current time in user's timezone (format: "HH:MM" or "HH:MM:SS")
       const [currentHourStr, currentMinuteStr] = userTimeStr.split(':');
       const currentHour = parseInt(currentHourStr, 10);
       const currentMinute = parseInt(currentMinuteStr, 10);
       
-      // Parse user's reminder time
-      const [reminderHour, reminderMinute] = user.reminderTime.split(':').map(Number);
-      
-      // Check if current time in user's timezone matches their reminder time
-      if (reminderHour === currentHour && reminderMinute === currentMinute) {
-        console.log(`[Daily Reminders] Sending reminder to user ${user.id} at ${user.reminderTime} ${user.timezone}`);
-      
-      const payload: PushNotificationPayload = {
-        title: '🔥 Daily Reminder',
-        body: 'Time to log your scores and continue your streak!',
-        icon: '/icon-192.png',
-        url: '/',
-        tag: `daily-reminder-${user.id}`
-      };
+      const reminderTimes = [
+        { time: user.reminderTime || "09:00", slot: "1" },
+        { time: user.reminderTime2 || "21:00", slot: "2" },
+      ];
 
-      for (const subscription of user.subscriptions) {
-        const success = await sendPushNotification(
-          {
-            endpoint: subscription.endpoint,
-            keys: {
-              p256dh: subscription.p256dh,
-              auth: subscription.auth
-            }
-          },
-          payload
-        );
+      for (const reminder of reminderTimes) {
+        const key = `${user.id}-${reminder.slot}`;
+        const lastSent = lastReminderSentDate.get(key);
+        if (lastSent === userDateStr) continue;
 
-        if (success) {
-          console.log(`✓ Sent reminder to user ${user.id}`);
+        const [reminderHour, reminderMinute] = reminder.time.split(':').map(Number);
+        
+        if (reminderHour === currentHour && reminderMinute === currentMinute) {
+          const isMorning = reminderHour < 14;
+          const payload: PushNotificationPayload = {
+            title: isMorning ? '☀️ Morning Check-in' : '🔥 Evening Reminder',
+            body: isMorning
+              ? 'Start your day right — set your goals and log how you feel.'
+              : 'Time to log your scores and continue your streak!',
+            icon: '/icon-192.png',
+            url: '/',
+            tag: `daily-reminder-${user.id}-${reminder.slot}`
+          };
+
+          for (const subscription of user.subscriptions) {
+            await sendPushNotification(
+              {
+                endpoint: subscription.endpoint,
+                keys: { p256dh: subscription.p256dh, auth: subscription.auth }
+              },
+              payload
+            );
+          }
+          
+          lastReminderSentDate.set(key, userDateStr);
         }
       }
-      
-      // Mark as sent for today to prevent DST duplicates
-      lastReminderSentDate.set(user.id, userDateStr);
-    }
     } catch (error) {
       console.error(`[Daily Reminders] Error processing user ${user.id}:`, error);
-      // Continue to next user even if this one fails
     }
   }
 }

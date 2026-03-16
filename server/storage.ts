@@ -10,13 +10,14 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc } from "drizzle-orm";
+import { encrypt, decrypt } from "./encryption";
 
 export interface IStorage {
   // User methods
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
-  updateUserSettings(userId: number, settings: Partial<Pick<User, 'notificationsEnabled' | 'reminderTime' | 'timezone'>>): Promise<User | undefined>;
+  updateUserSettings(userId: number, settings: Partial<Pick<User, 'notificationsEnabled' | 'reminderTime' | 'reminderTime2' | 'timezone'>>): Promise<User | undefined>;
 
   // Journal entry methods
   getJournalEntry(id: number): Promise<JournalEntry | undefined>;
@@ -369,7 +370,7 @@ export class MemStorage implements IStorage {
     }
   }
 
-  async updateUserSettings(userId: number, settings: Partial<Pick<User, 'notificationsEnabled' | 'reminderTime' | 'timezone'>>): Promise<User | undefined> {
+  async updateUserSettings(userId: number, settings: Partial<Pick<User, 'notificationsEnabled' | 'reminderTime' | 'reminderTime2' | 'timezone'>>): Promise<User | undefined> {
     const user = this.users.get(userId);
     if (user) {
       Object.assign(user, settings);
@@ -464,31 +465,40 @@ export class DatabaseStorage implements IStorage {
 
   async getJournalEntry(id: number): Promise<JournalEntry | undefined> {
     const [entry] = await db.select().from(journalEntries).where(eq(journalEntries.id, id));
+    if (entry) entry.content = decrypt(entry.content);
     return entry || undefined;
   }
 
   async getJournalEntriesByUser(userId: number): Promise<JournalEntry[]> {
-    return await db.select().from(journalEntries)
+    const entries = await db.select().from(journalEntries)
       .where(eq(journalEntries.userId, userId))
       .orderBy(desc(journalEntries.date));
+    return entries.map(e => ({ ...e, content: decrypt(e.content) }));
   }
 
   async getJournalEntryByDate(userId: number, date: string): Promise<JournalEntry | undefined> {
     const [entry] = await db.select().from(journalEntries)
       .where(and(eq(journalEntries.userId, userId), eq(journalEntries.date, date)));
+    if (entry) entry.content = decrypt(entry.content);
     return entry || undefined;
   }
 
   async createJournalEntry(entry: InsertJournalEntry): Promise<JournalEntry> {
-    const [created] = await db.insert(journalEntries).values(entry).returning();
+    const encrypted = { ...entry, content: encrypt(entry.content) };
+    const [created] = await db.insert(journalEntries).values(encrypted).returning();
+    created.content = decrypt(created.content);
     return created;
   }
 
   async updateJournalEntry(id: number, updates: Partial<InsertJournalEntry>): Promise<JournalEntry | undefined> {
+    const encryptedUpdates = updates.content
+      ? { ...updates, content: encrypt(updates.content) }
+      : updates;
     const [updated] = await db.update(journalEntries)
-      .set(updates)
+      .set(encryptedUpdates)
       .where(eq(journalEntries.id, id))
       .returning();
+    if (updated) updated.content = decrypt(updated.content);
     return updated || undefined;
   }
 
@@ -601,7 +611,7 @@ export class DatabaseStorage implements IStorage {
       .where(eq(aiInsights.id, id));
   }
 
-  async updateUserSettings(userId: number, settings: Partial<Pick<User, 'notificationsEnabled' | 'reminderTime' | 'timezone'>>): Promise<User | undefined> {
+  async updateUserSettings(userId: number, settings: Partial<Pick<User, 'notificationsEnabled' | 'reminderTime' | 'reminderTime2' | 'timezone'>>): Promise<User | undefined> {
     const [updated] = await db.update(users)
       .set(settings)
       .where(eq(users.id, userId))

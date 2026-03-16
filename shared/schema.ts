@@ -8,7 +8,8 @@ export const users = pgTable("users", {
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
   notificationsEnabled: boolean("notifications_enabled").default(true),
-  reminderTime: text("reminder_time").default("21:00"),
+  reminderTime: text("reminder_time").default("09:00"),
+  reminderTime2: text("reminder_time_2").default("21:00"),
   timezone: text("timezone").default("UTC"),
 });
 

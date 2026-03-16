@@ -740,6 +740,7 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
       res.json({
         notificationsEnabled: user.notificationsEnabled,
         reminderTime: user.reminderTime,
+        reminderTime2: user.reminderTime2,
         timezone: user.timezone
       });
     } catch (error) {
@@ -750,11 +751,12 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
   app.patch("/api/user/settings", async (req, res) => {
     try {
       const userId = getUserId(req);
-      const { notificationsEnabled, reminderTime, timezone } = req.body;
+      const { notificationsEnabled, reminderTime, reminderTime2, timezone } = req.body;
 
       const updatedUser = await storage.updateUserSettings(userId, {
         ...(notificationsEnabled !== undefined && { notificationsEnabled }),
         ...(reminderTime !== undefined && { reminderTime }),
+        ...(reminderTime2 !== undefined && { reminderTime2 }),
         ...(timezone !== undefined && { timezone })
       });
 
@@ -765,6 +767,7 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
       res.json({
         notificationsEnabled: updatedUser.notificationsEnabled,
         reminderTime: updatedUser.reminderTime,
+        reminderTime2: updatedUser.reminderTime2,
         timezone: updatedUser.timezone
       });
     } catch (error) {

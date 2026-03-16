@@ -3,6 +3,7 @@ import OpenAI from "openai";
 import { db } from "./db";
 import { debriefs, debriefMessages, dailyScores, journalEntries, moodCheckins, dailyGoals, userMetrics } from "@shared/schema";
 import { eq, and, desc } from "drizzle-orm";
+import { encrypt, decrypt } from "./encryption";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -38,7 +39,7 @@ async function gatherDayContext(userId: number, date: string) {
   const moodAvg = moods.length > 0
     ? `Mood: ${Math.round(moods.reduce((a, m) => a + m.value, 0) / moods.length)}/100 (${moods.length} check-in${moods.length > 1 ? "s" : ""})`
     : "No mood check-ins yet";
-  const journalContent = entries.length > 0 ? entries[0].content : "";
+  const journalContent = entries.length > 0 ? decrypt(entries[0].content) : "";
 
   return { scoreMap, goalSummary, moodAvg, journalContent, hasScores: scores.length > 0, hasGoals: goals.length > 0, hasMoods: moods.length > 0 };
 }
@@ -88,7 +89,9 @@ export function registerDebriefRoutes(app: Express): void {
         .where(eq(debriefMessages.debriefId, debrief.id))
         .orderBy(debriefMessages.createdAt);
 
-      res.json({ ...debrief, messages: msgs });
+      const decryptedMsgs = msgs.map(m => ({ ...m, content: decrypt(m.content) }));
+      const decryptedDebrief = { ...debrief, summary: debrief.summary ? decrypt(debrief.summary) : debrief.summary };
+      res.json({ ...decryptedDebrief, messages: decryptedMsgs });
     } catch (error) {
       console.error("Error fetching debrief:", error);
       res.status(500).json({ error: "Failed to fetch debrief" });
@@ -140,10 +143,10 @@ export function registerDebriefRoutes(app: Express): void {
       const [msg] = await db.insert(debriefMessages).values({
         debriefId: debrief.id,
         role: "assistant",
-        content: openingMessage,
+        content: encrypt(openingMessage),
       }).returning();
 
-      res.json({ ...debrief, messages: [msg] });
+      res.json({ ...debrief, messages: [{ ...msg, content: openingMessage }] });
     } catch (error) {
       console.error("Error starting debrief:", error);
       res.status(500).json({ error: "Failed to start debrief" });
@@ -168,7 +171,7 @@ export function registerDebriefRoutes(app: Express): void {
       await db.insert(debriefMessages).values({
         debriefId,
         role: "user",
-        content,
+        content: encrypt(content),
       });
 
       const allMessages = await db.select().from(debriefMessages)
@@ -185,7 +188,7 @@ export function registerDebriefRoutes(app: Express): void {
       for (const msg of allMessages) {
         chatMessages.push({
           role: msg.role as "user" | "assistant",
-          content: msg.content,
+          content: decrypt(msg.content),
         });
       }
 
@@ -213,7 +216,7 @@ export function registerDebriefRoutes(app: Express): void {
       await db.insert(debriefMessages).values({
         debriefId,
         role: "assistant",
-        content: fullResponse,
+        content: encrypt(fullResponse),
       });
 
       res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
@@ -248,7 +251,7 @@ export function registerDebriefRoutes(app: Express): void {
         .orderBy(debriefMessages.createdAt);
 
       const conversationText = allMessages.map(m =>
-        `${m.role === "assistant" ? "DBrief" : "User"}: ${m.content}`
+        `${m.role === "assistant" ? "DBrief" : "User"}: ${decrypt(m.content)}`
       ).join("\n");
 
       let summary = "";
@@ -271,13 +274,13 @@ export function registerDebriefRoutes(app: Express): void {
       }
 
       const [updated] = await db.update(debriefs)
-        .set({ isComplete: true, summary })
+        .set({ isComplete: true, summary: encrypt(summary) })
         .where(eq(debriefs.id, debriefId))
         .returning();
 
       const journalContent = allMessages
         .filter(m => m.role === "user")
-        .map(m => m.content)
+        .map(m => decrypt(m.content))
         .join("\n\n");
 
       if (journalContent.trim()) {
@@ -285,14 +288,15 @@ export function registerDebriefRoutes(app: Express): void {
           .where(and(eq(journalEntries.userId, userId), eq(journalEntries.date, debrief.date)));
 
         if (existingEntry) {
+          const existingContent = decrypt(existingEntry.content);
           await db.update(journalEntries)
-            .set({ content: existingEntry.content + "\n\n[Debrief]\n" + journalContent })
+            .set({ content: encrypt(existingContent + "\n\n[Debrief]\n" + journalContent) })
             .where(eq(journalEntries.id, existingEntry.id));
         } else {
           await db.insert(journalEntries).values({
             userId,
             date: debrief.date,
-            content: "[Debrief]\n" + journalContent,
+            content: encrypt("[Debrief]\n" + journalContent),
             isVoiceEntry: false,
           });
         }
