@@ -100,6 +100,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const [isStreaming, setIsStreaming] = useState(false);
   const [continuedPastCheckpoint, setContinuedPastCheckpoint] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -231,7 +232,12 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     }
   };
 
-  const handleSend = () => sendMessage(userInput);
+  const handleSend = () => {
+    if (showCheckpoint && userInput.trim()) {
+      setContinuedPastCheckpoint(true);
+    }
+    sendMessage(userInput);
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
@@ -262,14 +268,16 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   };
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
   }, [debrief?.messages, streamingContent, showCheckpoint]);
 
   useEffect(() => {
-    if (!voice.isListening && !isStreaming && !showCheckpoint) {
+    if (!voice.isListening && !isStreaming) {
       inputRef.current?.focus();
     }
-  }, [voice.isListening, isStreaming, debrief?.messages, showCheckpoint]);
+  }, [voice.isListening, isStreaming, debrief?.messages]);
 
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
@@ -420,7 +428,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
           )}
         </div>
 
-        <div className="px-5 py-4 space-y-3 max-h-[350px] overflow-y-auto">
+        <div ref={chatContainerRef} className="px-5 py-4 space-y-3 max-h-[350px] overflow-y-auto">
           <AnimatePresence initial={false}>
             {debrief.messages.map((msg) => (
               <motion.div
@@ -511,58 +519,53 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
           <div ref={messagesEndRef} />
         </div>
 
-        {!showCheckpoint && (
-          <div className="px-4 pb-4 pt-2">
-            {voice.isListening && (
-              <div className="flex items-center gap-2 mb-2 px-2">
-                <div className="flex items-center gap-1">
-                  <span className="w-1 h-3 bg-red-500 rounded-full animate-pulse" />
-                  <span className="w-1 h-4 bg-red-500 rounded-full animate-pulse" style={{ animationDelay: "150ms" }} />
-                  <span className="w-1 h-2.5 bg-red-500 rounded-full animate-pulse" style={{ animationDelay: "300ms" }} />
-                  <span className="w-1 h-3.5 bg-red-500 rounded-full animate-pulse" style={{ animationDelay: "100ms" }} />
-                </div>
-                <span className="text-xs text-red-500 font-medium">Listening...</span>
+        <div className="px-4 pb-4 pt-2">
+          {voice.isListening && (
+            <div className="flex items-center gap-2 mb-2 px-2">
+              <div className="flex items-center gap-1">
+                <span className="w-1 h-3 bg-red-500 rounded-full animate-pulse" />
+                <span className="w-1 h-4 bg-red-500 rounded-full animate-pulse" style={{ animationDelay: "150ms" }} />
+                <span className="w-1 h-2.5 bg-red-500 rounded-full animate-pulse" style={{ animationDelay: "300ms" }} />
+                <span className="w-1 h-3.5 bg-red-500 rounded-full animate-pulse" style={{ animationDelay: "100ms" }} />
               </div>
-            )}
-            <div className="flex items-center gap-2 bg-muted/50 rounded-xl border border-border/50 p-2">
-              {voice.isSupported && (
-                <button
-                  onClick={handleMicToggle}
-                  disabled={isStreaming}
-                  className={`h-8 w-8 rounded-lg shrink-0 flex items-center justify-center transition-all ${
-                    voice.isListening
-                      ? "bg-red-500 text-white shadow-sm shadow-red-200"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                  } ${isStreaming ? "opacity-40 cursor-not-allowed" : ""}`}
-                  aria-label={voice.isListening ? "Stop listening" : "Start voice input"}
-                >
-                  {voice.isListening ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
-                </button>
-              )}
-              <input
-                ref={inputRef}
-                type="text"
-                value={displayInput}
-                onChange={(e) => setUserInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={voice.isListening ? "Listening — speak freely..." : "Type or tap the mic to talk..."}
-                className="flex-1 min-w-0 bg-transparent border-0 outline-none text-sm placeholder:text-muted-foreground/60 text-foreground p-1"
-                disabled={isStreaming}
-              />
-              <Button
-                size="icon"
-                onClick={handleSend}
-                disabled={!userInput.trim() || isStreaming}
-                className="h-8 w-8 rounded-lg shrink-0"
-              >
-                <Send className="h-3.5 w-3.5" />
-              </Button>
+              <span className="text-xs text-red-500 font-medium">Listening...</span>
             </div>
-            <p className="text-[10px] text-muted-foreground/50 text-center mt-1.5">
-              Press Enter to send
-            </p>
+          )}
+          <div className="flex items-center gap-2 bg-muted/50 rounded-xl border border-border/50 p-2">
+            {voice.isSupported && (
+              <button
+                onClick={handleMicToggle}
+                disabled={isStreaming}
+                className={`h-8 w-8 rounded-lg shrink-0 flex items-center justify-center transition-all ${
+                  voice.isListening
+                    ? "bg-red-500 text-white shadow-sm shadow-red-200"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                } ${isStreaming ? "opacity-40 cursor-not-allowed" : ""}`}
+                aria-label={voice.isListening ? "Stop listening" : "Start voice input"}
+              >
+                {voice.isListening ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
+              </button>
+            )}
+            <input
+              ref={inputRef}
+              type="text"
+              value={displayInput}
+              onChange={(e) => setUserInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={voice.isListening ? "Listening — speak freely..." : "Type or tap the mic to talk..."}
+              className="flex-1 min-w-0 bg-transparent border-0 outline-none text-sm placeholder:text-muted-foreground/60 text-foreground p-1"
+              disabled={isStreaming}
+            />
+            <Button
+              size="icon"
+              onClick={handleSend}
+              disabled={!userInput.trim() || isStreaming}
+              className="h-8 w-8 rounded-lg shrink-0"
+            >
+              <Send className="h-3.5 w-3.5" />
+            </Button>
           </div>
-        )}
+        </div>
       </CardContent>
     </Card>
   );
