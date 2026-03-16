@@ -12,6 +12,7 @@ import { sendPushNotification, getVapidPublicKey } from "./notifications";
 import bcrypt from "bcrypt";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { registerChatRoutes } from "./replit_integrations/chat/routes";
+import { registerDebriefRoutes } from "./debrief-routes";
 
 const openai = new OpenAI({ 
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -851,6 +852,7 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
   }
 
   registerChatRoutes(app);
+  registerDebriefRoutes(app);
 
   return httpServer;
 }

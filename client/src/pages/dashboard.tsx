@@ -2,17 +2,15 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import ScoreDashboard from "@/components/ScoreDashboard";
 import CalendarView from "@/components/CalendarView";
-import JournalPanel from "@/components/JournalPanel";
+import DebriefPanel from "@/components/DebriefPanel";
 import AIInsights from "@/components/AIInsights";
-import VoiceRecordingModal from "@/components/VoiceRecordingModal";
 import SettingsModal from "@/components/SettingsModal";
 import StreakDisplay from "@/components/StreakDisplay";
 import GoalsSection from "@/components/GoalsSection";
 import MoodCheckinModal from "@/components/MoodCheckinModal";
 import { Button } from "@/components/ui/button";
-import { Settings, Plus, TrendingUp, LogOut, Smile, CalendarCheck } from "lucide-react";
+import { Settings, TrendingUp, LogOut, Smile, CalendarCheck } from "lucide-react";
 import { Link } from "wouter";
-import { motion, AnimatePresence } from "framer-motion";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -25,7 +23,6 @@ export default function Dashboard() {
   const [selectedDate, setSelectedDate] = useState<string>(getTodayStr);
   const todayStr = getTodayStr();
   const isViewingToday = selectedDate === todayStr;
-  const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isMoodCheckinOpen, setIsMoodCheckinOpen] = useState(false);
   const { toast } = useToast();
@@ -52,24 +49,29 @@ export default function Dashboard() {
     },
   });
 
+  const dateLabel = isViewingToday
+    ? "Today"
+    : new Date(selectedDate + "T12:00:00").toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-wrap justify-between items-center h-auto md:h-16 py-3 md:py-0 gap-3">
-            <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <span className="text-white text-sm font-semibold">D</span>
+    <div className="min-h-screen bg-background">
+      <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border/40">
+        <div className="max-w-2xl mx-auto px-4">
+          <div className="flex justify-between items-center h-14">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 bg-primary rounded-lg flex items-center justify-center">
+                <span className="text-primary-foreground text-xs font-bold">D</span>
               </div>
-              <h1 className="text-xl font-semibold text-gray-900">DBrief</h1>
+              <h1 className="text-lg font-semibold text-foreground tracking-tight">DBrief</h1>
             </div>
-            
-            <div className="flex items-center space-x-4">
+
+            <div className="flex items-center gap-1">
               <StreakDisplay streak={streak} />
-              
+
               <Button
                 variant="ghost"
                 size="icon"
+                className="h-9 w-9"
                 onClick={() => setIsMoodCheckinOpen(true)}
                 title="Mood Check-in"
               >
@@ -77,16 +79,16 @@ export default function Dashboard() {
               </Button>
 
               <Link href="/trends">
-                <Button variant="ghost" size="icon">
+                <Button variant="ghost" size="icon" className="h-9 w-9">
                   <TrendingUp className="h-4 w-4" />
                 </Button>
               </Link>
-              
-              <Button 
-                variant="ghost" 
+
+              <Button
+                variant="ghost"
                 size="icon"
+                className="h-9 w-9"
                 onClick={() => setIsSettingsModalOpen(true)}
-                data-testid="button-settings"
               >
                 <Settings className="h-4 w-4" />
               </Button>
@@ -94,6 +96,7 @@ export default function Dashboard() {
               <Button
                 variant="ghost"
                 size="icon"
+                className="h-9 w-9"
                 onClick={() => logoutMutation.mutate()}
                 title="Sign out"
               >
@@ -104,61 +107,43 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="max-w-2xl mx-auto px-4 py-5 space-y-5">
         {!isViewingToday && (
-          <div className="mb-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-medium text-muted-foreground">{dateLabel}</h2>
             <Button
               variant="outline"
               size="sm"
               onClick={() => setSelectedDate(todayStr)}
-              className="text-primary border-primary/30 hover:bg-primary/5"
+              className="h-8 text-xs"
             >
-              <CalendarCheck className="h-4 w-4 mr-1.5" />
+              <CalendarCheck className="h-3.5 w-3.5 mr-1.5" />
               Back to Today
             </Button>
           </div>
         )}
 
-        <section className="mb-8">
+        <section>
           <ScoreDashboard selectedDate={selectedDate} />
         </section>
 
-        <section className="mb-8 bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+        <section className="bg-card rounded-xl p-4 shadow-sm border border-border/50">
           <GoalsSection selectedDate={selectedDate} />
         </section>
 
-        <section className="mb-8">
-          <JournalPanel 
-            selectedDate={selectedDate}
-            onVoiceRecord={() => setIsVoiceModalOpen(true)}
-          />
+        <section>
+          <DebriefPanel selectedDate={selectedDate} />
         </section>
 
-        <section className="mb-8">
-          <CalendarView 
-            selectedDate={selectedDate} 
-            onDateSelect={setSelectedDate} 
+        <section>
+          <CalendarView
+            selectedDate={selectedDate}
+            onDateSelect={setSelectedDate}
           />
         </section>
 
         <AIInsights />
       </main>
-
-      <div className="fixed bottom-6 right-6">
-        <Button 
-          size="lg"
-          className="w-14 h-14 rounded-full shadow-lg hover:shadow-xl"
-          onClick={() => setIsVoiceModalOpen(true)}
-        >
-          <Plus className="h-6 w-6" />
-        </Button>
-      </div>
-
-      <VoiceRecordingModal 
-        isOpen={isVoiceModalOpen}
-        onClose={() => setIsVoiceModalOpen(false)}
-        selectedDate={selectedDate}
-      />
 
       <SettingsModal
         isOpen={isSettingsModalOpen}

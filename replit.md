@@ -1,11 +1,11 @@
 # DBrief - Daily Journaling App
 
 ## Overview
-DBrief is a daily journaling application designed to help users track their well-being through journal entries, customizable metric tracking, and AI-powered insights. It integrates with health devices for automated data collection and provides trend visualizations to help users understand their patterns over time. The project aims to offer a comprehensive and intuitive platform for personal reflection and self-improvement.
+DBrief is a daily journaling application with AI-driven conversational debriefs (Rosebud-inspired), customizable wellness metric tracking (0-100 scale), and data-driven insights. The app guides users through a daily reflection conversation with personalized AI prompts based on their scores, goals, and mood data. It integrates with health devices for automated data collection and provides trend visualizations. The design draws subtle F1 debrief inspiration — thoughtful, direct, and data-informed — without being over-the-top.
 
 ## User Preferences
 - Score circles must always remain at the top of the main dashboard
-- Journal panel sits directly under score circles, calendar at the bottom
+- Debrief panel (conversational AI journal) sits directly under goals, calendar at the bottom
 - All scores use a unified 0-100 scale (compatible with Oura, Whoop, Apple Health)
 - Scores should persist until the next day, then reset to blank for new inputs
 - Integration with Oura Ring API for automated health data (Sleep Quality, Readiness only)
@@ -29,20 +29,20 @@ DBrief is a daily journaling application designed to help users track their well
 **Storage**: PostgreSQL database with Drizzle ORM for persistent storage.
 **UI/UX**: Built with Shadcn/ui components and styled using Tailwind CSS.
 **Voice**: Web Speech API for voice-to-text transcription.
-**AI**: OpenAI integration for generating journal insights, pattern analysis, and habit improvement suggestions.
+**AI**: OpenAI integration for conversational debrief prompts, journal insights, pattern analysis, and habit improvement suggestions.
 **Health Tracking**: Oura Ring API integration for automatic health metrics synchronization (Sleep Quality, Readiness). All health API scores normalized to 0-100 scale.
 **Push Notifications**: Web Push API with service worker for daily score reminders. VAPID keys for secure delivery. Cron scheduler for timed notifications.
 **Feature Specifications**:
 - Welcome/Auth page with email+password login/register and Google/Apple sign-in buttons
 - Session-based authentication with logout support
+- **AI Debrief (Rosebud-style)**: Conversational daily reflection with personalized AI prompts based on scores, goals, mood. Streams responses via SSE. Auto-generates summary on completion. Saves user responses as journal entries.
 - Voice recording with speech-to-text.
 - Calendar-based journal entry and score retrieval.
 - Customizable metric tracking with interactive score circles (all 0-100 scale).
 - Interactive trend graph dialogs showing 14-day history, averages, and edit functionality.
-- Calendar long-press to view daily journal and scores.
+- Calendar long-press to view daily debrief conversations and scores.
 - Duolingo-style streak tracking with milestone celebrations (3, 7, 14, 30, 50, 100, 365 days).
 - Unified 0-100 scale for all metrics (wellness, health, activity).
-- Journal entries append with timestamps and preserve whitespace.
 - Score input flow simplified to two steps: tap circle to edit, then save.
 - AI Insights on dashboard and trends page - analyzes scores, journal entries, and streaks.
 - Trends page with 7 day, 30 day, 6 month, and lifetime timeline options.
@@ -50,7 +50,7 @@ DBrief is a daily journaling application designed to help users track their well
 
 ## Pages & Routing
 - `/` - Welcome/Auth page (unauthenticated) or Dashboard (authenticated)
-- `/dashboard` - Main dashboard with scores, journal, calendar, AI insights
+- `/dashboard` - Main dashboard with scores, goals, debrief, calendar, AI insights
 - `/trends` - Trends & Insights page with charts, AI analysis, timeline filters
 
 ## External Dependencies
@@ -61,7 +61,16 @@ DBrief is a daily journaling application designed to help users track their well
 - **express-session**: For session-based authentication.
 - **react-icons**: For social sign-in button icons (Google, Apple).
 
-## Recent Updates (Feb 19, 2026)
+## Recent Updates (Mar 16, 2026)
+- ✅ **Rosebud-Inspired Redesign**: Journal feature replaced with AI-driven conversational debrief system
+- ✅ **Debrief Panel**: Chat-style interface where AI asks personalized prompts based on day's scores, goals, and mood data. Streams responses in real-time via SSE.
+- ✅ **Debrief Backend**: New `debriefs` and `debrief_messages` tables. API routes for start, respond (streaming), and complete debriefs. Auto-generates conversation summary on completion.
+- ✅ **Journal Integration**: Completed debriefs save user responses as journal entries for trends/AI insights analysis
+- ✅ **Calendar Debrief View**: Long-press on calendar dates now shows debrief conversation alongside scores
+- ✅ **Visual Refresh**: Cleaner, more modern color palette (blue-based primary). Narrower max-width layout (max-w-2xl). Sticky header with backdrop blur. Subtle card shadows and refined spacing.
+- ✅ **F1 Debrief Tone**: AI system prompt acts as "personal debrief engineer" — warm, direct, perceptive. One question at a time, 3-5 exchange conversations.
+
+## Previous Updates (Feb 19, 2026)
 - ✅ **Score Carryover Fix**: Daily scores no longer show stale cached values from previous days; staleTime:0 forces fresh data on each load
 - ✅ **Consolidated Metric Management**: Removed duplicate "Customize" button; single "Manage" button handles all metric operations (add, edit, delete)
 - ✅ **No Default Metrics**: New users start with zero metrics and add their own; no pre-populated defaults (Happiness, Productivity, etc.)

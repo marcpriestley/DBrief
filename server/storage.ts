@@ -1,6 +1,6 @@
 import { 
   users, journalEntries, dailyScores, userMetrics, streaks, aiInsights, pushSubscriptions,
-  goalTemplates, dailyGoals, journalAttachments, moodCheckins,
+  goalTemplates, dailyGoals, journalAttachments, moodCheckins, debriefs,
   type User, type InsertUser, type JournalEntry, type InsertJournalEntry,
   type DailyScore, type InsertDailyScore, type UserMetric, type InsertUserMetric,
   type Streak, type InsertStreak, type AIInsight, type InsertAIInsight,
@@ -768,11 +768,15 @@ export class DatabaseStorage implements IStorage {
     const moodDates = await db.selectDistinct({ date: moodCheckins.date })
       .from(moodCheckins)
       .where(eq(moodCheckins.userId, userId));
+    const debriefDates = await db.selectDistinct({ date: debriefs.date })
+      .from(debriefs)
+      .where(eq(debriefs.userId, userId));
 
     const allDates = new Set<string>();
     for (const r of journalDates) allDates.add(r.date);
     for (const r of scoreDates) allDates.add(r.date);
     for (const r of moodDates) allDates.add(r.date);
+    for (const r of debriefDates) allDates.add(r.date);
     return Array.from(allDates);
   }
 
