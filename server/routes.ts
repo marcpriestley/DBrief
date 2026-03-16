@@ -7,7 +7,7 @@ import {
   insertPushSubscriptionSchema
 } from "@shared/schema";
 import OpenAI from "openai";
-import { getOuraDataForDate } from "./oura";
+import type { HealthData } from "./oura";
 import { sendPushNotification, getVapidPublicKey } from "./notifications";
 import bcrypt from "bcrypt";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
@@ -615,54 +615,56 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
     }
   });
 
-  // Oura Integration
-  app.get("/api/oura/status", async (req, res) => {
-    res.json({ configured: !!process.env.OURA_ACCESS_TOKEN });
+  // Health Integration (Apple Health via Capacitor)
+  app.get("/api/health/status", async (req, res) => {
+    res.json({ provider: "apple_health", available: true });
   });
 
-  app.post("/api/oura/sync/:date", async (req, res) => {
+  app.post("/api/health/sync", async (req, res) => {
     try {
       const userId = getUserId(req);
-      const { date } = req.params;
-      
-      const ouraData = await getOuraDataForDate(date);
-      
+      const { date, sleepScore, readinessScore, activityScore } = req.body;
+
+      if (!date) return res.status(400).json({ message: "Date is required" });
+
+      const healthData: HealthData = { sleepScore, readinessScore, activityScore };
+
       const existingMetrics = await storage.getUserMetrics(userId);
       const metricNames = new Set(existingMetrics.filter(m => m.isActive).map(m => m.name));
 
-      const ouraMetricsToCreate = [
-        { name: "Sleep Quality", color: "#8B5CF6", hasData: ouraData.sleepScore !== undefined },
-        { name: "Readiness", color: "#EF4444", hasData: ouraData.readinessScore !== undefined },
-        { name: "Activity", color: "#06B6D4", hasData: ouraData.activityScore !== undefined },
+      const healthMetrics = [
+        { name: "Sleep Quality", color: "#8B5CF6", hasData: healthData.sleepScore !== undefined },
+        { name: "Readiness", color: "#EF4444", hasData: healthData.readinessScore !== undefined },
+        { name: "Activity", color: "#06B6D4", hasData: healthData.activityScore !== undefined },
       ];
 
-      for (const m of ouraMetricsToCreate) {
+      for (const m of healthMetrics) {
         if (m.hasData && !metricNames.has(m.name)) {
           await storage.createUserMetric({ userId, name: m.name, color: m.color, maxValue: 100, isDefault: false, isActive: true });
         }
       }
 
       const updatedScores = [];
-      
-      if (ouraData.sleepScore !== undefined) {
-        const sleepScore = await storage.updateDailyScore(userId, date, "Sleep Quality", ouraData.sleepScore, true);
-        updatedScores.push(sleepScore);
-      }
-      
-      if (ouraData.readinessScore !== undefined) {
-        const readiness = await storage.updateDailyScore(userId, date, "Readiness", ouraData.readinessScore, true);
-        updatedScores.push(readiness);
+
+      if (healthData.sleepScore !== undefined) {
+        const score = await storage.updateDailyScore(userId, date, "Sleep Quality", healthData.sleepScore, true);
+        updatedScores.push(score);
       }
 
-      if (ouraData.activityScore !== undefined) {
-        const activity = await storage.updateDailyScore(userId, date, "Activity", ouraData.activityScore, true);
-        updatedScores.push(activity);
+      if (healthData.readinessScore !== undefined) {
+        const score = await storage.updateDailyScore(userId, date, "Readiness", healthData.readinessScore, true);
+        updatedScores.push(score);
       }
-      
-      res.json({ success: true, data: ouraData, updatedScores });
+
+      if (healthData.activityScore !== undefined) {
+        const score = await storage.updateDailyScore(userId, date, "Activity", healthData.activityScore, true);
+        updatedScores.push(score);
+      }
+
+      res.json({ success: true, data: healthData, updatedScores });
     } catch (error) {
-      console.error("Oura sync error:", error);
-      res.status(500).json({ message: "Failed to sync Oura data", error: String(error) });
+      console.error("Health sync error:", error);
+      res.status(500).json({ message: "Failed to sync health data", error: String(error) });
     }
   });
 

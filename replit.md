@@ -6,11 +6,11 @@ DBrief is a daily journaling application with AI-driven conversational debriefs 
 ## User Preferences
 - Score circles must always remain at the top of the main dashboard
 - Debrief panel (conversational AI journal) sits directly under goals, calendar at the bottom
-- All scores use a unified 0-100 scale (compatible with Oura, Whoop, Apple Health)
+- All scores use a unified 0-100 scale (compatible with Apple Health)
 - Scores should persist until the next day, then reset to blank for new inputs
-- Integration with Oura Ring API for automated health data (Sleep Quality, Readiness only)
-- Oura metrics auto-sync when app opens - Sleep Quality and Readiness automatically populate
-- Manual metrics remain blank until first input - Happiness, Productivity, Energy, Nutrition start blank each day
+- Integration with Apple Health (HealthKit via Capacitor) for automated health data (Sleep Quality, Readiness, Activity)
+- Health metrics sync via client-side HealthKit reads that POST to `/api/health/sync`
+- Manual metrics remain blank until first input - start blank each day
 - Once inputted, all scores persist and display for that date
 - Trend graphs should pop up when tapping metric circles
 - Journal entries and scores should display in a dialog when holding calendar dates (2 seconds)
@@ -30,7 +30,7 @@ DBrief is a daily journaling application with AI-driven conversational debriefs 
 **UI/UX**: Built with Shadcn/ui components and styled using Tailwind CSS.
 **Voice**: Web Speech API for voice-to-text transcription.
 **AI**: OpenAI integration for conversational debrief prompts, journal insights, pattern analysis, and habit improvement suggestions.
-**Health Tracking**: Oura Ring API integration for automatic health metrics synchronization (Sleep Quality, Readiness). All health API scores normalized to 0-100 scale.
+**Health Tracking**: Apple Health (HealthKit) integration via Capacitor native plugin for automatic health metrics synchronization (Sleep Quality, Readiness, Activity). Client-side reads POST to `/api/health/sync`. All scores normalized to 0-100 scale.
 **Push Notifications**: Web Push API with service worker for daily score reminders. VAPID keys for secure delivery. Cron scheduler for timed notifications.
 **Feature Specifications**:
 - Welcome/Auth page with email+password login/register and Google/Apple sign-in buttons
@@ -55,13 +55,20 @@ DBrief is a daily journaling application with AI-driven conversational debriefs 
 
 ## External Dependencies
 - **PostgreSQL**: Database for persistent storage (currently on fallback to in-memory).
-- **Oura Ring API**: For syncing Sleep Quality and Readiness metrics.
+- **Apple Health (HealthKit)**: For syncing Sleep Quality, Readiness, and Activity metrics via Capacitor.
 - **OpenAI API**: For AI-powered journal insights and analysis.
 - **Web Push API**: For browser push notifications (requires VAPID keys: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_EMAIL).
 - **express-session**: For session-based authentication.
 - **react-icons**: For social sign-in button icons (Google, Apple).
 
-## Recent Updates (Mar 16, 2026)
+## Recent Updates (Mar 16, 2026 - Latest)
+- **Apple Health Integration**: Replaced Oura Ring API with Apple Health (HealthKit via Capacitor). Server accepts health data via `POST /api/health/sync` from native client. Sleep Quality, Readiness, and Activity auto-sync on iOS.
+- **Visual Polish**: Complete redesign of all components for professional, cohesive look. SVG ring charts replace conic-gradient circles. Refined card layouts, tighter spacing, consistent typography across ScoreDashboard, Trends, Welcome, Settings, Mood Check-in, and Streak Display.
+- **Trends Page Redesign**: Matches main app design system — sticky blurred header, max-w-2xl layout, area chart gradient fills, compact metric filter pills, refined AI insights section.
+- **Welcome Page Refresh**: Cleaner auth page with subtle design, proper card styling, matching color system.
+- **Settings Enhancement**: Added Apple Health info section, compact notification controls, refined layout.
+
+## Previous Updates (Mar 16, 2026)
 - ✅ **Rosebud-Inspired Redesign**: Journal feature replaced with AI-driven conversational debrief system
 - ✅ **Debrief Panel**: Chat-style interface where AI asks personalized prompts based on day's scores, goals, and mood data. Streams responses in real-time via SSE.
 - ✅ **Debrief Backend**: New `debriefs` and `debrief_messages` tables. API routes for start, respond (streaming), and complete debriefs. Auto-generates conversation summary on completion.

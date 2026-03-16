@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Flame, Trophy, Star, Zap } from "lucide-react";
+import { Flame, Trophy } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface StreakDisplayProps {
@@ -7,18 +7,18 @@ interface StreakDisplayProps {
 }
 
 const milestones = [
-  { days: 3, label: "3 Day Streak!", icon: Flame, color: "text-orange-500" },
-  { days: 7, label: "1 Week!", icon: Star, color: "text-yellow-500" },
-  { days: 14, label: "2 Weeks!", icon: Zap, color: "text-blue-500" },
-  { days: 30, label: "1 Month!", icon: Trophy, color: "text-purple-500" },
-  { days: 50, label: "50 Days!", icon: Trophy, color: "text-emerald-500" },
-  { days: 100, label: "100 Days!", icon: Trophy, color: "text-red-500" },
-  { days: 365, label: "1 Year!", icon: Trophy, color: "text-amber-600" },
+  { days: 3, label: "3 Day Streak!" },
+  { days: 7, label: "1 Week!" },
+  { days: 14, label: "2 Weeks!" },
+  { days: 30, label: "1 Month!" },
+  { days: 50, label: "50 Days!" },
+  { days: 100, label: "100 Days!" },
+  { days: 365, label: "1 Year!" },
 ];
 
 function getStreakMessage(days: number): string {
   if (days === 0) return "Start your streak today!";
-  if (days === 1) return "Great start! Keep it going!";
+  if (days === 1) return "Great start!";
   if (days < 3) return "Building momentum!";
   if (days < 7) return "You're on fire!";
   if (days < 14) return "Incredible consistency!";
@@ -38,7 +38,6 @@ export default function StreakDisplay({ streak }: StreakDisplayProps) {
   const [showMilestone, setShowMilestone] = useState(false);
   
   const currentStreak = streak?.currentStreak || 0;
-  const longestStreak = streak?.longestStreak || 0;
 
   useEffect(() => {
     if (currentStreak > 0 && previousStreak > 0 && currentStreak > previousStreak) {
@@ -58,9 +57,9 @@ export default function StreakDisplay({ streak }: StreakDisplayProps) {
 
   if (!streak || currentStreak === 0) {
     return (
-      <div className="flex items-center space-x-2 bg-gray-50 px-3 py-1 rounded-full">
-        <Flame className="h-4 w-4 text-gray-400" />
-        <span className="text-sm text-gray-500">No streak yet</span>
+      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted/60">
+        <Flame className="h-3.5 w-3.5 text-muted-foreground" />
+        <span className="text-xs text-muted-foreground">0</span>
       </div>
     );
   }
@@ -71,35 +70,35 @@ export default function StreakDisplay({ streak }: StreakDisplayProps) {
   return (
     <div className="relative">
       <motion.div 
-        className="flex items-center space-x-2 bg-amber-50 px-3 py-1 rounded-full cursor-pointer group"
-        animate={showAnimation ? { scale: [1, 1.2, 1] } : {}}
-        transition={{ duration: 0.5 }}
-        title={`${getStreakMessage(currentStreak)}${nextMilestone ? ` Next milestone: ${nextMilestone.label}` : ''}`}
+        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 cursor-pointer"
+        animate={showAnimation ? { scale: [1, 1.15, 1] } : {}}
+        transition={{ duration: 0.4 }}
+        title={`${getStreakMessage(currentStreak)}${nextMilestone ? ` Next: ${nextMilestone.label}` : ''}`}
       >
         <motion.div
           animate={showAnimation ? {
-            rotate: [0, -10, 10, -10, 10, 0],
-            scale: [1, 1.3, 1.3, 1.3, 1.3, 1]
+            rotate: [0, -10, 10, -10, 0],
+            scale: [1, 1.2, 1.2, 1.2, 1]
           } : {}}
-          transition={{ duration: 0.6 }}
+          transition={{ duration: 0.5 }}
         >
-          <Flame className="h-4 w-4 text-amber-500" />
+          <Flame className="h-3.5 w-3.5 text-amber-500" />
         </motion.div>
-        <span className="text-sm font-medium text-amber-700">
-          {currentStreak} day{currentStreak !== 1 ? 's' : ''}
+        <span className="text-xs font-semibold text-amber-600">
+          {currentStreak}
         </span>
         
         <AnimatePresence>
           {showAnimation && (
-            <motion.div
-              initial={{ opacity: 0, y: -10, scale: 0.5 }}
-              animate={{ opacity: 1, y: -30, scale: 1.5 }}
-              exit={{ opacity: 0, y: -40 }}
-              transition={{ duration: 0.8 }}
-              className="absolute -top-8 left-1/2 transform -translate-x-1/2 text-xl font-bold text-amber-500 whitespace-nowrap"
+            <motion.span
+              initial={{ opacity: 0, y: 0, scale: 0.5 }}
+              animate={{ opacity: 1, y: -20, scale: 1.2 }}
+              exit={{ opacity: 0, y: -28 }}
+              transition={{ duration: 0.6 }}
+              className="absolute -top-5 left-1/2 -translate-x-1/2 text-xs font-bold text-amber-500"
             >
               +1
-            </motion.div>
+            </motion.span>
           )}
         </AnimatePresence>
       </motion.div>
@@ -107,17 +106,16 @@ export default function StreakDisplay({ streak }: StreakDisplayProps) {
       <AnimatePresence>
         {showMilestone && currentMilestone && (
           <motion.div
-            initial={{ opacity: 0, y: 10, scale: 0.8 }}
+            initial={{ opacity: 0, y: 8, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -10, scale: 0.8 }}
-            transition={{ duration: 0.5 }}
-            className="absolute top-full mt-2 left-1/2 transform -translate-x-1/2 bg-white shadow-lg rounded-lg px-4 py-3 text-center z-50 border border-amber-200 whitespace-nowrap"
+            exit={{ opacity: 0, y: -8, scale: 0.9 }}
+            className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-card shadow-lg rounded-lg px-3 py-2 text-center z-50 border border-amber-200 whitespace-nowrap"
           >
-            <div className="flex items-center space-x-2">
-              <Trophy className="h-5 w-5 text-amber-500" />
-              <span className="text-sm font-semibold text-gray-900">{currentMilestone.label}</span>
+            <div className="flex items-center gap-1.5">
+              <Trophy className="h-4 w-4 text-amber-500" />
+              <span className="text-xs font-semibold text-foreground">{currentMilestone.label}</span>
             </div>
-            <p className="text-xs text-gray-500 mt-1">{getStreakMessage(currentStreak)}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">{getStreakMessage(currentStreak)}</p>
           </motion.div>
         )}
       </AnimatePresence>

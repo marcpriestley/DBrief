@@ -13,8 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Bell, BellOff, AlertCircle, CheckCircle2 } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Bell, BellOff, AlertCircle, CheckCircle2, Heart } from "lucide-react";
 
 function NotificationPermissionHelper() {
   const [permissionState, setPermissionState] = useState<NotificationPermission | "unsupported">("default");
@@ -29,40 +28,36 @@ function NotificationPermissionHelper() {
 
   if (permissionState === "granted") {
     return (
-      <Alert className="border-green-200 bg-green-50">
-        <CheckCircle2 className="h-4 w-4 text-green-600" />
-        <AlertDescription className="text-green-800 text-sm">
-          Notifications are enabled in your browser. You're all set!
-        </AlertDescription>
-      </Alert>
+      <div className="flex items-start gap-2.5 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+        <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
+        <p className="text-xs text-emerald-700">Notifications are enabled. You're all set!</p>
+      </div>
     );
   }
 
   if (permissionState === "denied") {
     return (
-      <Alert className="border-orange-200 bg-orange-50">
-        <AlertCircle className="h-4 w-4 text-orange-600" />
-        <AlertDescription className="text-orange-800 text-sm">
-          Notifications are blocked in your browser. To enable them:
-          <ol className="list-decimal ml-4 mt-1 space-y-0.5 text-xs">
-            <li>Click the lock/info icon in your browser's address bar</li>
-            <li>Find "Notifications" in the site settings</li>
-            <li>Change it from "Block" to "Allow"</li>
+      <div className="flex items-start gap-2.5 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+        <AlertCircle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+        <div className="text-xs text-amber-700">
+          <p className="font-medium mb-1">Notifications are blocked</p>
+          <ol className="list-decimal ml-3 space-y-0.5 text-[11px]">
+            <li>Click the lock icon in your address bar</li>
+            <li>Find "Notifications" in site settings</li>
+            <li>Change from "Block" to "Allow"</li>
             <li>Refresh this page</li>
           </ol>
-        </AlertDescription>
-      </Alert>
+        </div>
+      </div>
     );
   }
 
   if (permissionState === "unsupported") {
     return (
-      <Alert className="border-gray-200 bg-gray-50">
-        <AlertCircle className="h-4 w-4 text-gray-500" />
-        <AlertDescription className="text-gray-700 text-sm">
-          Push notifications are not supported in this browser.
-        </AlertDescription>
-      </Alert>
+      <div className="flex items-start gap-2.5 p-3 rounded-lg bg-muted border border-border">
+        <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+        <p className="text-xs text-muted-foreground">Push notifications aren't supported in this browser.</p>
+      </div>
     );
   }
 
@@ -92,7 +87,6 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [reminderTime, setReminderTime] = useState("21:00");
 
-  // Update local state when settings are loaded
   useEffect(() => {
     if (settings) {
       setNotificationsEnabled(settings.notificationsEnabled);
@@ -106,48 +100,28 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/user/settings"] });
-      toast({
-        title: "Settings saved",
-        description: "Your notification preferences have been updated.",
-      });
+      toast({ title: "Settings saved", description: "Your preferences have been updated." });
     },
     onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to save settings. Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to save settings.", variant: "destructive" });
     },
   });
 
   const handleSave = () => {
-    // Get user's timezone
     const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    
-    updateSettingsMutation.mutate({
-      notificationsEnabled,
-      reminderTime,
-      timezone: userTimezone,
-    });
+    updateSettingsMutation.mutate({ notificationsEnabled, reminderTime, timezone: userTimezone });
   };
 
   const handleToggleNotifications = async (enabled: boolean) => {
     setNotificationsEnabled(enabled);
     
     if (enabled) {
-      // Request notification permission when enabling
       if ('Notification' in window) {
         const permission = await Notification.requestPermission();
-        
         if (permission === 'granted') {
-          // Register service worker and subscribe to push
           await registerPushSubscription();
         } else {
-          toast({
-            title: "Permission denied",
-            description: "Please enable notifications in your browser settings.",
-            variant: "destructive",
-          });
+          toast({ title: "Permission denied", description: "Please enable notifications in browser settings.", variant: "destructive" });
           setNotificationsEnabled(false);
         }
       }
@@ -160,22 +134,18 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         throw new Error('Push notifications not supported');
       }
 
-      // Register service worker
       const registration = await navigator.serviceWorker.register('/sw.js');
       await navigator.serviceWorker.ready;
 
-      // Fetch VAPID public key from server
       const vapidRes = await fetch('/api/push/vapid-public-key', { credentials: "include" });
       if (!vapidRes.ok) throw new Error('Push notifications not available');
       const { publicKey } = await vapidRes.json();
 
-      // Subscribe to push notifications
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(publicKey)
       });
 
-      // Send subscription to backend
       await fetch('/api/push/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -183,30 +153,19 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         body: JSON.stringify(subscription)
       });
 
-      toast({
-        title: "Notifications enabled",
-        description: "You'll receive daily reminders at your chosen time.",
-      });
+      toast({ title: "Notifications enabled", description: "You'll receive daily reminders." });
     } catch (error) {
       console.error('Push subscription error:', error);
-      toast({
-        title: "Error",
-        description: "Failed to enable push notifications.",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to enable push notifications.", variant: "destructive" });
       setNotificationsEnabled(false);
     }
   };
 
   const urlBase64ToUint8Array = (base64String: string) => {
     const padding = '='.repeat((4 - base64String.length % 4) % 4);
-    const base64 = (base64String + padding)
-      .replace(/\-/g, '+')
-      .replace(/_/g, '/');
-
+    const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
     const rawData = window.atob(base64);
     const outputArray = new Uint8Array(rawData.length);
-
     for (let i = 0; i < rawData.length; ++i) {
       outputArray[i] = rawData.charCodeAt(i);
     }
@@ -215,78 +174,71 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Settings</DialogTitle>
-          <DialogDescription>
-            Manage your notification preferences and reminder settings.
-          </DialogDescription>
+          <DialogTitle className="text-base">Settings</DialogTitle>
+          <DialogDescription className="text-xs">Manage notifications and preferences.</DialogDescription>
         </DialogHeader>
 
         {isLoading ? (
-          <div className="py-8 text-center text-gray-500">Loading settings...</div>
+          <div className="py-8 text-center text-xs text-muted-foreground">Loading...</div>
         ) : (
-          <div className="space-y-6 py-4">
-            {/* Notifications Toggle */}
+          <div className="space-y-5 py-2">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label className="text-base flex items-center gap-2">
-                  {notificationsEnabled ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
+                <Label className="text-sm flex items-center gap-2">
+                  {notificationsEnabled ? <Bell className="h-3.5 w-3.5" /> : <BellOff className="h-3.5 w-3.5" />}
                   Daily Reminders
                 </Label>
-                <p className="text-sm text-gray-500">
-                  Get notified to log your scores and continue your streak
+                <p className="text-[11px] text-muted-foreground">
+                  Get notified to log scores and keep your streak
                 </p>
               </div>
               <Switch
                 checked={notificationsEnabled}
                 onCheckedChange={handleToggleNotifications}
-                data-testid="switch-notifications"
               />
             </div>
 
-            {/* Reminder Time */}
             {notificationsEnabled && (
               <div className="space-y-2">
-                <Label htmlFor="reminderTime">Reminder Time</Label>
+                <Label htmlFor="reminderTime" className="text-xs">Reminder Time</Label>
                 <Input
                   id="reminderTime"
                   type="time"
                   value={reminderTime}
                   onChange={(e) => setReminderTime(e.target.value)}
-                  data-testid="input-reminder-time"
+                  className="h-9"
                 />
-                <p className="text-xs text-gray-500">
-                  You'll receive a notification at this time every day (UTC timezone)
-                </p>
               </div>
             )}
 
-            {notificationsEnabled && (
-              <NotificationPermissionHelper />
-            )}
+            {notificationsEnabled && <NotificationPermissionHelper />}
 
-            <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-              <p className="text-sm font-medium text-gray-700">Mood Check-in Reminders</p>
-              <p className="text-xs text-gray-500">
-                When notifications are enabled, you'll receive three daily mood check-ins at 8:00 AM, 1:00 PM, and 9:00 PM (your local time).
+            <div className="rounded-lg bg-muted/50 border border-border/50 p-3 space-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <Heart className="h-3 w-3 text-pink-500" />
+                <p className="text-xs font-medium text-foreground">Mood Reminders</p>
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Three daily check-ins at 8 AM, 1 PM, and 9 PM (your local time).
               </p>
             </div>
 
-            <div className="flex justify-end gap-2 pt-4">
-              <Button
-                variant="outline"
-                onClick={onClose}
-                data-testid="button-cancel-settings"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleSave}
-                disabled={updateSettingsMutation.isPending}
-                data-testid="button-save-settings"
-              >
-                {updateSettingsMutation.isPending ? "Saving..." : "Save Changes"}
+            <div className="rounded-lg bg-muted/50 border border-border/50 p-3 space-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <Heart className="h-3 w-3 text-red-500" />
+                <p className="text-xs font-medium text-foreground">Apple Health</p>
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Sleep, readiness, and activity scores sync automatically when using the iOS app.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+              <Button size="sm" onClick={handleSave} disabled={updateSettingsMutation.isPending}>
+                {updateSettingsMutation.isPending ? "Saving..." : "Save"}
               </Button>
             </div>
           </div>

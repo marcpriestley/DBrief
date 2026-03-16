@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Smile, Frown, Meh, Heart, X } from "lucide-react";
+import { Smile, Frown, Meh, Heart } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -14,17 +14,17 @@ interface MoodCheckinModalProps {
 }
 
 function getMoodEmoji(value: number) {
-  if (value >= 80) return { icon: Heart, color: "text-pink-500", label: "Amazing" };
-  if (value >= 60) return { icon: Smile, color: "text-green-500", label: "Good" };
-  if (value >= 40) return { icon: Meh, color: "text-yellow-500", label: "Okay" };
-  if (value >= 20) return { icon: Frown, color: "text-orange-500", label: "Low" };
-  return { icon: Frown, color: "text-red-500", label: "Struggling" };
+  if (value >= 80) return { icon: Heart, color: "text-pink-500", bg: "bg-pink-50", label: "Amazing" };
+  if (value >= 60) return { icon: Smile, color: "text-emerald-500", bg: "bg-emerald-50", label: "Good" };
+  if (value >= 40) return { icon: Meh, color: "text-amber-500", bg: "bg-amber-50", label: "Okay" };
+  if (value >= 20) return { icon: Frown, color: "text-orange-500", bg: "bg-orange-50", label: "Low" };
+  return { icon: Frown, color: "text-red-500", bg: "bg-red-50", label: "Struggling" };
 }
 
 function getMoodColor(value: number) {
   if (value >= 80) return "#EC4899";
-  if (value >= 60) return "#22C55E";
-  if (value >= 40) return "#EAB308";
+  if (value >= 60) return "#10B981";
+  if (value >= 40) return "#F59E0B";
   if (value >= 20) return "#F97316";
   return "#EF4444";
 }
@@ -53,10 +53,7 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
 
   const saveMutation = useMutation({
     mutationFn: async (value: number) => {
-      const res = await apiRequest("POST", "/api/mood-checkins", {
-        value,
-        label: timeOfDay,
-      });
+      const res = await apiRequest("POST", "/api/mood-checkins", { value, label: timeOfDay });
       return res.json();
     },
     onSuccess: () => {
@@ -73,38 +70,36 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle className="text-center">{timeLabels[timeOfDay]}</DialogTitle>
-          <DialogDescription className="text-center">
-            How are you feeling right now?
-          </DialogDescription>
+      <DialogContent className="max-w-xs">
+        <DialogHeader className="text-center">
+          <DialogTitle className="text-base">{timeLabels[timeOfDay]}</DialogTitle>
+          <DialogDescription className="text-xs">How are you feeling right now?</DialogDescription>
         </DialogHeader>
 
-        <div className="py-6 space-y-8">
+        <div className="py-4 space-y-6">
           <div className="text-center">
             <motion.div
               key={mood.label}
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ type: "spring", stiffness: 300 }}
-              className="inline-block"
+              className={`inline-flex items-center justify-center w-16 h-16 rounded-2xl ${mood.bg}`}
             >
-              <MoodIcon className={`h-16 w-16 mx-auto ${mood.color}`} />
+              <MoodIcon className={`h-8 w-8 ${mood.color}`} />
             </motion.div>
             <motion.p
               key={`label-${mood.label}`}
-              initial={{ opacity: 0, y: 5 }}
+              initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
-              className="text-lg font-semibold mt-3"
+              className="text-sm font-semibold mt-2"
               style={{ color: getMoodColor(moodValue) }}
             >
               {mood.label}
             </motion.p>
-            <p className="text-3xl font-bold text-gray-900 mt-1">{moodValue}</p>
+            <p className="text-2xl font-bold text-foreground mt-0.5">{moodValue}</p>
           </div>
 
-          <div className="px-4">
+          <div className="px-2">
             <Slider
               value={[moodValue]}
               onValueChange={(v) => setMoodValue(v[0])}
@@ -113,14 +108,14 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
               step={1}
               className="w-full"
             />
-            <div className="flex justify-between mt-2 text-xs text-gray-400">
+            <div className="flex justify-between mt-1.5 text-[10px] text-muted-foreground">
               <span>0</span>
               <span>50</span>
               <span>100</span>
             </div>
           </div>
 
-          <div className="flex gap-2 px-4">
+          <div className="flex gap-1.5 px-1">
             {[20, 40, 60, 80].map((preset) => {
               const p = getMoodEmoji(preset);
               const PIcon = p.icon;
@@ -130,12 +125,12 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
                   onClick={() => setMoodValue(preset)}
                   className={`flex-1 py-2 rounded-lg border text-center transition-all ${
                     Math.abs(moodValue - preset) < 10
-                      ? "border-primary bg-primary/5"
-                      : "border-gray-200 hover:border-gray-300"
+                      ? "border-primary bg-primary/5 shadow-sm"
+                      : "border-border hover:border-border/80"
                   }`}
                 >
-                  <PIcon className={`h-5 w-5 mx-auto ${p.color}`} />
-                  <span className="text-xs text-gray-500 mt-1 block">{preset}</span>
+                  <PIcon className={`h-4 w-4 mx-auto ${p.color}`} />
+                  <span className="text-[10px] text-muted-foreground mt-0.5 block">{preset}</span>
                 </button>
               );
             })}
@@ -144,8 +139,7 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
           <Button
             onClick={() => saveMutation.mutate(moodValue)}
             disabled={saveMutation.isPending}
-            className="w-full"
-            size="lg"
+            className="w-full h-9 text-sm"
           >
             {saveMutation.isPending ? "Saving..." : "Log Mood"}
           </Button>

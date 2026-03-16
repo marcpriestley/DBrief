@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, Area, AreaChart } from "recharts";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CalendarDays, TrendingUp, Target, Activity, ArrowLeft, BarChart3, LineChart as LineChartIcon, PieChart, Sparkles, Loader2 } from "lucide-react";
+import { TrendingUp, ArrowLeft, Sparkles, Loader2 } from "lucide-react";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -18,7 +18,7 @@ interface TrendData {
 export default function TrendsEnhanced() {
   const [timeRange, setTimeRange] = useState<string>("30");
   const [selectedMetrics, setSelectedMetrics] = useState<string[]>([]);
-  const [chartType, setChartType] = useState<string>("line");
+  const [chartType, setChartType] = useState<string>("area");
   const { toast } = useToast();
 
   const { data: metrics = [] } = useQuery<UserMetric[]>({
@@ -158,39 +158,41 @@ export default function TrendsEnhanced() {
   };
 
   const renderChart = () => {
+    const axisStyle = { fontSize: 11, fill: 'hsl(220, 10%, 46%)' };
+    
     const commonXAxis = (
       <XAxis 
         dataKey="date" 
-        tick={{ fontSize: 12 }}
+        tick={axisStyle}
         tickFormatter={(value) => {
           const date = new Date(value);
           return `${date.getMonth() + 1}/${date.getDate()}`;
         }}
+        axisLine={false}
+        tickLine={false}
       />
-    );
-
-    const commonProps = (
-      <>
-        <CartesianGrid strokeDasharray="3 3" />
-        {commonXAxis}
-        <YAxis domain={[0, 100]} />
-        <Tooltip labelFormatter={(value) => new Date(value).toLocaleDateString()} />
-        <Legend />
-      </>
     );
 
     if (chartType === "line") {
       return (
         <LineChart data={chartData}>
-          {commonProps}
+          <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 14%, 92%)" vertical={false} />
+          {commonXAxis}
+          <YAxis domain={[0, 100]} tick={axisStyle} axisLine={false} tickLine={false} width={30} />
+          <Tooltip
+            labelFormatter={(value) => new Date(value).toLocaleDateString()}
+            contentStyle={{ borderRadius: '8px', border: '1px solid hsl(220, 14%, 90%)', fontSize: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}
+          />
+          <Legend wrapperStyle={{ fontSize: '12px' }} />
           {displayMetrics.map((metric) => (
             <Line
               key={metric.name}
               type="monotone"
               dataKey={metric.name}
               stroke={metric.color}
-              strokeWidth={3}
-              dot={{ fill: metric.color, strokeWidth: 2, r: 4 }}
+              strokeWidth={2}
+              dot={{ fill: metric.color, strokeWidth: 0, r: 2.5 }}
+              activeDot={{ r: 4, strokeWidth: 0 }}
               connectNulls={false}
             />
           ))}
@@ -201,15 +203,29 @@ export default function TrendsEnhanced() {
     if (chartType === "area") {
       return (
         <AreaChart data={chartData}>
-          {commonProps}
+          <defs>
+            {displayMetrics.map((metric) => (
+              <linearGradient key={`grad-${metric.name}`} id={`grad-${metric.name}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={metric.color} stopOpacity={0.2} />
+                <stop offset="95%" stopColor={metric.color} stopOpacity={0} />
+              </linearGradient>
+            ))}
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 14%, 92%)" vertical={false} />
+          {commonXAxis}
+          <YAxis domain={[0, 100]} tick={axisStyle} axisLine={false} tickLine={false} width={30} />
+          <Tooltip
+            labelFormatter={(value) => new Date(value).toLocaleDateString()}
+            contentStyle={{ borderRadius: '8px', border: '1px solid hsl(220, 14%, 90%)', fontSize: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}
+          />
+          <Legend wrapperStyle={{ fontSize: '12px' }} />
           {displayMetrics.map((metric) => (
             <Area
               key={metric.name}
               type="monotone"
               dataKey={metric.name}
               stroke={metric.color}
-              fill={metric.color}
-              fillOpacity={0.4}
+              fill={`url(#grad-${metric.name})`}
               strokeWidth={2}
             />
           ))}
@@ -219,13 +235,21 @@ export default function TrendsEnhanced() {
 
     return (
       <BarChart data={chartData}>
-        {commonProps}
+        <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 14%, 92%)" vertical={false} />
+        {commonXAxis}
+        <YAxis domain={[0, 100]} tick={axisStyle} axisLine={false} tickLine={false} width={30} />
+        <Tooltip
+          labelFormatter={(value) => new Date(value).toLocaleDateString()}
+          contentStyle={{ borderRadius: '8px', border: '1px solid hsl(220, 14%, 90%)', fontSize: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}
+        />
+        <Legend wrapperStyle={{ fontSize: '12px' }} />
         {displayMetrics.map((metric) => (
           <Bar
             key={metric.name}
             dataKey={metric.name}
             fill={metric.color}
             radius={[4, 4, 0, 0]}
+            maxBarSize={24}
           />
         ))}
       </BarChart>
@@ -233,25 +257,22 @@ export default function TrendsEnhanced() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-wrap justify-between items-center h-auto md:h-16 py-3 md:py-0 gap-3">
-            <div className="flex items-center space-x-3">
+    <div className="min-h-screen bg-background">
+      <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border/40">
+        <div className="max-w-2xl mx-auto px-4">
+          <div className="flex justify-between items-center h-14">
+            <div className="flex items-center gap-2.5">
               <Link href="/">
-                <Button variant="ghost" size="icon">
+                <Button variant="ghost" size="icon" className="h-8 w-8">
                   <ArrowLeft className="h-4 w-4" />
                 </Button>
               </Link>
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <span className="text-white text-sm font-semibold">D</span>
-              </div>
-              <h1 className="text-xl font-semibold text-gray-900">Trends & Insights</h1>
+              <h1 className="text-base font-semibold text-foreground tracking-tight">Trends & Insights</h1>
             </div>
             
-            <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+            <div className="flex items-center gap-1.5">
               <Select value={timeRange} onValueChange={setTimeRange}>
-                <SelectTrigger className="w-32">
+                <SelectTrigger className="h-8 w-24 text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -263,14 +284,14 @@ export default function TrendsEnhanced() {
               </Select>
               
               <Select value={chartType} onValueChange={setChartType}>
-                <SelectTrigger className="w-32">
+                <SelectTrigger className="h-8 w-20 text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="line">Line Chart</SelectItem>
-                  <SelectItem value="area">Area Chart</SelectItem>
-                  <SelectItem value="bar">Bar Chart</SelectItem>
-                  <SelectItem value="heatmap">Heat Map</SelectItem>
+                  <SelectItem value="area">Area</SelectItem>
+                  <SelectItem value="line">Line</SelectItem>
+                  <SelectItem value="bar">Bar</SelectItem>
+                  <SelectItem value="heatmap">Heat</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -278,57 +299,41 @@ export default function TrendsEnhanced() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {metrics.slice(0, 4).map((metric) => {
-            const stats = getMetricStats(metric.name);
-            
-            return (
-              <Card key={metric.id}>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">{metric.name}</p>
-                      <p className="text-2xl font-bold text-gray-900">{stats.avg.toFixed(0)}<span className="text-sm text-gray-400">/100</span></p>
+      <main className="max-w-2xl mx-auto px-4 py-5 space-y-4">
+        {metrics.length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {metrics.slice(0, 4).map((metric) => {
+              const stats = getMetricStats(metric.name);
+              return (
+                <Card key={metric.id} className="border-border/50 shadow-sm">
+                  <CardContent className="p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: metric.color }} />
+                      <span className="text-[11px] font-medium text-muted-foreground truncate">{metric.name}</span>
                     </div>
-                    <div 
-                      className="w-12 h-12 rounded-full flex items-center justify-center"
-                      style={{ backgroundColor: `${metric.color}20`, color: metric.color }}
-                    >
-                      <TrendingUp className="h-6 w-6" />
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-xl font-bold text-foreground">{stats.avg.toFixed(0)}</span>
+                      <span className="text-[10px] text-muted-foreground">/100</span>
                     </div>
-                  </div>
-                  <div className="mt-4 space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-500">Best</span>
-                      <span className="font-medium">{stats.best}/100</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-500">Trend</span>
-                      <span className={`font-medium ${stats.trend >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    <div className="flex items-center gap-1 mt-1">
+                      <TrendingUp className={`h-3 w-3 ${stats.trend >= 0 ? 'text-emerald-500' : 'text-red-500'}`} />
+                      <span className={`text-[10px] font-medium ${stats.trend >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                         {stats.trend >= 0 ? '+' : ''}{stats.trend.toFixed(1)}
                       </span>
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-500">Consistency</span>
-                      <span className="font-medium">{stats.consistency.toFixed(0)}%</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
 
-        <Card className="mb-8">
-          <CardContent className="p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Select Metrics to Display</h3>
-            <div className="flex flex-wrap gap-2">
+        <Card className="border-border/50 shadow-sm">
+          <CardContent className="p-3">
+            <div className="flex flex-wrap gap-1.5">
               {allMetricsWithGoals.map((metric) => (
-                <Button
+                <button
                   key={metric.id}
-                  variant={selectedMetrics.includes(metric.name) ? "default" : "outline"}
-                  size="sm"
                   onClick={() => {
                     setSelectedMetrics(prev => 
                       prev.includes(metric.name)
@@ -336,44 +341,36 @@ export default function TrendsEnhanced() {
                         : [...prev, metric.name]
                     );
                   }}
-                  className="flex items-center space-x-2"
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all ${
+                    selectedMetrics.includes(metric.name)
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  }`}
                 >
-                  <div 
-                    className="w-3 h-3 rounded-full"
-                    style={{ backgroundColor: metric.color }}
-                  />
-                  <span>{metric.name}</span>
-                </Button>
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: selectedMetrics.includes(metric.name) ? 'white' : metric.color }} />
+                  {metric.name}
+                </button>
               ))}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setSelectedMetrics([])}
-                disabled={selectedMetrics.length === 0}
-              >
-                Clear All
-              </Button>
+              {selectedMetrics.length > 0 && (
+                <button
+                  onClick={() => setSelectedMetrics([])}
+                  className="text-xs text-muted-foreground hover:text-foreground px-2 py-1"
+                >
+                  Clear
+                </button>
+              )}
             </div>
           </CardContent>
         </Card>
 
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              {chartType === "line" ? <LineChartIcon className="mr-2 h-5 w-5" /> :
-               chartType === "area" ? <Activity className="mr-2 h-5 w-5" /> :
-               chartType === "bar" ? <BarChart3 className="mr-2 h-5 w-5" /> : 
-               <PieChart className="mr-2 h-5 w-5" />}
-              {`Trends - ${formatTimeRange(timeRange)}`}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+        <Card className="border-border/50 shadow-sm">
+          <CardContent className="p-4">
+            <div className="text-xs font-medium text-muted-foreground mb-3">
+              {formatTimeRange(timeRange)}
+            </div>
             {chartType === "heatmap" ? (
-              <div className="space-y-4">
-                <p className="text-sm text-gray-600 text-center">
-                  Activity intensity over the selected time period (all scores on 0-100 scale)
-                </p>
-                <div className="grid grid-cols-7 gap-2 max-w-lg mx-auto">
+              <div className="space-y-3">
+                <div className="grid grid-cols-7 gap-1.5 max-w-xs mx-auto">
                   {chartData.slice(-49).map((day, index) => {
                     const avgScore = displayMetrics.length > 0 
                       ? displayMetrics.reduce((sum, metric) => sum + (day[metric.name] as number || 0), 0) / displayMetrics.length
@@ -383,165 +380,115 @@ export default function TrendsEnhanced() {
                     return (
                       <div
                         key={index}
-                        className="w-8 h-8 rounded border cursor-pointer transition-all hover:scale-110"
+                        className="aspect-square rounded-sm cursor-pointer transition-transform hover:scale-125"
                         style={{
-                          backgroundColor: `rgba(34, 197, 94, ${intensity})`,
-                          borderColor: intensity > 0.3 ? '#22c55e' : '#e5e7eb'
+                          backgroundColor: intensity > 0 ? `rgba(79, 70, 229, ${0.15 + intensity * 0.7})` : 'hsl(220, 14%, 94%)',
                         }}
-                        title={`${new Date(day.date).toLocaleDateString()}: Avg ${avgScore.toFixed(0)}/100`}
+                        title={`${new Date(day.date).toLocaleDateString()}: ${avgScore.toFixed(0)}/100`}
                       />
                     );
                   })}
                 </div>
-                <div className="flex items-center justify-between text-xs text-gray-500 max-w-lg mx-auto">
-                  <span>Less active</span>
-                  <span>More active</span>
+                <div className="flex items-center justify-between text-[10px] text-muted-foreground max-w-xs mx-auto px-0.5">
+                  <span>Less</span>
+                  <div className="flex gap-0.5">
+                    {[0.15, 0.35, 0.55, 0.75, 0.9].map((o, i) => (
+                      <div key={i} className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: `rgba(79, 70, 229, ${o})` }} />
+                    ))}
+                  </div>
+                  <span>More</span>
                 </div>
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height={400}>
+              <ResponsiveContainer width="100%" height={280}>
                 {renderChart()}
               </ResponsiveContainer>
             )}
           </CardContent>
         </Card>
 
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <div className="flex items-center">
-                <Sparkles className="mr-2 h-5 w-5 text-purple-500" />
-                AI Insights
+        <Card className="border-border/50 shadow-sm">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-primary" />
+                <span className="text-sm font-semibold text-foreground">AI Insights</span>
               </div>
               <Button 
-                size="sm" 
+                size="sm"
+                variant="ghost"
+                className="h-7 text-xs"
                 onClick={() => generateInsightsMutation.mutate()}
                 disabled={generateInsightsMutation.isPending}
               >
                 {generateInsightsMutation.isPending ? (
-                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Analyzing...</>
+                  <><Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> Analyzing</>
                 ) : (
-                  <><Sparkles className="mr-2 h-4 w-4" /> Generate Insights</>
+                  <><Sparkles className="mr-1.5 h-3 w-3" /> Generate</>
                 )}
               </Button>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+            </div>
             {aiInsights.length > 0 ? (
-              <div className="space-y-4">
-                {aiInsights.slice(0, 5).map((insight) => (
-                  <div key={insight.id} className="p-4 bg-purple-50 rounded-lg border border-purple-100">
-                    <p className="text-sm text-gray-800">{insight.insight}</p>
+              <div className="space-y-3">
+                {aiInsights.slice(0, 3).map((insight) => (
+                  <div key={insight.id} className="p-3 bg-primary/5 rounded-lg border border-primary/10">
+                    <p className="text-sm text-foreground leading-relaxed">{insight.insight}</p>
                     {insight.tags && insight.tags.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-2">
                         {insight.tags.map((tag, i) => (
-                          <span key={i} className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+                          <span key={i} className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">
                             {tag}
                           </span>
                         ))}
                       </div>
                     )}
-                    {insight.createdAt && (
-                      <p className="text-xs text-gray-400 mt-2">
-                        {new Date(insight.createdAt).toLocaleDateString()}
-                      </p>
-                    )}
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="text-center py-8">
-                <Sparkles className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500">No insights yet. Add some scores and journal entries, then generate insights to see AI-powered analysis of your patterns.</p>
+              <div className="text-center py-6">
+                <Sparkles className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
+                <p className="text-xs text-muted-foreground">Add scores and complete debriefs to unlock AI insights.</p>
               </div>
             )}
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <CalendarDays className="mr-2 h-5 w-5" />
-                Weekly Averages
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart 
-                  data={(() => {
-                    const weeklyData = [];
-                    for (let i = 0; i < Math.min(4, Math.floor(chartData.length / 7)); i++) {
-                      const week = chartData.slice(i * 7, (i + 1) * 7);
-                      const weekData: any = { week: `Week ${i + 1}` };
-                      
-                      displayMetrics.forEach(metric => {
-                        const values = week.map(day => day[metric.name] as number).filter(v => v > 0);
-                        weekData[metric.name] = values.length > 0 
-                          ? values.reduce((a, b) => a + b, 0) / values.length 
-                          : 0;
-                      });
-                      
-                      weeklyData.push(weekData);
-                    }
-                    return weeklyData;
-                  })()}
-                >
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="week" />
-                  <YAxis domain={[0, 100]} />
-                  <Tooltip />
-                  <Legend />
-                  {displayMetrics.map((metric) => (
-                    <Bar
-                      key={metric.name}
-                      dataKey={metric.name}
-                      fill={metric.color}
-                      radius={[4, 4, 0, 0]}
-                    />
-                  ))}
-                </BarChart>
-              </ResponsiveContainer>
+        {displayMetrics.length > 0 && (
+          <Card className="border-border/50 shadow-sm">
+            <CardContent className="p-4">
+              <div className="text-xs font-medium text-muted-foreground mb-3">Goal Progress</div>
+              <div className="space-y-3">
+                {displayMetrics.map((metric) => {
+                  const stats = getMetricStats(metric.name);
+                  const goal = 80;
+                  const progress = (stats.avg / goal) * 100;
+                  
+                  return (
+                    <div key={metric.name} className="space-y-1.5">
+                      <div className="flex justify-between text-xs">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: metric.color }} />
+                          <span className="font-medium text-foreground">{metric.name}</span>
+                        </div>
+                        <span className="text-muted-foreground">{stats.avg.toFixed(0)}/80</span>
+                      </div>
+                      <div className="w-full bg-muted rounded-full h-1.5">
+                        <div
+                          className="h-1.5 rounded-full transition-all duration-500"
+                          style={{
+                            width: `${Math.min(100, progress)}%`,
+                            backgroundColor: metric.color
+                          }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </CardContent>
           </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Target className="mr-2 h-5 w-5" />
-                Goal Progress (Target: 80/100)
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {displayMetrics.map((metric) => {
-                const stats = getMetricStats(metric.name);
-                const goal = 80;
-                const progress = (stats.avg / goal) * 100;
-                
-                return (
-                  <div key={metric.name} className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="font-medium">{metric.name}</span>
-                      <span className="text-gray-500">{stats.avg.toFixed(0)}/{goal}</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="h-2 rounded-full transition-all duration-300"
-                        style={{
-                          width: `${Math.min(100, progress)}%`,
-                          backgroundColor: metric.color
-                        }}
-                      />
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {progress >= 100 ? "Goal achieved!" : `${(100 - progress).toFixed(0)}% to goal`}
-                    </div>
-                  </div>
-                );
-              })}
-            </CardContent>
-          </Card>
-        </div>
+        )}
       </main>
     </div>
   );

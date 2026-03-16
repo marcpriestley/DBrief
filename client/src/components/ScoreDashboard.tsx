@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { DailyScore, UserMetric } from "@shared/schema";
-import { RefreshCw, Edit, Plus, Settings, Trash2, X } from "lucide-react";
+import { Heart, Edit, Plus, Settings, Trash2 } from "lucide-react";
 import MetricTrendChart from "./MetricTrendChart";
 
 interface ScoreDashboardProps {
@@ -17,7 +17,7 @@ interface ScoreDashboardProps {
 type DialogMode = 'trend' | 'edit' | 'manage' | 'addMetric' | 'editMetric';
 
 const METRIC_COLORS = [
-  "#10B981", "#4F46E5", "#F59E0B", "#EC4899", "#8B5CF6",
+  "#4F46E5", "#10B981", "#F59E0B", "#EC4899", "#8B5CF6",
   "#EF4444", "#06B6D4", "#84CC16", "#F97316", "#6366F1",
   "#14B8A6", "#E11D48", "#7C3AED", "#0EA5E9",
 ];
@@ -59,39 +59,26 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
     enabled: !!selectedMetric,
   });
 
-  const { data: ouraStatus } = useQuery<{ configured: boolean }>({
-    queryKey: ["/api/oura/status"],
-  });
-
-  const syncOuraMutation = useMutation({
-    mutationFn: async (date: string) => {
-      return apiRequest("POST", `/api/oura/sync/${date}`, {});
+  const syncHealthMutation = useMutation({
+    mutationFn: async (data: { date: string; sleepScore?: number; readinessScore?: number; activityScore?: number }) => {
+      return apiRequest("POST", "/api/health/sync", data);
     },
-    onSuccess: (data, date) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/daily-scores", date] });
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/daily-scores", variables.date] });
       queryClient.invalidateQueries({ queryKey: ["/api/user-metrics"] });
       toast({
-        title: "Oura data synced",
-        description: "Your Oura ring data has been updated successfully.",
+        title: "Health data synced",
+        description: "Your Apple Health data has been updated.",
       });
     },
-    onError: (error: any) => {
+    onError: () => {
       toast({
         title: "Sync failed",
-        description: error.message || "Failed to sync Oura data. Please try again.",
+        description: "Could not sync health data. Make sure the app has HealthKit permissions.",
         variant: "destructive",
       });
     },
   });
-
-  useEffect(() => {
-    if (!isToday || !ouraStatus?.configured) return;
-    const hasAutoSyncedScores = scores.some(s => s.isAutoSynced);
-    
-    if (!hasAutoSyncedScores && !syncOuraMutation.isPending) {
-      syncOuraMutation.mutate(today);
-    }
-  }, [ouraStatus, scores, syncOuraMutation.isPending, today, isToday]);
 
   const updateScoreMutation = useMutation({
     mutationFn: async (data: { date: string; metricName: string; value: number }) => {
@@ -105,7 +92,7 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
       const metricName = selectedMetric?.name;
       toast({
         title: "Score updated",
-        description: "Your daily score has been saved successfully.",
+        description: "Your daily score has been saved.",
       });
       if (metricName) {
         queryClient.invalidateQueries({ queryKey: ["/api/metric-history", metricName] });
@@ -213,10 +200,6 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
     });
   };
 
-  const handleSyncOura = () => {
-    syncOuraMutation.mutate(today);
-  };
-
   const handleOpenManage = () => {
     setSelectedMetric(null);
     setDialogMode('manage');
@@ -251,103 +234,119 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
   };
 
   const isManageOpen = dialogMode === 'manage' || dialogMode === 'addMetric' || dialogMode === 'editMetric';
+  const activeMetrics = metrics.filter(m => m.isActive);
 
   return (
     <>
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-semibold text-gray-900">
-          {isToday ? "Daily Scores" : `Scores for ${new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
-        </h2>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleOpenManage}
-          >
-            <Settings className="w-4 h-4 mr-1" />
-            Manage
-          </Button>
-          {isToday && ouraStatus?.configured && (
-            <Button 
-              variant="outline" 
+      <div className="bg-card rounded-xl border border-border/50 shadow-sm overflow-hidden">
+        <div className="px-4 py-3 flex justify-between items-center border-b border-border/30">
+          <h2 className="text-sm font-semibold text-foreground tracking-tight">
+            {isToday ? "Daily Scores" : `Scores — ${new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
+          </h2>
+          <div className="flex items-center gap-1.5">
+            <Button
+              variant="ghost"
               size="sm"
-              onClick={handleSyncOura}
-              disabled={syncOuraMutation.isPending}
+              onClick={handleOpenManage}
+              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
             >
-              <RefreshCw className={`w-4 h-4 mr-2 ${syncOuraMutation.isPending ? 'animate-spin' : ''}`} />
-              {syncOuraMutation.isPending ? "Syncing..." : "Sync Oura"}
+              <Settings className="w-3.5 h-3.5 mr-1" />
+              Manage
             </Button>
-          )}
+          </div>
         </div>
-      </div>
-      
-      {metrics.filter(m => m.isActive).length === 0 && (
-        <div className="text-center py-8 bg-white rounded-xl shadow-sm border border-gray-100">
-          <p className="text-gray-500 mb-3">No metrics set up yet</p>
-          <Button variant="outline" size="sm" onClick={handleOpenManage}>
-            <Plus className="w-4 h-4 mr-1" />
-            Add Your First Metric
-          </Button>
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-        {metrics.filter(m => m.isActive).map((metric) => {
-          const score = getScoreForMetric(metric.name);
-          const value = score?.value;
-          const maxValue = metric.maxValue || 100;
-          const percentage = value !== undefined ? Math.min(100, Math.max(0, (value / maxValue) * 100)) : 0;
-
-          return (
-            <div 
-              key={metric.id} 
-              onClick={() => handleMetricClick(metric)}
-              className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-center cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
-            >
-              <div className="relative w-16 h-16 mx-auto mb-3">
-                <div 
-                  className="w-full h-full rounded-full"
-                  style={{
-                    background: value !== undefined
-                      ? `conic-gradient(from 0deg, ${metric.color} ${percentage}%, #E5E7EB ${percentage}%)`
-                      : '#F3F4F6'
-                  }}
-                />
-                <div className="absolute inset-0 flex items-center justify-center">
-                  {value !== undefined ? (
-                    <span className="text-lg font-semibold text-gray-900">
-                      {value}
-                    </span>
-                  ) : (
-                    <span className="text-sm text-gray-400">--</span>
-                  )}
-                </div>
-              </div>
-              <h3 className="text-sm font-medium text-gray-700">{metric.name}</h3>
-              <p className="text-xs text-gray-500 mt-1">
-                {score?.isAutoSynced ? "Auto-synced" : (value !== undefined ? "Tap to edit" : "Tap to add")}
-              </p>
+        
+        {activeMetrics.length === 0 ? (
+          <div className="text-center py-10 px-4">
+            <div className="w-10 h-10 rounded-full bg-muted/60 flex items-center justify-center mx-auto mb-3">
+              <Heart className="w-4 h-4 text-muted-foreground" />
             </div>
-          );
-        })}
+            <p className="text-sm text-muted-foreground mb-3">No metrics set up yet</p>
+            <Button variant="outline" size="sm" onClick={handleOpenManage} className="h-8 text-xs">
+              <Plus className="w-3.5 h-3.5 mr-1" />
+              Add Your First Metric
+            </Button>
+          </div>
+        ) : (
+          <div className="p-3">
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+              {activeMetrics.map((metric) => {
+                const score = getScoreForMetric(metric.name);
+                const value = score?.value;
+                const maxValue = metric.maxValue || 100;
+                const percentage = value !== undefined ? Math.min(100, Math.max(0, (value / maxValue) * 100)) : 0;
+                const ringSize = 52;
+                const strokeWidth = 3.5;
+                const radius = (ringSize - strokeWidth) / 2;
+                const circumference = 2 * Math.PI * radius;
+                const strokeDashoffset = circumference - (percentage / 100) * circumference;
+
+                return (
+                  <button
+                    key={metric.id} 
+                    onClick={() => handleMetricClick(metric)}
+                    className="flex flex-col items-center py-3 px-1 rounded-lg hover:bg-muted/40 transition-colors cursor-pointer group"
+                  >
+                    <div className="relative" style={{ width: ringSize, height: ringSize }}>
+                      <svg width={ringSize} height={ringSize} className="-rotate-90">
+                        <circle
+                          cx={ringSize / 2}
+                          cy={ringSize / 2}
+                          r={radius}
+                          fill="none"
+                          stroke="hsl(var(--border))"
+                          strokeWidth={strokeWidth}
+                        />
+                        {value !== undefined && (
+                          <circle
+                            cx={ringSize / 2}
+                            cy={ringSize / 2}
+                            r={radius}
+                            fill="none"
+                            stroke={metric.color}
+                            strokeWidth={strokeWidth}
+                            strokeLinecap="round"
+                            strokeDasharray={circumference}
+                            strokeDashoffset={strokeDashoffset}
+                            className="transition-all duration-500"
+                          />
+                        )}
+                      </svg>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        {value !== undefined ? (
+                          <span className="text-sm font-semibold text-foreground">{value}</span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">--</span>
+                        )}
+                      </div>
+                    </div>
+                    <span className="text-[11px] font-medium text-muted-foreground mt-1.5 leading-tight text-center line-clamp-2">{metric.name}</span>
+                    {score?.isAutoSynced && (
+                      <span className="text-[9px] text-primary/70 mt-0.5">synced</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Score Edit / Trend Dialog */}
       <Dialog open={!!selectedMetric && !isManageOpen} onOpenChange={(open) => !open && handleCloseDialog()}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-md sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>
-              {dialogMode === 'trend' ? `${selectedMetric?.name} Trends` : `Update ${selectedMetric?.name} Score`}
+            <DialogTitle className="text-base">
+              {dialogMode === 'trend' ? `${selectedMetric?.name} Trends` : `Update ${selectedMetric?.name}`}
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-xs">
               {dialogMode === 'trend' 
-                ? `14-day trend for ${selectedMetric?.name}. Tap Edit to update the score.`
-                : `Enter a score from 0 to ${selectedMetric?.maxValue || 100} for ${selectedMetric?.name}.`
+                ? `14-day trend for ${selectedMetric?.name}.`
+                : `Enter a score from 0 to ${selectedMetric?.maxValue || 100}.`
               }
             </DialogDescription>
           </DialogHeader>
           
-          <div className="py-4">
+          <div className="py-2">
             {dialogMode === 'trend' && selectedMetric ? (
               <div className="space-y-4">
                 <MetricTrendChart 
@@ -356,33 +355,40 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
                   selectedDate={today}
                 />
                 <div className="flex justify-end">
-                  <Button onClick={() => setDialogMode('edit')}>
-                    <Edit className="w-4 h-4 mr-2" />
+                  <Button size="sm" onClick={() => setDialogMode('edit')}>
+                    <Edit className="w-3.5 h-3.5 mr-1.5" />
                     Edit Score
                   </Button>
                 </div>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-5">
                 <div className="text-center">
-                  <div 
-                    className="w-20 h-20 mx-auto mb-4 rounded-full"
-                    style={{
-                      background: selectedMetric 
-                        ? `conic-gradient(from 0deg, ${selectedMetric.color} ${Math.min(100, Math.max(0, ((parseInt(scoreValue) || 0) / (selectedMetric.maxValue || 100)) * 100))}%, #E5E7EB ${Math.min(100, Math.max(0, ((parseInt(scoreValue) || 0) / (selectedMetric.maxValue || 100)) * 100))}%)`
-                        : '#E5E7EB'
-                    }}
-                  >
-                    <div className="w-full h-full flex items-center justify-center">
-                      <span className="text-xl font-semibold text-gray-900">
-                        {scoreValue || 0}
-                      </span>
-                    </div>
-                  </div>
+                  {selectedMetric && (() => {
+                    const val = parseInt(scoreValue) || 0;
+                    const maxVal = selectedMetric.maxValue || 100;
+                    const pct = Math.min(100, Math.max(0, (val / maxVal) * 100));
+                    const size = 80;
+                    const sw = 5;
+                    const r = (size - sw) / 2;
+                    const c = 2 * Math.PI * r;
+                    const offset = c - (pct / 100) * c;
+                    return (
+                      <div className="relative inline-block" style={{ width: size, height: size }}>
+                        <svg width={size} height={size} className="-rotate-90">
+                          <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="hsl(var(--border))" strokeWidth={sw} />
+                          <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={selectedMetric.color} strokeWidth={sw} strokeLinecap="round" strokeDasharray={c} strokeDashoffset={offset} className="transition-all duration-300" />
+                        </svg>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <span className="text-xl font-bold text-foreground">{scoreValue || 0}</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
                 
                 <div>
-                  <Label htmlFor="score">Score (0-{selectedMetric?.maxValue || 100})</Label>
+                  <Label htmlFor="score" className="text-xs">Score (0-{selectedMetric?.maxValue || 100})</Label>
                   <Input
                     id="score"
                     type="number"
@@ -390,17 +396,18 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
                     max={selectedMetric?.maxValue || 100}
                     value={scoreValue}
                     onChange={(e) => setScoreValue(e.target.value)}
-                    placeholder={`Enter score from 0 to ${selectedMetric?.maxValue || 100}`}
+                    placeholder={`Enter score`}
                     className="mt-1"
                   />
                 </div>
                 
-                <div className="flex space-x-2">
+                <div className="flex gap-2">
                   <Button 
                     variant="outline" 
                     className="flex-1"
                     onClick={handleViewTrendsClick}
                     disabled={updateScoreMutation.isPending}
+                    size="sm"
                   >
                     View Trends
                   </Button>
@@ -408,6 +415,7 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
                     className="flex-1"
                     onClick={handleSaveScore}
                     disabled={updateScoreMutation.isPending}
+                    size="sm"
                   >
                     {updateScoreMutation.isPending ? "Saving..." : "Save"}
                   </Button>
@@ -418,69 +426,59 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Manage Metrics Dialog */}
       <Dialog open={isManageOpen} onOpenChange={(open) => { if (!open) { setDialogMode('trend'); setSelectedMetric(null); } }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>
-              {dialogMode === 'addMetric' ? 'Add New Metric' : dialogMode === 'editMetric' ? 'Edit Metric' : 'Manage Metrics'}
+            <DialogTitle className="text-base">
+              {dialogMode === 'addMetric' ? 'Add Metric' : dialogMode === 'editMetric' ? 'Edit Metric' : 'Manage Metrics'}
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-xs">
               {dialogMode === 'addMetric' 
                 ? 'Create a new metric to track.'
                 : dialogMode === 'editMetric'
-                ? 'Update the name or color of this metric.'
-                : 'Add, edit, or remove metrics you want to track.'}
+                ? 'Update the name or color.'
+                : 'Add, edit, or remove your tracked metrics.'}
             </DialogDescription>
           </DialogHeader>
 
           {dialogMode === 'manage' && (
-            <div className="space-y-2 py-2">
+            <div className="space-y-1.5 py-1">
               {metrics.filter(m => m.isActive).map((metric) => (
-                <div key={metric.id} className="flex items-center justify-between p-3 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className="w-4 h-4 rounded-full" style={{ backgroundColor: metric.color }} />
-                    <span className="text-sm font-medium">{metric.name}</span>
+                <div key={metric.id} className="flex items-center justify-between p-2.5 rounded-lg border border-border/60 hover:border-border transition-colors">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: metric.color }} />
+                    <span className="text-sm font-medium text-foreground">{metric.name}</span>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => handleOpenEditMetric(metric)}
-                    >
-                      <Edit className="h-3.5 w-3.5" />
+                  <div className="flex items-center gap-0.5">
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleOpenEditMetric(metric)}>
+                      <Edit className="h-3 w-3" />
                     </Button>
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                      className="h-7 w-7 text-destructive/60 hover:text-destructive hover:bg-destructive/10"
                       onClick={() => {
                         if (confirm(`Remove "${metric.name}"? This won't delete any saved scores.`)) {
                           deleteMetricMutation.mutate(metric.id);
                         }
                       }}
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <Trash2 className="h-3 w-3" />
                     </Button>
                   </div>
                 </div>
               ))}
-              <Button
-                variant="outline"
-                className="w-full mt-3"
-                onClick={handleOpenAddMetric}
-              >
-                <Plus className="w-4 h-4 mr-2" />
+              <Button variant="outline" className="w-full mt-2 h-9 text-xs" onClick={handleOpenAddMetric}>
+                <Plus className="w-3.5 h-3.5 mr-1.5" />
                 Add Metric
               </Button>
             </div>
           )}
 
           {dialogMode === 'addMetric' && (
-            <div className="space-y-4 py-2">
+            <div className="space-y-4 py-1">
               <div>
-                <Label htmlFor="metric-name">Name</Label>
+                <Label htmlFor="metric-name" className="text-xs">Name</Label>
                 <Input
                   id="metric-name"
                   value={newMetricName}
@@ -490,13 +488,13 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
                 />
               </div>
               <div>
-                <Label>Color</Label>
-                <div className="flex flex-wrap gap-2 mt-2">
+                <Label className="text-xs">Color</Label>
+                <div className="flex flex-wrap gap-1.5 mt-2">
                   {METRIC_COLORS.map((color) => (
                     <button
                       key={color}
-                      className={`w-8 h-8 rounded-full border-2 transition-all ${
-                        newMetricColor === color ? 'border-gray-900 scale-110' : 'border-transparent'
+                      className={`w-7 h-7 rounded-full border-2 transition-all ${
+                        newMetricColor === color ? 'border-foreground scale-110' : 'border-transparent hover:scale-105'
                       }`}
                       style={{ backgroundColor: color }}
                       onClick={() => setNewMetricColor(color)}
@@ -505,14 +503,10 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
                 </div>
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" className="flex-1" onClick={() => setDialogMode('manage')}>
+                <Button variant="outline" className="flex-1" size="sm" onClick={() => setDialogMode('manage')}>
                   Back
                 </Button>
-                <Button 
-                  className="flex-1" 
-                  onClick={handleSaveNewMetric}
-                  disabled={addMetricMutation.isPending}
-                >
+                <Button className="flex-1" size="sm" onClick={handleSaveNewMetric} disabled={addMetricMutation.isPending}>
                   {addMetricMutation.isPending ? "Adding..." : "Add Metric"}
                 </Button>
               </div>
@@ -520,9 +514,9 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
           )}
 
           {dialogMode === 'editMetric' && selectedMetric && (
-            <div className="space-y-4 py-2">
+            <div className="space-y-4 py-1">
               <div>
-                <Label htmlFor="edit-metric-name">Name</Label>
+                <Label htmlFor="edit-metric-name" className="text-xs">Name</Label>
                 <Input
                   id="edit-metric-name"
                   value={editMetricName}
@@ -531,13 +525,13 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
                 />
               </div>
               <div>
-                <Label>Color</Label>
-                <div className="flex flex-wrap gap-2 mt-2">
+                <Label className="text-xs">Color</Label>
+                <div className="flex flex-wrap gap-1.5 mt-2">
                   {METRIC_COLORS.map((color) => (
                     <button
                       key={color}
-                      className={`w-8 h-8 rounded-full border-2 transition-all ${
-                        editMetricColor === color ? 'border-gray-900 scale-110' : 'border-transparent'
+                      className={`w-7 h-7 rounded-full border-2 transition-all ${
+                        editMetricColor === color ? 'border-foreground scale-110' : 'border-transparent hover:scale-105'
                       }`}
                       style={{ backgroundColor: color }}
                       onClick={() => setEditMetricColor(color)}
@@ -546,14 +540,10 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
                 </div>
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" className="flex-1" onClick={() => setDialogMode('manage')}>
+                <Button variant="outline" className="flex-1" size="sm" onClick={() => setDialogMode('manage')}>
                   Back
                 </Button>
-                <Button 
-                  className="flex-1" 
-                  onClick={handleSaveEditMetric}
-                  disabled={updateMetricMutation.isPending}
-                >
+                <Button className="flex-1" size="sm" onClick={handleSaveEditMetric} disabled={updateMetricMutation.isPending}>
                   {updateMetricMutation.isPending ? "Saving..." : "Save Changes"}
                 </Button>
               </div>
