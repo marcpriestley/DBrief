@@ -32,7 +32,7 @@ DBrief is a daily journaling application designed to enhance self-reflection and
 **Health Tracking**: Apple Health (HealthKit via Capacitor) integration for automatic synchronization of Sleep Quality, Readiness, and Activity metrics, normalized to a 0-100 scale.
 **Notifications**: Web Push API with service workers and VAPID keys for secure push notifications and cron-scheduled daily reminders.
 **Key Features**:
-- AI Debrief: Rosebud-style conversational reflection with personalized AI prompts, streaming responses via SSE, and auto-summarization. User responses are saved as journal entries.
+- AI Debrief: Rosebud-style conversational reflection with 3 core prompts, then opt-in to continue deeper. Users choose "keep going" or "that's enough" at each checkpoint. Voice + text input. Streaming via SSE. Auto-summarization. User responses saved as journal entries.
 - Customizable Metric Tracking: Interactive 0-100 score circles with simplified input flow.
 - Streak Tracking: Duolingo-style system with milestone celebrations and motivational messages.
 - Trends & Analytics: Dedicated page with various timeline options and AI-driven insights, focusing on user-input data.

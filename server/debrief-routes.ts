@@ -44,10 +44,12 @@ async function gatherDayContext(userId: number, date: string) {
   return { scoreMap, goalSummary, moodAvg, journalContent, hasScores: scores.length > 0, hasGoals: goals.length > 0, hasMoods: moods.length > 0 };
 }
 
-function buildSystemPrompt(context: Awaited<ReturnType<typeof gatherDayContext>>, date: string) {
+function buildSystemPrompt(context: Awaited<ReturnType<typeof gatherDayContext>>, date: string, userMessageCount: number) {
   const today = new Date();
   const debriefDate = new Date(date + "T12:00:00");
   const isToday = date === `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+  const phase = userMessageCount < 3 ? "core" : "extended";
 
   return `You are the user's personal debrief engineer — think of yourself as a thoughtful race engineer reviewing the day's data with them. Your tone is warm, direct, and perceptive. No corporate speak. No cheesy metaphors. Just genuine, sharp observation.
 
@@ -61,14 +63,26 @@ ${context.goalSummary}
 ${context.moodAvg}
 ${context.journalContent ? `Earlier journal notes: "${context.journalContent}"` : ""}
 
+CONVERSATION STRUCTURE:
+This is exchange ${userMessageCount + 1}. The user has replied ${userMessageCount} time(s) so far.
+${phase === "core" ? `
+- You are in the CORE phase (exchanges 1-3). Ask one meaningful, focused question per response.
+- Exchange 1: Start with something that acknowledges their data or asks how things went overall.
+- Exchange 2: Go deeper on whatever thread they opened — follow up on what they said.
+- Exchange 3: This is the LAST core question. Make it count — tie threads together, or explore something they haven't touched yet. After their answer, the app will ask if they want to continue.
+` : `
+- You are in the EXTENDED phase. The user chose to keep going, so continue the conversation naturally.
+- Keep asking one question at a time. Go deeper, explore new angles, or follow up on earlier threads.
+- Each response should feel worthwhile — don't pad or repeat.
+`}
+
 GUIDELINES:
-- Start with a brief, personalized opening that references their actual data (if available). If no data yet, start with a simple open-ended prompt about their day.
 - Ask ONE question at a time. Keep it conversational, not clinical.
-- After 3-5 exchanges, naturally wrap up with a brief reflection or acknowledgment. Don't force more questions.
 - Reference specific data points when relevant (scores, goals, mood) but weave them in naturally.
 - If they give short answers, gently probe deeper. If they're expressive, reflect back what you hear.
 - Avoid: bullet points, numbered lists, emojis, motivational platitudes, F1 jargon.
-- Keep responses concise — 1-3 sentences max per response.`;
+- Keep responses concise — 1-3 sentences max per response.
+- Do NOT say "would you like to continue?" or offer to wrap up — the app handles that UI.`;
 }
 
 export function registerDebriefRoutes(app: Express): void {
@@ -121,7 +135,7 @@ export function registerDebriefRoutes(app: Express): void {
       }
 
       const context = await gatherDayContext(userId, date);
-      const systemPrompt = buildSystemPrompt(context, date);
+      const systemPrompt = buildSystemPrompt(context, date, 0);
 
       const response = await openai.chat.completions.create({
         model: "gpt-4o",
@@ -178,8 +192,9 @@ export function registerDebriefRoutes(app: Express): void {
         .where(eq(debriefMessages.debriefId, debriefId))
         .orderBy(debriefMessages.createdAt);
 
+      const userMessageCount = allMessages.filter(m => m.role === "user").length;
       const context = await gatherDayContext(userId, debrief.date);
-      const systemPrompt = buildSystemPrompt(context, debrief.date);
+      const systemPrompt = buildSystemPrompt(context, debrief.date, userMessageCount);
 
       const chatMessages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
         { role: "system", content: systemPrompt },
