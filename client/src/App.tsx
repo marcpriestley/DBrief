@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import Dashboard from "@/pages/dashboard";
 import Trends from "@/pages/trends";
 import Welcome from "@/pages/welcome";
+import OnboardingFlow from "@/components/OnboardingFlow";
 import NotFound from "@/pages/not-found";
 
 function AuthenticatedRouter() {
@@ -31,6 +32,10 @@ function AuthenticatedRouter() {
 
   if (!user) {
     return <Welcome />;
+  }
+
+  if (!user.hasCompletedOnboarding) {
+    return <OnboardingFlow username={user.username} />;
   }
 
   return (

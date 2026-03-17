@@ -47,7 +47,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.createGoalTemplate({ userId: user.id, title: "Make my bed", sortOrder: 0, isActive: true, recurring: true });
       
       (req.session as any).userId = user.id;
-      res.json({ id: user.id, username: user.username });
+      res.json({
+        id: user.id,
+        username: user.username,
+        hasCompletedOnboarding: user.hasCompletedOnboarding ?? false,
+        journalPreference: user.journalPreference ?? "evening",
+      });
     } catch (error) {
       console.error("Registration error:", error);
       res.status(500).json({ message: "Failed to create account" });
@@ -69,7 +74,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Invalid email or password" });
       }
       (req.session as any).userId = user.id;
-      res.json({ id: user.id, username: user.username });
+      res.json({
+        id: user.id,
+        username: user.username,
+        hasCompletedOnboarding: user.hasCompletedOnboarding ?? false,
+        journalPreference: user.journalPreference ?? "evening",
+      });
     } catch (error) {
       res.status(500).json({ message: "Failed to sign in" });
     }
@@ -85,7 +95,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!user) {
         return res.status(401).json({ message: "Not authenticated" });
       }
-      res.json({ id: user.id, username: user.username });
+      res.json({
+        id: user.id,
+        username: user.username,
+        hasCompletedOnboarding: user.hasCompletedOnboarding ?? false,
+        journalPreference: user.journalPreference ?? "evening",
+      });
     } catch (error) {
       res.status(500).json({ message: "Failed to get user" });
     }
@@ -101,6 +116,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       res.status(500).json({ message: "Failed to sign out" });
+    }
+  });
+
+  app.post("/api/onboarding/complete", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { journalPreference } = req.body;
+      const pref = journalPreference === "morning" ? "morning" : "evening";
+      const updatedUser = await storage.updateUserSettings(userId, {
+        hasCompletedOnboarding: true,
+        journalPreference: pref,
+      });
+      if (!updatedUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      res.json({ success: true, journalPreference: pref });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to complete onboarding" });
     }
   });
 

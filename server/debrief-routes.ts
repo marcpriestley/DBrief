@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import OpenAI from "openai";
 import { db } from "./db";
-import { debriefs, debriefMessages, dailyScores, journalEntries, moodCheckins, dailyGoals, userMetrics } from "@shared/schema";
+import { debriefs, debriefMessages, dailyScores, journalEntries, moodCheckins, dailyGoals, userMetrics, users } from "@shared/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { encrypt, decrypt } from "./encryption";
 
@@ -44,17 +44,23 @@ async function gatherDayContext(userId: number, date: string) {
   return { scoreMap, goalSummary, moodAvg, journalContent, hasScores: scores.length > 0, hasGoals: goals.length > 0, hasMoods: moods.length > 0 };
 }
 
-function buildSystemPrompt(context: Awaited<ReturnType<typeof gatherDayContext>>, date: string, userMessageCount: number) {
+function buildSystemPrompt(context: Awaited<ReturnType<typeof gatherDayContext>>, date: string, userMessageCount: number, journalPreference: string = "evening") {
   const today = new Date();
   const debriefDate = new Date(date + "T12:00:00");
   const isToday = date === `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const isMorning = journalPreference === "morning";
 
   const phase = userMessageCount < 3 ? "core" : "extended";
+
+  const timingContext = isMorning
+    ? "The user journals in the morning, reflecting on yesterday. Frame questions about 'yesterday' rather than 'today'."
+    : "The user journals in the evening, reflecting on today while it's fresh.";
 
   return `You are the user's personal debrief engineer — think of yourself as a thoughtful race engineer reviewing the day's data with them. Your tone is warm, direct, and perceptive. No corporate speak. No cheesy metaphors. Just genuine, sharp observation.
 
 ROLE: Guide a daily reflection conversation. Ask one focused question at a time. Listen carefully to their response and follow up meaningfully before moving on.
 
+TIMING: ${timingContext}
 ${isToday ? "This is today's debrief." : `This is a retrospective debrief for ${debriefDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}.`}
 
 AVAILABLE DATA:
@@ -135,7 +141,8 @@ export function registerDebriefRoutes(app: Express): void {
       }
 
       const context = await gatherDayContext(userId, date);
-      const systemPrompt = buildSystemPrompt(context, date, 0);
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const systemPrompt = buildSystemPrompt(context, date, 0, user?.journalPreference || "evening");
 
       const response = await openai.chat.completions.create({
         model: "gpt-4o",
@@ -194,7 +201,8 @@ export function registerDebriefRoutes(app: Express): void {
 
       const userMessageCount = allMessages.filter(m => m.role === "user").length;
       const context = await gatherDayContext(userId, debrief.date);
-      const systemPrompt = buildSystemPrompt(context, debrief.date, userMessageCount);
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const systemPrompt = buildSystemPrompt(context, debrief.date, userMessageCount, user?.journalPreference || "evening");
 
       const chatMessages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
         { role: "system", content: systemPrompt },
