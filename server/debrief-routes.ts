@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import OpenAI from "openai";
 import { db } from "./db";
-import { debriefs, debriefMessages, dailyScores, journalEntries, moodCheckins, dailyGoals, userMetrics, users } from "@shared/schema";
+import { debriefs, debriefMessages, dailyScores, journalEntries, moodCheckins, dailyGoals, userMetrics, users, infiniteGoals, longTermGoals } from "@shared/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { encrypt, decrypt } from "./encryption";
 
@@ -24,24 +24,36 @@ function requireAuth(req: Request, res: Response): number | null {
 }
 
 async function gatherDayContext(userId: number, date: string) {
-  const [scores, metrics, goals, moods, entries] = await Promise.all([
+  const [scores, metrics, goals, moods, entries, infiniteGoalRows, ltGoals] = await Promise.all([
     db.select().from(dailyScores).where(and(eq(dailyScores.userId, userId), eq(dailyScores.date, date))),
     db.select().from(userMetrics).where(and(eq(userMetrics.userId, userId), eq(userMetrics.isActive, true))),
     db.select().from(dailyGoals).where(and(eq(dailyGoals.userId, userId), eq(dailyGoals.date, date))),
     db.select().from(moodCheckins).where(and(eq(moodCheckins.userId, userId), eq(moodCheckins.date, date))),
     db.select().from(journalEntries).where(and(eq(journalEntries.userId, userId), eq(journalEntries.date, date))),
+    db.select().from(infiniteGoals).where(eq(infiniteGoals.userId, userId)).limit(1),
+    db.select().from(longTermGoals).where(and(eq(longTermGoals.userId, userId), eq(longTermGoals.isActive, true))),
   ]);
 
   const scoreMap = scores.map(s => `${s.metricName}: ${s.value}/100`).join(", ");
   const goalSummary = goals.length > 0
-    ? `Goals: ${goals.filter(g => g.completed).length}/${goals.length} completed (${goals.map(g => `${g.title}: ${g.completed ? "done" : "not done"}`).join(", ")})`
-    : "No goals set today";
+    ? `Daily goals: ${goals.filter(g => g.completed).length}/${goals.length} completed (${goals.map(g => `${g.title}: ${g.completed ? "done" : "not done"}`).join(", ")})`
+    : "No daily goals set today";
   const moodAvg = moods.length > 0
     ? `Mood: ${Math.round(moods.reduce((a, m) => a + m.value, 0) / moods.length)}/100 (${moods.length} check-in${moods.length > 1 ? "s" : ""})`
     : "No mood check-ins yet";
   const journalContent = entries.length > 0 ? decrypt(entries[0].content) : "";
+  const infiniteGoalContent = infiniteGoalRows.length > 0 ? decrypt(infiniteGoalRows[0].content) : null;
+  const longTermGoalsList = ltGoals.map(g => decrypt(g.title));
 
-  return { scoreMap, goalSummary, moodAvg, journalContent, hasScores: scores.length > 0, hasGoals: goals.length > 0, hasMoods: moods.length > 0 };
+  const debriefDate = new Date(date + "T12:00:00");
+  const dayOfWeek = debriefDate.getDay();
+  const isWeeklyAlignmentDay = dayOfWeek === 0;
+
+  return {
+    scoreMap, goalSummary, moodAvg, journalContent,
+    hasScores: scores.length > 0, hasGoals: goals.length > 0, hasMoods: moods.length > 0,
+    infiniteGoalContent, longTermGoalsList, isWeeklyAlignmentDay,
+  };
 }
 
 function buildSystemPrompt(context: Awaited<ReturnType<typeof gatherDayContext>>, date: string, userMessageCount: number, journalPreference: string = "evening") {
@@ -56,37 +68,46 @@ function buildSystemPrompt(context: Awaited<ReturnType<typeof gatherDayContext>>
     ? "The user journals in the morning, reflecting on yesterday. Frame questions about 'yesterday' rather than 'today'."
     : "The user journals in the evening, reflecting on today while it's fresh.";
 
-  return `You are the user's personal debrief engineer — think of yourself as a thoughtful race engineer reviewing the day's data with them. Your tone is warm, direct, and perceptive. No corporate speak. No cheesy metaphors. Just genuine, sharp observation.
+  const infiniteGoalSection = context.infiniteGoalContent
+    ? `\nINFINITE GOAL: "${context.infiniteGoalContent}"
+${context.isWeeklyAlignmentDay ? `TODAY IS THE WEEKLY ALIGNMENT CHECK. At some point during the conversation (ideally exchange 2 or 3), naturally ask how this week's actions have moved the needle toward their infinite goal. Don't force it — weave it in based on what they share.` : ""}`
+    : `\nThe user hasn't set an infinite goal yet. ${context.isWeeklyAlignmentDay ? "If the conversation flows naturally toward purpose or direction, gently suggest they might benefit from setting one — but only if it fits organically." : ""}`;
 
-ROLE: Guide a daily reflection conversation. Ask one focused question at a time. Listen carefully to their response and follow up meaningfully before moving on.
+  const ltGoalsSection = context.longTermGoalsList.length > 0
+    ? `\nLong-term targets: ${context.longTermGoalsList.join(", ")}`
+    : "";
+
+  return `You are the user's performance engineer — like an F1 race engineer reviewing telemetry with their driver after a session. Your job is to help them extract maximum performance from their day. You're warm but direct, perceptive, and focused on what moves the needle. No therapy speak. No corporate platitudes. Just sharp, genuine analysis of how they're performing and where they can gain an edge.
+
+ROLE: Run a daily performance debrief. One focused question at a time. Listen to their response. Follow up on what matters before moving on. Everything connects back to helping them perform better tomorrow.
 
 TIMING: ${timingContext}
 ${isToday ? "This is today's debrief." : `This is a retrospective debrief for ${debriefDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}.`}
 
-AVAILABLE DATA:
-${context.hasScores ? `Scores: ${context.scoreMap}` : "No scores logged yet."}
+TELEMETRY:
+${context.hasScores ? `Performance scores: ${context.scoreMap}` : "No scores logged yet."}
 ${context.goalSummary}
 ${context.moodAvg}
-${context.journalContent ? `Earlier journal notes: "${context.journalContent}"` : ""}
+${context.journalContent ? `Session notes: "${context.journalContent}"` : ""}${infiniteGoalSection}${ltGoalsSection}
 
 CONVERSATION STRUCTURE:
 This is exchange ${userMessageCount + 1}. The user has replied ${userMessageCount} time(s) so far.
 ${phase === "core" ? `
 - You are in the CORE phase (exchanges 1-3). Ask one meaningful, focused question per response.
-- Exchange 1: Start with something that acknowledges their data or asks how things went overall.
-- Exchange 2: Go deeper on whatever thread they opened — follow up on what they said.
-- Exchange 3: This is the LAST core question. Make it count — tie threads together, or explore something they haven't touched yet. After their answer, the app will ask if they want to continue.
+- Exchange 1: Review the telemetry. Acknowledge their data or ask how the day's session went overall.
+- Exchange 2: Go deeper on whatever thread they opened — follow up on what they shared, probe for the detail that matters.
+- Exchange 3: This is the LAST core question. Make it count — connect the dots, identify a pattern, or challenge them on something they haven't explored. After their answer, the app will offer the option to continue.
 ` : `
-- You are in the EXTENDED phase. The user chose to keep going, so continue the conversation naturally.
-- Keep asking one question at a time. Go deeper, explore new angles, or follow up on earlier threads.
-- Each response should feel worthwhile — don't pad or repeat.
+- You are in the EXTENDED phase. The user chose to keep pushing. Continue the conversation naturally.
+- Keep asking one question at a time. Dig deeper, find new angles, or connect earlier threads.
+- Each response should add value — don't pad or repeat.
 `}
 
 GUIDELINES:
-- Ask ONE question at a time. Keep it conversational, not clinical.
-- Reference specific data points when relevant (scores, goals, mood) but weave them in naturally.
-- If they give short answers, gently probe deeper. If they're expressive, reflect back what you hear.
-- Avoid: bullet points, numbered lists, emojis, motivational platitudes, F1 jargon.
+- Ask ONE question at a time. Conversational, not clinical.
+- Reference specific data points (scores, goals, mood, progress toward targets) — weave them in naturally like reviewing lap data.
+- If they give short answers, probe for the insight underneath. If they're open, reflect back what you're hearing and push it further.
+- Avoid: bullet points, numbered lists, emojis, vague encouragement. Think performance coach, not cheerleader.
 - Keep responses concise — 1-3 sentences max per response.
 - Do NOT say "would you like to continue?" or offer to wrap up — the app handles that UI.`;
 }

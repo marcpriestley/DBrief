@@ -4,7 +4,8 @@ import { storage } from "./storage";
 import { 
   insertJournalEntrySchema, insertDailyScoreSchema, 
   insertUserMetricSchema, insertAIInsightSchema,
-  insertPushSubscriptionSchema
+  insertPushSubscriptionSchema,
+  infiniteGoals, longTermGoals,
 } from "@shared/schema";
 import OpenAI from "openai";
 import type { HealthData } from "./oura";
@@ -13,6 +14,9 @@ import bcrypt from "bcrypt";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { registerChatRoutes } from "./replit_integrations/chat/routes";
 import { registerDebriefRoutes } from "./debrief-routes";
+import { db } from "./db";
+import { eq, and, desc } from "drizzle-orm";
+import { encrypt, decrypt } from "./encryption";
 
 const openai = new OpenAI({ 
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -134,6 +138,153 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true, journalPreference: pref });
     } catch (error) {
       res.status(500).json({ message: "Failed to complete onboarding" });
+    }
+  });
+
+  app.get("/api/infinite-goal", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const [goal] = await db.select().from(infiniteGoals)
+        .where(eq(infiniteGoals.userId, userId))
+        .orderBy(desc(infiniteGoals.updatedAt))
+        .limit(1);
+      if (!goal) return res.json(null);
+      res.json({ ...goal, content: decrypt(goal.content) });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch infinite goal" });
+    }
+  });
+
+  app.post("/api/infinite-goal", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { content } = req.body;
+      if (!content?.trim()) {
+        return res.status(400).json({ message: "Content is required" });
+      }
+      const existing = await db.select().from(infiniteGoals)
+        .where(eq(infiniteGoals.userId, userId));
+      if (existing.length > 0) {
+        const [updated] = await db.update(infiniteGoals)
+          .set({ content: encrypt(content.trim()), updatedAt: new Date() })
+          .where(eq(infiniteGoals.id, existing[0].id))
+          .returning();
+        return res.json({ ...updated, content: content.trim() });
+      }
+      const [goal] = await db.insert(infiniteGoals)
+        .values({ userId, content: encrypt(content.trim()) })
+        .returning();
+      res.json({ ...goal, content: content.trim() });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to save infinite goal" });
+    }
+  });
+
+  app.post("/api/infinite-goal/ai-assist", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { input } = req.body;
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "system",
+            content: `You help people articulate their infinite goal — an overarching aspiration that can never be fully achieved but always drives them forward. Think of it like a Formula 1 team's mission: they never stop pursuing perfection.
+
+The infinite goal should be:
+- Personal and meaningful, not generic
+- Aspirational yet authentic — it should feel like THEM
+- Impossible to fully "complete" — it's a direction, not a destination
+- Concise — one powerful sentence, no more than 15 words
+
+If the user gives you a rough idea, refine it. If they're unsure, ask one pointed question to help them find it. Return ONLY the refined goal text, nothing else. If you need more info, ask ONE short question.`
+          },
+          { role: "user", content: input || "Help me figure out my infinite goal" },
+        ],
+        max_tokens: 100,
+      });
+      res.json({ suggestion: response.choices[0].message.content });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to generate suggestion" });
+    }
+  });
+
+  app.get("/api/long-term-goals", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const goals = await db.select().from(longTermGoals)
+        .where(and(eq(longTermGoals.userId, userId), eq(longTermGoals.isActive, true)))
+        .orderBy(longTermGoals.sortOrder);
+      const decrypted = goals.map(g => ({
+        ...g,
+        title: decrypt(g.title),
+        description: g.description ? decrypt(g.description) : null,
+      }));
+      res.json(decrypted);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch long-term goals" });
+    }
+  });
+
+  app.post("/api/long-term-goals", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { title, description } = req.body;
+      if (!title?.trim()) {
+        return res.status(400).json({ message: "Title is required" });
+      }
+      const existing = await db.select().from(longTermGoals)
+        .where(and(eq(longTermGoals.userId, userId), eq(longTermGoals.isActive, true)));
+      if (existing.length >= 3) {
+        return res.status(400).json({ message: "Maximum of 3 long-term goals allowed" });
+      }
+      const [goal] = await db.insert(longTermGoals)
+        .values({
+          userId,
+          title: encrypt(title.trim()),
+          description: description ? encrypt(description.trim()) : null,
+          sortOrder: existing.length,
+        })
+        .returning();
+      res.json({ ...goal, title: title.trim(), description: description?.trim() || null });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to create long-term goal" });
+    }
+  });
+
+  app.put("/api/long-term-goals/:id", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const id = parseInt(req.params.id);
+      const { title, description } = req.body;
+      const [existing] = await db.select().from(longTermGoals)
+        .where(and(eq(longTermGoals.id, id), eq(longTermGoals.userId, userId)));
+      if (!existing) {
+        return res.status(404).json({ message: "Goal not found" });
+      }
+      const [updated] = await db.update(longTermGoals)
+        .set({
+          ...(title ? { title: encrypt(title.trim()) } : {}),
+          ...(description !== undefined ? { description: description ? encrypt(description.trim()) : null } : {}),
+        })
+        .where(eq(longTermGoals.id, id))
+        .returning();
+      res.json({ ...updated, title: title?.trim() || decrypt(existing.title), description: description?.trim() || (existing.description ? decrypt(existing.description) : null) });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update goal" });
+    }
+  });
+
+  app.delete("/api/long-term-goals/:id", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const id = parseInt(req.params.id);
+      await db.update(longTermGoals)
+        .set({ isActive: false })
+        .where(and(eq(longTermGoals.id, id), eq(longTermGoals.userId, userId)));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete goal" });
     }
   });
 

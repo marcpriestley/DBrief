@@ -90,11 +90,11 @@ export default function OnboardingFlow({ username }: OnboardingFlowProps) {
                   Welcome{firstName ? `, ${firstName}` : ""}
                 </h1>
                 <p className="text-sm text-muted-foreground leading-relaxed max-w-xs mx-auto">
-                  DBrief is your personal space to reflect, track what matters, and notice
-                  patterns in your daily life.
+                  DBrief is your personal performance engineer. Like an F1 team debriefs every
+                  session to find gains, you'll debrief your day to perform better tomorrow.
                 </p>
                 <p className="text-sm text-muted-foreground leading-relaxed max-w-xs mx-auto">
-                  Let's take a quick look at what's here for you.
+                  Let's get you set up for your first session.
                 </p>
               </div>
 
@@ -115,8 +115,8 @@ export default function OnboardingFlow({ username }: OnboardingFlowProps) {
               className="space-y-6"
             >
               <div className="text-center space-y-2">
-                <h2 className="text-xl font-bold text-foreground">What you can do</h2>
-                <p className="text-sm text-muted-foreground">A few things that make DBrief yours.</p>
+                <h2 className="text-xl font-bold text-foreground">Your performance toolkit</h2>
+                <p className="text-sm text-muted-foreground">Everything you need to find your edge, every day.</p>
               </div>
 
               <div className="space-y-3">
@@ -125,28 +125,28 @@ export default function OnboardingFlow({ username }: OnboardingFlowProps) {
                   iconBg="bg-blue-500/10"
                   iconColor="text-blue-500"
                   title="Daily Debrief"
-                  description="A short AI-guided conversation to reflect on your day. Type or speak — it listens, then asks the right follow-ups."
+                  description="Like a post-session debrief with your race engineer. Review your day's performance, find what worked, and spot where you left time on the table."
                 />
                 <FeatureCard
                   icon={<BarChart3 className="h-4 w-4" />}
                   iconBg="bg-emerald-500/10"
                   iconColor="text-emerald-500"
-                  title="Track What Matters"
-                  description="Score your wellness metrics daily with simple sliders. Choose from Apple Health categories or create your own."
+                  title="Performance Telemetry"
+                  description="Track your key metrics daily — energy, sleep, focus, and more. Like monitoring tyre data and fuel loads, except it's you."
                 />
                 <FeatureCard
                   icon={<Flame className="h-4 w-4" />}
                   iconBg="bg-orange-500/10"
                   iconColor="text-orange-500"
-                  title="Streaks & Goals"
-                  description="Build consistency with streaks and set recurring daily goals. Small wins compound."
+                  title="Streaks & Targets"
+                  description="Set daily goals and long-term targets. Consistency compounds — the best teams never miss a session."
                 />
                 <FeatureCard
                   icon={<Sparkles className="h-4 w-4" />}
                   iconBg="bg-violet-500/10"
                   iconColor="text-violet-500"
-                  title="AI Insights"
-                  description="After a few days, you'll start seeing patterns and personalised suggestions based on your entries."
+                  title="Pattern Analysis"
+                  description="After a few sessions, you'll start seeing the patterns in your data — what drives your best performances and what holds you back."
                 />
               </div>
 
@@ -171,9 +171,9 @@ export default function OnboardingFlow({ username }: OnboardingFlowProps) {
               </div>
 
               <div className="space-y-3">
-                <h2 className="text-xl font-bold text-foreground">Your data is safe</h2>
+                <h2 className="text-xl font-bold text-foreground">Your data is locked down</h2>
                 <p className="text-sm text-muted-foreground leading-relaxed max-w-xs mx-auto">
-                  Everything you write is encrypted with AES-256-GCM — the same standard used by banks and governments.
+                  Everything you log is encrypted with AES-256-GCM — the same standard used by banks and governments. Your performance data stays yours.
                 </p>
               </div>
 
@@ -197,7 +197,7 @@ export default function OnboardingFlow({ username }: OnboardingFlowProps) {
               </div>
 
               <p className="text-xs text-muted-foreground/60 max-w-xs mx-auto">
-                This is your private space. Write freely.
+                This is your pit wall. Speak freely.
               </p>
 
               <Button onClick={next} className="w-full max-w-xs h-11">
@@ -217,9 +217,9 @@ export default function OnboardingFlow({ username }: OnboardingFlowProps) {
               className="text-center space-y-6"
             >
               <div className="space-y-3">
-                <h2 className="text-xl font-bold text-foreground">When do you reflect?</h2>
+                <h2 className="text-xl font-bold text-foreground">When do you debrief?</h2>
                 <p className="text-sm text-muted-foreground leading-relaxed max-w-xs mx-auto">
-                  This helps us tailor your debrief prompts. You can change this anytime in settings.
+                  This shapes how your performance engineer frames the conversation. You can change this anytime.
                 </p>
               </div>
 
@@ -238,9 +238,9 @@ export default function OnboardingFlow({ username }: OnboardingFlowProps) {
                     <Sun className={`h-5 w-5 ${journalPreference === "morning" ? "text-amber-500" : "text-muted-foreground"}`} />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-foreground">Morning reflector</p>
+                    <p className="text-sm font-semibold text-foreground">Morning debrief</p>
                     <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                      I journal in the morning about the day before. A fresh perspective on yesterday.
+                      Review yesterday's performance with fresh eyes. Like analysing last race's data before the next session.
                     </p>
                   </div>
                 </button>
@@ -259,9 +259,9 @@ export default function OnboardingFlow({ username }: OnboardingFlowProps) {
                     <Moon className={`h-5 w-5 ${journalPreference === "evening" ? "text-indigo-500" : "text-muted-foreground"}`} />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-foreground">Evening reflector</p>
+                    <p className="text-sm font-semibold text-foreground">Evening debrief</p>
                     <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                      I journal at the end of the day while it's still fresh. Wind down and process.
+                      Debrief while the session is still fresh. Process the day and extract what matters most.
                     </p>
                   </div>
                 </button>
@@ -272,7 +272,7 @@ export default function OnboardingFlow({ username }: OnboardingFlowProps) {
                 disabled={!journalPreference || completeMutation.isPending}
                 className="w-full max-w-xs h-11"
               >
-                {completeMutation.isPending ? "Setting up..." : "Start journaling"}
+                {completeMutation.isPending ? "Setting up..." : "Start my first session"}
                 {!completeMutation.isPending && <ArrowRight className="ml-2 h-4 w-4" />}
               </Button>
             </motion.div>

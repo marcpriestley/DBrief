@@ -7,6 +7,8 @@ import AIInsights from "@/components/AIInsights";
 import SettingsModal from "@/components/SettingsModal";
 import StreakDisplay from "@/components/StreakDisplay";
 import GoalsSection from "@/components/GoalsSection";
+import InfiniteGoalBanner from "@/components/InfiniteGoalBanner";
+import LongTermGoals from "@/components/LongTermGoals";
 import MoodCheckinModal from "@/components/MoodCheckinModal";
 import { Button } from "@/components/ui/button";
 import { Settings, TrendingUp, LogOut, Smile, CalendarCheck } from "lucide-react";
@@ -108,6 +110,8 @@ export default function Dashboard() {
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-5 space-y-5">
+        <InfiniteGoalBanner />
+
         {!isViewingToday && (
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-medium text-muted-foreground">{dateLabel}</h2>
@@ -130,6 +134,8 @@ export default function Dashboard() {
         <section className="bg-card rounded-xl p-4 shadow-sm border border-border/50">
           <GoalsSection selectedDate={selectedDate} />
         </section>
+
+        <LongTermGoals />
 
         <section>
           <DebriefPanel selectedDate={selectedDate} />

@@ -153,6 +153,35 @@ export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions
   createdAt: true,
 });
 
+export const infiniteGoals = pgTable("infinite_goals", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const longTermGoals = pgTable("long_term_goals", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  sortOrder: integer("sort_order").default(0),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertInfiniteGoalSchema = createInsertSchema(infiniteGoals).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertLongTermGoalSchema = createInsertSchema(longTermGoals).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
@@ -168,6 +197,22 @@ export const usersRelations = relations(users, ({ many }) => ({
   pushSubscriptions: many(pushSubscriptions),
   goalTemplates: many(goalTemplates),
   dailyGoals: many(dailyGoals),
+  infiniteGoals: many(infiniteGoals),
+  longTermGoals: many(longTermGoals),
+}));
+
+export const infiniteGoalsRelations = relations(infiniteGoals, ({ one }) => ({
+  user: one(users, {
+    fields: [infiniteGoals.userId],
+    references: [users.id],
+  }),
+}));
+
+export const longTermGoalsRelations = relations(longTermGoals, ({ one }) => ({
+  user: one(users, {
+    fields: [longTermGoals.userId],
+    references: [users.id],
+  }),
 }));
 
 export const goalTemplatesRelations = relations(goalTemplates, ({ one }) => ({
@@ -270,5 +315,9 @@ export type JournalAttachment = typeof journalAttachments.$inferSelect;
 export type InsertJournalAttachment = z.infer<typeof insertJournalAttachmentSchema>;
 export type MoodCheckin = typeof moodCheckins.$inferSelect;
 export type InsertMoodCheckin = z.infer<typeof insertMoodCheckinSchema>;
+export type InfiniteGoal = typeof infiniteGoals.$inferSelect;
+export type InsertInfiniteGoal = z.infer<typeof insertInfiniteGoalSchema>;
+export type LongTermGoal = typeof longTermGoals.$inferSelect;
+export type InsertLongTermGoal = z.infer<typeof insertLongTermGoalSchema>;
 
 export * from "./models/chat";
