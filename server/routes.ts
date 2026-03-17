@@ -247,6 +247,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/user-metrics", async (req, res) => {
     try {
       const userId = getUserId(req);
+      const { name, color, maxValue } = req.body;
+
+      const existing = (await storage.getUserMetrics(userId)).find(
+        m => m.name.toLowerCase() === (name || "").toLowerCase()
+      );
+      if (existing) {
+        const reactivated = await storage.updateUserMetric(existing.id, { isActive: true, color: color || existing.color });
+        return res.json(reactivated);
+      }
+
       const validatedData = insertUserMetricSchema.parse({ ...req.body, userId });
       const metric = await storage.createUserMetric(validatedData);
       res.json(metric);

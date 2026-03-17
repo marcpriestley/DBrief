@@ -13,7 +13,37 @@ import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Bell, BellOff, AlertCircle, CheckCircle2, Heart } from "lucide-react";
+import { Bell, BellOff, AlertCircle, CheckCircle2, Heart, Plus, Check, Info } from "lucide-react";
+import type { UserMetric } from "@shared/schema";
+
+const APPLE_HEALTH_METRICS: {
+  name: string;
+  category: string;
+  color: string;
+  maxValue: number;
+  unit: string;
+}[] = [
+  { name: "Steps",               category: "Activity",     color: "#10B981", maxValue: 20000, unit: "steps" },
+  { name: "Active Energy",       category: "Activity",     color: "#F59E0B", maxValue: 800,   unit: "kcal" },
+  { name: "Exercise Minutes",    category: "Activity",     color: "#3B82F6", maxValue: 60,    unit: "min" },
+  { name: "Stand Hours",         category: "Activity",     color: "#06B6D4", maxValue: 12,    unit: "hrs" },
+  { name: "Flights Climbed",     category: "Activity",     color: "#84CC16", maxValue: 20,    unit: "" },
+  { name: "Walking Distance",    category: "Activity",     color: "#0EA5E9", maxValue: 10,    unit: "km" },
+  { name: "Sleep Duration",      category: "Sleep",        color: "#4F46E5", maxValue: 10,    unit: "hrs" },
+  { name: "Sleep Quality",       category: "Sleep",        color: "#7C3AED", maxValue: 100,   unit: "/100" },
+  { name: "Heart Rate",          category: "Heart",        color: "#EF4444", maxValue: 200,   unit: "bpm" },
+  { name: "Resting Heart Rate",  category: "Heart",        color: "#E11D48", maxValue: 100,   unit: "bpm" },
+  { name: "HRV",                 category: "Heart",        color: "#8B5CF6", maxValue: 120,   unit: "ms" },
+  { name: "Blood Oxygen",        category: "Heart",        color: "#38BDF8", maxValue: 100,   unit: "%" },
+  { name: "Body Weight",         category: "Body",         color: "#EC4899", maxValue: 200,   unit: "kg" },
+  { name: "Body Fat %",          category: "Body",         color: "#F97316", maxValue: 50,    unit: "%" },
+  { name: "BMI",                 category: "Body",         color: "#6366F1", maxValue: 40,    unit: "" },
+  { name: "Mindful Minutes",     category: "Mindfulness",  color: "#14B8A6", maxValue: 60,    unit: "min" },
+  { name: "Respiratory Rate",    category: "Respiratory",  color: "#64748B", maxValue: 30,    unit: "brpm" },
+  { name: "Water",               category: "Nutrition",    color: "#0EA5E9", maxValue: 4,     unit: "L" },
+];
+
+const CATEGORY_ORDER = ["Activity", "Sleep", "Heart", "Body", "Mindfulness", "Respiratory", "Nutrition"];
 
 function NotificationPermissionHelper() {
   const [permissionState, setPermissionState] = useState<NotificationPermission | "unsupported">("default");
@@ -41,7 +71,7 @@ function NotificationPermissionHelper() {
         <AlertCircle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
         <div className="text-xs text-amber-700">
           <p className="font-medium mb-1">Notifications are blocked</p>
-          <ol className="list-decimal ml-3 space-y-0.5 text-[11px]">
+          <ol className="list-decimal ml-3 space-y-0.5 text[11px]">
             <li>Click the lock icon in your address bar</li>
             <li>Find "Notifications" in site settings</li>
             <li>Change from "Block" to "Allow"</li>
@@ -69,18 +99,11 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
-const ALL_HEALTH_METRICS = [
-  { key: "sleep", label: "Sleep Quality" },
-  { key: "readiness", label: "Readiness" },
-  { key: "activity", label: "Activity" },
-];
-
 interface UserSettings {
   notificationsEnabled: boolean;
   reminderTime: string;
   reminderTime2: string;
   timezone: string;
-  healthMetricsEnabled: string[];
 }
 
 export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
@@ -92,17 +115,20 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     enabled: isOpen,
   });
 
+  const { data: userMetrics = [] } = useQuery<UserMetric[]>({
+    queryKey: ["/api/user-metrics"],
+    enabled: isOpen,
+  });
+
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [reminderTime, setReminderTime] = useState("09:00");
   const [reminderTime2, setReminderTime2] = useState("21:00");
-  const [healthMetricsEnabled, setHealthMetricsEnabled] = useState<string[]>(["sleep", "readiness", "activity"]);
 
   useEffect(() => {
     if (settings) {
       setNotificationsEnabled(settings.notificationsEnabled);
       setReminderTime(settings.reminderTime);
       setReminderTime2(settings.reminderTime2);
-      setHealthMetricsEnabled(settings.healthMetricsEnabled ?? ["sleep", "readiness", "activity"]);
     }
   }, [settings]);
 
@@ -119,15 +145,30 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     },
   });
 
-  const toggleHealthMetric = (key: string) => {
-    setHealthMetricsEnabled(prev =>
-      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
-    );
-  };
+  const addMetricMutation = useMutation({
+    mutationFn: async (data: { name: string; color: string; maxValue: number }) => {
+      return apiRequest("POST", "/api/user-metrics", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user-metrics"] });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to add metric.", variant: "destructive" });
+    },
+  });
+
+  const deleteMetricMutation = useMutation({
+    mutationFn: async (id: number) => {
+      return apiRequest("DELETE", `/api/user-metrics/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user-metrics"] });
+    },
+  });
 
   const handleSave = () => {
     const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    updateSettingsMutation.mutate({ notificationsEnabled, reminderTime, reminderTime2, timezone: userTimezone, healthMetricsEnabled });
+    updateSettingsMutation.mutate({ notificationsEnabled, reminderTime, reminderTime2, timezone: userTimezone });
   };
 
   const handleToggleNotifications = async (enabled: boolean) => {
@@ -190,12 +231,30 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     return outputArray;
   };
 
+  const existingMetricNames = new Set(
+    userMetrics.filter(m => m.isActive !== false).map(m => m.name.toLowerCase())
+  );
+
+  const handleToggleHealthMetric = (metric: typeof APPLE_HEALTH_METRICS[0]) => {
+    const existing = userMetrics.find(m => m.name.toLowerCase() === metric.name.toLowerCase());
+    if (existing && existing.isActive !== false) {
+      deleteMetricMutation.mutate(existing.id);
+    } else {
+      addMetricMutation.mutate({ name: metric.name, color: metric.color, maxValue: metric.maxValue });
+    }
+  };
+
+  const groupedMetrics = CATEGORY_ORDER.map(category => ({
+    category,
+    metrics: APPLE_HEALTH_METRICS.filter(m => m.category === category),
+  }));
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-base">Settings</DialogTitle>
-          <DialogDescription className="text-xs">Manage notifications and preferences.</DialogDescription>
+          <DialogDescription className="text-xs">Manage notifications and health metric preferences.</DialogDescription>
         </DialogHeader>
 
         {isLoading ? (
@@ -258,22 +317,53 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             <div className="rounded-lg bg-muted/50 border border-border/50 p-3 space-y-3">
               <div className="flex items-center gap-1.5">
                 <Heart className="h-3 w-3 text-red-500" />
-                <p className="text-xs font-medium text-foreground">Apple Health</p>
+                <p className="text-xs font-medium text-foreground">Apple Health Metrics</p>
               </div>
-              <div className="rounded-md bg-amber-500/10 border border-amber-500/20 p-2.5">
-                <p className="text-[11px] text-amber-700 leading-relaxed">
-                  Apple Health sync requires the native iOS app (built with Capacitor). On your phone, go to <strong>Health → Apps → DBrief</strong> and make sure the permissions are enabled for the metrics below.
-                </p>
+
+              <div className="rounded-md bg-blue-500/10 border border-blue-500/20 p-2.5 flex gap-2">
+                <Info className="h-3.5 w-3.5 text-blue-600 shrink-0 mt-0.5" />
+                <div className="text-[11px] text-blue-700 leading-relaxed space-y-1">
+                  <p><strong>Auto-sync requires the native iOS app.</strong> DBrief is currently a web app — Apple HealthKit only works inside a native iOS app distributed through the App Store.</p>
+                  <p>You can still select any metrics below to <strong>manually track them</strong> on your dashboard. When the iOS app is built, these will auto-sync from your Health data.</p>
+                </div>
               </div>
-              <div className="space-y-2">
-                <p className="text-[11px] text-muted-foreground font-medium">Choose which metrics to sync:</p>
-                {ALL_HEALTH_METRICS.map(({ key, label }) => (
-                  <div key={key} className="flex items-center justify-between">
-                    <span className="text-xs text-foreground">{label}</span>
-                    <Switch
-                      checked={healthMetricsEnabled.includes(key)}
-                      onCheckedChange={() => toggleHealthMetric(key)}
-                    />
+
+              <p className="text-[11px] text-muted-foreground font-medium">Tap to add metrics to your dashboard:</p>
+
+              <div className="space-y-3">
+                {groupedMetrics.map(({ category, metrics }) => (
+                  <div key={category}>
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">{category}</p>
+                    <div className="space-y-1">
+                      {metrics.map((metric) => {
+                        const isAdded = existingMetricNames.has(metric.name.toLowerCase());
+                        const isPending = addMetricMutation.isPending || deleteMetricMutation.isPending;
+                        return (
+                          <button
+                            key={metric.name}
+                            onClick={() => !isPending && handleToggleHealthMetric(metric)}
+                            className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-left transition-colors ${
+                              isAdded
+                                ? "bg-primary/10 border border-primary/20"
+                                : "hover:bg-muted border border-transparent"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: metric.color }} />
+                              <span className="text-xs text-foreground">{metric.name}</span>
+                              {metric.unit && (
+                                <span className="text-[10px] text-muted-foreground">({metric.unit})</span>
+                              )}
+                            </div>
+                            {isAdded ? (
+                              <Check className="h-3.5 w-3.5 text-primary shrink-0" />
+                            ) : (
+                              <Plus className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 ))}
               </div>

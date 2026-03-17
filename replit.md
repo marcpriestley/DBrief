@@ -8,7 +8,8 @@ DBrief is a daily journaling application designed to enhance self-reflection and
 - Debrief panel (conversational AI journal) sits directly under goals, calendar at the bottom
 - All scores use a unified 0-100 scale (compatible with Apple Health)
 - Score input uses a slider (0-100) — dialog closes immediately after saving, no confirmation steps
-- Apple Health metric sync is customizable per-metric (Sleep, Readiness, Activity) in Settings
+- Apple Health metric sync is customizable per-metric in Settings — 18 real HealthKit metric types across Activity, Sleep, Heart, Body, Mindfulness, Respiratory, and Nutrition categories
+- Apple Health auto-sync requires a native iOS app build — currently all metrics are manually tracked; selecting a metric in Settings adds it as a dashboard circle
 - Scores should persist until the next day, then reset to blank for new inputs
 - Integration with Apple Health (HealthKit via Capacitor) for automated health data (Sleep Quality, Readiness, Activity)
 - Health metrics sync via client-side HealthKit reads that POST to `/api/health/sync`
