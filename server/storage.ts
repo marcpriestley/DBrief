@@ -17,7 +17,7 @@ export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
-  updateUserSettings(userId: number, settings: Partial<Pick<User, 'notificationsEnabled' | 'reminderTime' | 'reminderTime2' | 'timezone'>>): Promise<User | undefined>;
+  updateUserSettings(userId: number, settings: Partial<Pick<User, 'notificationsEnabled' | 'reminderTime' | 'reminderTime2' | 'timezone' | 'healthMetricsEnabled'>>): Promise<User | undefined>;
 
   // Journal entry methods
   getJournalEntry(id: number): Promise<JournalEntry | undefined>;
@@ -370,7 +370,7 @@ export class MemStorage implements IStorage {
     }
   }
 
-  async updateUserSettings(userId: number, settings: Partial<Pick<User, 'notificationsEnabled' | 'reminderTime' | 'reminderTime2' | 'timezone'>>): Promise<User | undefined> {
+  async updateUserSettings(userId: number, settings: Partial<Pick<User, 'notificationsEnabled' | 'reminderTime' | 'reminderTime2' | 'timezone' | 'healthMetricsEnabled'>>): Promise<User | undefined> {
     const user = this.users.get(userId);
     if (user) {
       Object.assign(user, settings);
@@ -611,7 +611,7 @@ export class DatabaseStorage implements IStorage {
       .where(eq(aiInsights.id, id));
   }
 
-  async updateUserSettings(userId: number, settings: Partial<Pick<User, 'notificationsEnabled' | 'reminderTime' | 'reminderTime2' | 'timezone'>>): Promise<User | undefined> {
+  async updateUserSettings(userId: number, settings: Partial<Pick<User, 'notificationsEnabled' | 'reminderTime' | 'reminderTime2' | 'timezone' | 'healthMetricsEnabled'>>): Promise<User | undefined> {
     const [updated] = await db.update(users)
       .set(settings)
       .where(eq(users.id, userId))

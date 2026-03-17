@@ -36,57 +36,81 @@ function useInlineVoice() {
   const [interimText, setInterimText] = useState("");
   const recognitionRef = useRef<any>(null);
   const accumulatedRef = useRef("");
+  const shouldRestartRef = useRef(false);
+  const onFinalRef = useRef<((text: string) => void) | null>(null);
 
   const isSupported =
     typeof window !== "undefined" &&
     ("webkitSpeechRecognition" in window || "SpeechRecognition" in window);
 
+  const createAndStartRecognition = useCallback(() => {
+    if (!isSupported) return;
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SR();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+
+    recognition.onstart = () => setIsListening(true);
+
+    recognition.onresult = (e: any) => {
+      let finalChunk = "";
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) {
+          finalChunk += t;
+        } else {
+          interim += t;
+        }
+      }
+      if (finalChunk) {
+        accumulatedRef.current += (accumulatedRef.current ? " " : "") + finalChunk.trim();
+        onFinalRef.current?.(accumulatedRef.current);
+      }
+      setInterimText(interim);
+    };
+
+    recognition.onerror = (e: any) => {
+      if (e.error === "aborted") return;
+      if (e.error !== "no-speech" && shouldRestartRef.current) {
+        setIsListening(false);
+        shouldRestartRef.current = false;
+      }
+    };
+
+    recognition.onend = () => {
+      setInterimText("");
+      if (shouldRestartRef.current) {
+        setTimeout(() => {
+          if (shouldRestartRef.current) {
+            createAndStartRecognition();
+          }
+        }, 100);
+      } else {
+        setIsListening(false);
+      }
+    };
+
+    recognitionRef.current = recognition;
+    try {
+      recognition.start();
+    } catch {}
+  }, [isSupported]);
+
   const start = useCallback(
     (onFinal: (text: string) => void) => {
       if (!isSupported) return;
-      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-      const recognition = new SR();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = "en-US";
-
       accumulatedRef.current = "";
-
-      recognition.onstart = () => setIsListening(true);
-
-      recognition.onresult = (e: any) => {
-        let finalChunk = "";
-        let interim = "";
-        for (let i = e.resultIndex; i < e.results.length; i++) {
-          const t = e.results[i][0].transcript;
-          if (e.results[i].isFinal) {
-            finalChunk += t;
-          } else {
-            interim += t;
-          }
-        }
-        if (finalChunk) {
-          accumulatedRef.current += (accumulatedRef.current ? " " : "") + finalChunk.trim();
-          onFinal(accumulatedRef.current);
-        }
-        setInterimText(interim);
-      };
-
-      recognition.onerror = () => setIsListening(false);
-      recognition.onend = () => {
-        setIsListening(false);
-        setInterimText("");
-      };
-
-      recognitionRef.current = recognition;
-      try {
-        recognition.start();
-      } catch {}
+      onFinalRef.current = onFinal;
+      shouldRestartRef.current = true;
+      createAndStartRecognition();
     },
-    [isSupported],
+    [isSupported, createAndStartRecognition],
   );
 
   const stop = useCallback(() => {
+    shouldRestartRef.current = false;
     recognitionRef.current?.stop();
     setInterimText("");
   }, []);

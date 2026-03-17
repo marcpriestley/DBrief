@@ -741,7 +741,8 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
         notificationsEnabled: user.notificationsEnabled,
         reminderTime: user.reminderTime,
         reminderTime2: user.reminderTime2,
-        timezone: user.timezone
+        timezone: user.timezone,
+        healthMetricsEnabled: user.healthMetricsEnabled ?? ["sleep", "readiness", "activity"]
       });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch user settings" });
@@ -751,13 +752,14 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
   app.patch("/api/user/settings", async (req, res) => {
     try {
       const userId = getUserId(req);
-      const { notificationsEnabled, reminderTime, reminderTime2, timezone } = req.body;
+      const { notificationsEnabled, reminderTime, reminderTime2, timezone, healthMetricsEnabled } = req.body;
 
       const updatedUser = await storage.updateUserSettings(userId, {
         ...(notificationsEnabled !== undefined && { notificationsEnabled }),
         ...(reminderTime !== undefined && { reminderTime }),
         ...(reminderTime2 !== undefined && { reminderTime2 }),
-        ...(timezone !== undefined && { timezone })
+        ...(timezone !== undefined && { timezone }),
+        ...(healthMetricsEnabled !== undefined && { healthMetricsEnabled })
       });
 
       if (!updatedUser) {
@@ -768,7 +770,8 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
         notificationsEnabled: updatedUser.notificationsEnabled,
         reminderTime: updatedUser.reminderTime,
         reminderTime2: updatedUser.reminderTime2,
-        timezone: updatedUser.timezone
+        timezone: updatedUser.timezone,
+        healthMetricsEnabled: updatedUser.healthMetricsEnabled ?? ["sleep", "readiness", "activity"]
       });
     } catch (error) {
       console.error("Settings update error:", error);

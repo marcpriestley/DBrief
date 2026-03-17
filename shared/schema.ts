@@ -11,6 +11,7 @@ export const users = pgTable("users", {
   reminderTime: text("reminder_time").default("09:00"),
   reminderTime2: text("reminder_time_2").default("21:00"),
   timezone: text("timezone").default("UTC"),
+  healthMetricsEnabled: text("health_metrics_enabled").array().default(["sleep", "readiness", "activity"]),
 });
 
 export const journalEntries = pgTable("journal_entries", {

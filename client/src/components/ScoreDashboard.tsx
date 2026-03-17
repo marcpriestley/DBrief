@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { DailyScore, UserMetric } from "@shared/schema";
@@ -90,13 +91,10 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
       queryClient.invalidateQueries({ queryKey: ["/api/streak"] });
       
       const metricName = selectedMetric?.name;
-      toast({
-        title: "Score updated",
-        description: "Your daily score has been saved.",
-      });
       if (metricName) {
         queryClient.invalidateQueries({ queryKey: ["/api/metric-history", metricName] });
       }
+      setSelectedMetric(null);
       setDialogMode('trend');
       setScoreValue("");
     },
@@ -180,19 +178,7 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
 
   const handleSaveScore = () => {
     if (!selectedMetric) return;
-    
-    const value = parseInt(scoreValue);
-    const maxValue = selectedMetric.maxValue || 100;
-    
-    if (isNaN(value) || value < 0 || value > maxValue) {
-      toast({
-        title: "Invalid score",
-        description: `Please enter a score between 0 and ${maxValue}.`,
-        variant: "destructive",
-      });
-      return;
-    }
-
+    const value = parseInt(scoreValue) || 0;
     updateScoreMutation.mutate({
       date: selectedDate,
       metricName: selectedMetric.name,
@@ -362,14 +348,14 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
                 </div>
               </div>
             ) : (
-              <div className="space-y-5">
+              <div className="space-y-6">
                 <div className="text-center">
                   {selectedMetric && (() => {
                     const val = parseInt(scoreValue) || 0;
                     const maxVal = selectedMetric.maxValue || 100;
                     const pct = Math.min(100, Math.max(0, (val / maxVal) * 100));
-                    const size = 80;
-                    const sw = 5;
+                    const size = 88;
+                    const sw = 6;
                     const r = (size - sw) / 2;
                     const c = 2 * Math.PI * r;
                     const offset = c - (pct / 100) * c;
@@ -380,46 +366,37 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
                           <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={selectedMetric.color} strokeWidth={sw} strokeLinecap="round" strokeDasharray={c} strokeDashoffset={offset} className="transition-all duration-300" />
                         </svg>
                         <div className="absolute inset-0 flex items-center justify-center">
-                          <span className="text-xl font-bold text-foreground">{scoreValue || 0}</span>
+                          <span className="text-2xl font-bold text-foreground">{val}</span>
                         </div>
                       </div>
                     );
                   })()}
                 </div>
-                
-                <div>
-                  <Label htmlFor="score" className="text-xs">Score (0-{selectedMetric?.maxValue || 100})</Label>
-                  <Input
-                    id="score"
-                    type="number"
-                    min="0"
+
+                <div className="space-y-3 px-1">
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>0</span>
+                    <span className="font-medium text-foreground">{parseInt(scoreValue) || 0} / {selectedMetric?.maxValue || 100}</span>
+                    <span>{selectedMetric?.maxValue || 100}</span>
+                  </div>
+                  <Slider
+                    min={0}
                     max={selectedMetric?.maxValue || 100}
-                    value={scoreValue}
-                    onChange={(e) => setScoreValue(e.target.value)}
-                    placeholder={`Enter score`}
-                    className="mt-1"
+                    step={1}
+                    value={[parseInt(scoreValue) || 0]}
+                    onValueChange={([val]) => setScoreValue(String(val))}
+                    className="w-full"
                   />
                 </div>
-                
-                <div className="flex gap-2">
-                  <Button 
-                    variant="outline" 
-                    className="flex-1"
-                    onClick={handleViewTrendsClick}
-                    disabled={updateScoreMutation.isPending}
-                    size="sm"
-                  >
-                    View Trends
-                  </Button>
-                  <Button 
-                    className="flex-1"
-                    onClick={handleSaveScore}
-                    disabled={updateScoreMutation.isPending}
-                    size="sm"
-                  >
-                    {updateScoreMutation.isPending ? "Saving..." : "Save"}
-                  </Button>
-                </div>
+
+                <Button
+                  className="w-full"
+                  onClick={handleSaveScore}
+                  disabled={updateScoreMutation.isPending}
+                  size="sm"
+                >
+                  {updateScoreMutation.isPending ? "Saving..." : "Save"}
+                </Button>
               </div>
             )}
           </div>

@@ -69,11 +69,18 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
+const ALL_HEALTH_METRICS = [
+  { key: "sleep", label: "Sleep Quality" },
+  { key: "readiness", label: "Readiness" },
+  { key: "activity", label: "Activity" },
+];
+
 interface UserSettings {
   notificationsEnabled: boolean;
   reminderTime: string;
   reminderTime2: string;
   timezone: string;
+  healthMetricsEnabled: string[];
 }
 
 export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
@@ -88,12 +95,14 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [reminderTime, setReminderTime] = useState("09:00");
   const [reminderTime2, setReminderTime2] = useState("21:00");
+  const [healthMetricsEnabled, setHealthMetricsEnabled] = useState<string[]>(["sleep", "readiness", "activity"]);
 
   useEffect(() => {
     if (settings) {
       setNotificationsEnabled(settings.notificationsEnabled);
       setReminderTime(settings.reminderTime);
       setReminderTime2(settings.reminderTime2);
+      setHealthMetricsEnabled(settings.healthMetricsEnabled ?? ["sleep", "readiness", "activity"]);
     }
   }, [settings]);
 
@@ -110,9 +119,15 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     },
   });
 
+  const toggleHealthMetric = (key: string) => {
+    setHealthMetricsEnabled(prev =>
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+    );
+  };
+
   const handleSave = () => {
     const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    updateSettingsMutation.mutate({ notificationsEnabled, reminderTime, reminderTime2, timezone: userTimezone });
+    updateSettingsMutation.mutate({ notificationsEnabled, reminderTime, reminderTime2, timezone: userTimezone, healthMetricsEnabled });
   };
 
   const handleToggleNotifications = async (enabled: boolean) => {
@@ -240,14 +255,28 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               </p>
             </div>
 
-            <div className="rounded-lg bg-muted/50 border border-border/50 p-3 space-y-1.5">
+            <div className="rounded-lg bg-muted/50 border border-border/50 p-3 space-y-3">
               <div className="flex items-center gap-1.5">
                 <Heart className="h-3 w-3 text-red-500" />
                 <p className="text-xs font-medium text-foreground">Apple Health</p>
               </div>
-              <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Sleep, readiness, and activity scores sync automatically when using the iOS app.
-              </p>
+              <div className="rounded-md bg-amber-500/10 border border-amber-500/20 p-2.5">
+                <p className="text-[11px] text-amber-700 leading-relaxed">
+                  Apple Health sync requires the native iOS app (built with Capacitor). On your phone, go to <strong>Health → Apps → DBrief</strong> and make sure the permissions are enabled for the metrics below.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <p className="text-[11px] text-muted-foreground font-medium">Choose which metrics to sync:</p>
+                {ALL_HEALTH_METRICS.map(({ key, label }) => (
+                  <div key={key} className="flex items-center justify-between">
+                    <span className="text-xs text-foreground">{label}</span>
+                    <Switch
+                      checked={healthMetricsEnabled.includes(key)}
+                      onCheckedChange={() => toggleHealthMetric(key)}
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
