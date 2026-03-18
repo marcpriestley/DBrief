@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Dashboard from "@/pages/dashboard";
 import Trends from "@/pages/trends";
+import CalendarPage from "@/pages/calendar";
 import Welcome from "@/pages/welcome";
 import OnboardingFlow from "@/components/OnboardingFlow";
 import NotFound from "@/pages/not-found";
@@ -42,6 +43,7 @@ function AuthenticatedRouter() {
     <Switch>
       <Route path="/" component={Dashboard} />
       <Route path="/dashboard" component={Dashboard} />
+      <Route path="/calendar" component={CalendarPage} />
       <Route path="/trends" component={Trends} />
       <Route component={NotFound} />
     </Switch>

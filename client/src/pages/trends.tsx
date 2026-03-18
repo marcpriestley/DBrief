@@ -4,8 +4,8 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { TrendingUp, ArrowLeft, Sparkles, Loader2 } from "lucide-react";
-import { Link } from "wouter";
+import { TrendingUp, Sparkles, Loader2 } from "lucide-react";
+import AppLayout from "@/components/AppLayout";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { DailyScore, UserMetric, AIInsight, DailyGoal, MoodCheckin } from "@shared/schema";
@@ -257,49 +257,35 @@ export default function TrendsEnhanced() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border/40">
-        <div className="max-w-2xl mx-auto px-4">
-          <div className="flex justify-between items-center h-14">
-            <div className="flex items-center gap-2.5">
-              <Link href="/">
-                <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <ArrowLeft className="h-4 w-4" />
-                </Button>
-              </Link>
-              <h1 className="text-base font-semibold text-foreground tracking-tight">Trends & Insights</h1>
-            </div>
-            
-            <div className="flex items-center gap-1.5">
-              <Select value={timeRange} onValueChange={setTimeRange}>
-                <SelectTrigger className="h-8 w-24 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="7">7 Days</SelectItem>
-                  <SelectItem value="30">30 Days</SelectItem>
-                  <SelectItem value="180">6 Months</SelectItem>
-                  <SelectItem value="all">Lifetime</SelectItem>
-                </SelectContent>
-              </Select>
-              
-              <Select value={chartType} onValueChange={setChartType}>
-                <SelectTrigger className="h-8 w-20 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="area">Area</SelectItem>
-                  <SelectItem value="line">Line</SelectItem>
-                  <SelectItem value="bar">Bar</SelectItem>
-                  <SelectItem value="heatmap">Heat</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+    <AppLayout>
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold text-foreground">Performance Trends</h2>
+          <div className="flex items-center gap-1.5">
+            <Select value={timeRange} onValueChange={setTimeRange}>
+              <SelectTrigger className="h-8 w-24 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="7">7 Days</SelectItem>
+                <SelectItem value="30">30 Days</SelectItem>
+                <SelectItem value="180">6 Months</SelectItem>
+                <SelectItem value="all">Lifetime</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={chartType} onValueChange={setChartType}>
+              <SelectTrigger className="h-8 w-20 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="area">Area</SelectItem>
+                <SelectItem value="line">Line</SelectItem>
+                <SelectItem value="bar">Bar</SelectItem>
+                <SelectItem value="heatmap">Heat</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
-      </header>
-
-      <main className="max-w-2xl mx-auto px-4 py-5 space-y-4">
         {metrics.length > 0 && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {metrics.slice(0, 4).map((metric) => {
@@ -489,7 +475,7 @@ export default function TrendsEnhanced() {
             </CardContent>
           </Card>
         )}
-      </main>
-    </div>
+      </div>
+    </AppLayout>
   );
 }
