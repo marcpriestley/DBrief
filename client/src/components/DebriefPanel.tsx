@@ -40,6 +40,7 @@ function useInlineVoice() {
   const shouldListenRef = useRef(false);
   const onFinalRef = useRef<((text: string) => void) | null>(null);
   const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const watchdogRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const isSupported =
     typeof window !== "undefined" &&
@@ -130,12 +131,20 @@ function useInlineVoice() {
       onFinalRef.current = onFinal;
       shouldListenRef.current = true;
       startRecognitionRef.current();
+      // Watchdog: every 2s, if we should be listening but nothing is running, force restart
+      if (watchdogRef.current) clearInterval(watchdogRef.current);
+      watchdogRef.current = setInterval(() => {
+        if (shouldListenRef.current && !recognitionRef.current && !restartTimerRef.current) {
+          startRecognitionRef.current();
+        }
+      }, 2000);
     },
     [isSupported],
   );
 
   const stop = useCallback(() => {
     shouldListenRef.current = false;
+    if (watchdogRef.current) { clearInterval(watchdogRef.current); watchdogRef.current = null; }
     if (restartTimerRef.current) {
       clearTimeout(restartTimerRef.current);
       restartTimerRef.current = null;
@@ -151,6 +160,7 @@ function useInlineVoice() {
   useEffect(() => {
     return () => {
       shouldListenRef.current = false;
+      if (watchdogRef.current) clearInterval(watchdogRef.current);
       if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
       const old = recognitionRef.current;
       recognitionRef.current = null;

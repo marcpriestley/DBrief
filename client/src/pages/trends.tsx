@@ -102,9 +102,9 @@ export default function TrendsEnhanced() {
 
       const dayMoods = moodCheckins.filter(c => c.date === date);
       if (dayMoods.length > 0) {
-        dayData["Mood"] = Math.round(dayMoods.reduce((sum, c) => sum + c.value, 0) / dayMoods.length);
+        dayData["Mood Check-in"] = Math.round(dayMoods.reduce((sum, c) => sum + c.value, 0) / dayMoods.length);
       } else {
-        dayData["Mood"] = 0;
+        dayData["Mood Check-in"] = 0;
       }
       
       return dayData;
@@ -114,7 +114,7 @@ export default function TrendsEnhanced() {
   };
 
   const goalsVirtualMetric: UserMetric = { id: -1, userId: 0, name: "Goals", color: "#F97316", maxValue: 100, isDefault: false, isActive: true };
-  const moodVirtualMetric: UserMetric = { id: -2, userId: 0, name: "Mood", color: "#EC4899", maxValue: 100, isDefault: false, isActive: true };
+  const moodVirtualMetric: UserMetric = { id: -2, userId: 0, name: "Mood Check-in", color: "#EC4899", maxValue: 100, isDefault: false, isActive: true };
   const allMetricsWithGoals = [...metrics, goalsVirtualMetric, moodVirtualMetric];
 
   const chartData = processedData();
