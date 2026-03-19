@@ -53,6 +53,9 @@ DBrief is a personal performance engineering app built around the F1 debrief fra
 - Retrospective Editing: Users can input scores and journal entries for past dates.
 - Mood Check-in: Slider-based modal with time-of-day labels, integrated into trends.
 - Data Encryption: AES-256-GCM encryption for sensitive user data at rest.
+- Haptics: `client/src/lib/haptics.ts` — light/medium/heavy/select/success/error vibration patterns via `navigator.vibrate`. Used on mic, send, tabs, toggle, goals.
+- Smart Default View: Morning journalers see Yesterday by default if opening before 12pm; evening journalers always see Today.
+- Color Theme: Grey + yellow (`hsl(40, 95%, 48%)` amber primary on clean grey backgrounds). Updated across all components.
 
 ## Database Tables
 - `users` - Auth, settings, onboarding status, journal preference

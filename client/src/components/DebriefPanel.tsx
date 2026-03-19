@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { haptic } from "@/lib/haptics";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { MessageCircle, Send, CheckCircle, Loader2, RotateCcw, Mic, MicOff, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -36,33 +37,47 @@ function useInlineVoice() {
   const [interimText, setInterimText] = useState("");
   const recognitionRef = useRef<any>(null);
   const accumulatedRef = useRef("");
-  const shouldRestartRef = useRef(false);
+  const shouldListenRef = useRef(false);
   const onFinalRef = useRef<((text: string) => void) | null>(null);
+  const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isSupported =
     typeof window !== "undefined" &&
     ("webkitSpeechRecognition" in window || "SpeechRecognition" in window);
 
-  const createAndStartRecognition = useCallback(() => {
-    if (!isSupported) return;
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const startRecognitionRef = useRef<() => void>(() => {});
+
+  startRecognitionRef.current = () => {
+    if (!isSupported || !shouldListenRef.current) return;
+
+    if (restartTimerRef.current) {
+      clearTimeout(restartTimerRef.current);
+      restartTimerRef.current = null;
+    }
+
+    if (recognitionRef.current) {
+      try { recognitionRef.current.abort(); } catch {}
+      recognitionRef.current = null;
+    }
+
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     const recognition = new SR();
     recognition.continuous = true;
     recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
     recognition.lang = "en-US";
 
-    recognition.onstart = () => setIsListening(true);
+    recognition.onstart = () => {
+      if (shouldListenRef.current) setIsListening(true);
+    };
 
     recognition.onresult = (e: any) => {
       let finalChunk = "";
       let interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const t = e.results[i][0].transcript;
-        if (e.results[i].isFinal) {
-          finalChunk += t;
-        } else {
-          interim += t;
-        }
+        if (e.results[i].isFinal) finalChunk += t;
+        else interim += t;
       }
       if (finalChunk) {
         accumulatedRef.current += (accumulatedRef.current ? " " : "") + finalChunk.trim();
@@ -72,21 +87,19 @@ function useInlineVoice() {
     };
 
     recognition.onerror = (e: any) => {
-      if (e.error === "aborted") return;
-      if (e.error !== "no-speech" && shouldRestartRef.current) {
+      if (e.error === "aborted" || e.error === "no-speech") return;
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+        shouldListenRef.current = false;
         setIsListening(false);
-        shouldRestartRef.current = false;
       }
     };
 
     recognition.onend = () => {
       setInterimText("");
-      if (shouldRestartRef.current) {
-        setTimeout(() => {
-          if (shouldRestartRef.current) {
-            createAndStartRecognition();
-          }
-        }, 100);
+      if (shouldListenRef.current) {
+        restartTimerRef.current = setTimeout(() => {
+          startRecognitionRef.current();
+        }, 150);
       } else {
         setIsListening(false);
       }
@@ -95,24 +108,44 @@ function useInlineVoice() {
     recognitionRef.current = recognition;
     try {
       recognition.start();
-    } catch {}
-  }, [isSupported]);
+    } catch {
+      if (shouldListenRef.current) {
+        restartTimerRef.current = setTimeout(() => {
+          startRecognitionRef.current();
+        }, 500);
+      }
+    }
+  };
 
   const start = useCallback(
     (onFinal: (text: string) => void) => {
       if (!isSupported) return;
       accumulatedRef.current = "";
       onFinalRef.current = onFinal;
-      shouldRestartRef.current = true;
-      createAndStartRecognition();
+      shouldListenRef.current = true;
+      startRecognitionRef.current();
     },
-    [isSupported, createAndStartRecognition],
+    [isSupported],
   );
 
   const stop = useCallback(() => {
-    shouldRestartRef.current = false;
-    recognitionRef.current?.stop();
+    shouldListenRef.current = false;
+    if (restartTimerRef.current) {
+      clearTimeout(restartTimerRef.current);
+      restartTimerRef.current = null;
+    }
     setInterimText("");
+    setIsListening(false);
+    try { recognitionRef.current?.stop(); } catch {}
+    recognitionRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      shouldListenRef.current = false;
+      if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
+      try { recognitionRef.current?.abort(); } catch {}
+    };
   }, []);
 
   return { isListening, interimText, isSupported, start, stop };
@@ -257,9 +290,9 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   };
 
   const handleSend = () => {
-    if (showCheckpoint && userInput.trim()) {
-      setContinuedPastCheckpoint(true);
-    }
+    if (!userInput.trim()) return;
+    haptic("medium");
+    if (showCheckpoint) setContinuedPastCheckpoint(true);
     sendMessage(userInput);
   };
 
@@ -272,8 +305,10 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
 
   const handleMicToggle = () => {
     if (voice.isListening) {
+      haptic("light");
       voice.stop();
     } else {
+      haptic("medium");
       setUserInput("");
       voice.start((finalText) => {
         setUserInput(finalText);
@@ -310,7 +345,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
 
   if (isLoading) {
     return (
-      <Card className="border-0 shadow-md bg-gradient-to-br from-slate-50 to-white">
+      <Card className="border border-border/50 shadow-sm bg-card">
         <CardContent className="p-6 flex items-center justify-center min-h-[200px]">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </CardContent>
@@ -320,7 +355,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
 
   if (!debrief) {
     return (
-      <Card className="border-0 shadow-md bg-gradient-to-br from-slate-50 to-white overflow-hidden">
+      <Card className="border border-border/50 shadow-sm bg-card overflow-hidden">
         <CardContent className="p-0">
           <div className="p-6 text-center">
             <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-primary/10 flex items-center justify-center">
@@ -360,7 +395,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
 
   if (debrief.isComplete) {
     return (
-      <Card className="border-0 shadow-md bg-gradient-to-br from-slate-50 to-white">
+      <Card className="border border-border/50 shadow-sm bg-card">
         <CardContent className="p-6">
           <div className="flex items-center gap-2 mb-4">
             <CheckCircle className="h-5 w-5 text-emerald-500" />
@@ -412,7 +447,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const progressDots = Math.min(userMessageCount, CORE_EXCHANGES);
 
   return (
-    <Card className="border-0 shadow-md bg-gradient-to-br from-slate-50 to-white">
+    <Card className="border border-border/50 shadow-sm bg-card">
       <CardContent className="p-0">
         <div className="px-5 py-3 border-b border-border/50 flex items-center justify-between">
           <div className="flex items-center gap-2">

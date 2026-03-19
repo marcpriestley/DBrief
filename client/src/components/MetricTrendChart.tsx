@@ -35,20 +35,20 @@ export default function MetricTrendChart({ metric, history, selectedDate }: Metr
           <div className="text-2xl font-bold" style={{ color: metric.color }}>
             {currentValue !== undefined ? currentValue : "—"}
           </div>
-          <div className="text-xs text-gray-500">Current</div>
+          <div className="text-xs text-muted-foreground">Current</div>
         </div>
         <div className="text-center">
-          <div className="text-2xl font-bold text-gray-700">
+          <div className="text-2xl font-bold text-foreground">
             {avg7Days}
           </div>
-          <div className="text-xs text-gray-500">7-day avg</div>
+          <div className="text-xs text-muted-foreground">7-day avg</div>
         </div>
         {currentValue !== undefined && (
           <div className="text-center">
-            <div className={`text-2xl font-bold ${trend > 0 ? 'text-green-600' : trend < 0 ? 'text-red-600' : 'text-gray-600'}`}>
+            <div className={`text-2xl font-bold ${trend > 0 ? 'text-emerald-500' : trend < 0 ? 'text-red-500' : 'text-muted-foreground'}`}>
               {trend > 0 ? '+' : ''}{trend}
             </div>
-            <div className="text-xs text-gray-500">vs avg</div>
+            <div className="text-xs text-muted-foreground">vs avg</div>
           </div>
         )}
       </div>
@@ -85,8 +85,8 @@ export default function MetricTrendChart({ metric, history, selectedDate }: Metr
           </LineChart>
         </ResponsiveContainer>
       ) : (
-        <div className="flex items-center justify-center h-[220px] text-gray-500">
-          <p>No data available for this metric</p>
+        <div className="flex items-center justify-center h-[220px] text-muted-foreground text-sm">
+          <p>No data logged yet for this metric</p>
         </div>
       )}
     </div>

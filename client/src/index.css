@@ -3,48 +3,48 @@
 @tailwind utilities;
 
 :root {
-  --background: hsl(220, 20%, 97%);
-  --foreground: hsl(220, 20%, 10%);
-  --muted: hsl(220, 14%, 92%);
-  --muted-foreground: hsl(220, 10%, 46%);
+  --background: hsl(0, 0%, 97%);
+  --foreground: hsl(0, 0%, 9%);
+  --muted: hsl(0, 0%, 93%);
+  --muted-foreground: hsl(0, 0%, 44%);
   --popover: hsl(0, 0%, 100%);
-  --popover-foreground: hsl(220, 20%, 10%);
+  --popover-foreground: hsl(0, 0%, 9%);
   --card: hsl(0, 0%, 100%);
-  --card-foreground: hsl(220, 20%, 10%);
-  --border: hsl(220, 14%, 90%);
-  --input: hsl(220, 14%, 90%);
-  --primary: hsl(230, 70%, 55%);
-  --primary-foreground: hsl(0, 0%, 100%);
-  --secondary: hsl(220, 14%, 94%);
-  --secondary-foreground: hsl(220, 20%, 10%);
-  --accent: hsl(220, 14%, 94%);
-  --accent-foreground: hsl(220, 20%, 10%);
+  --card-foreground: hsl(0, 0%, 9%);
+  --border: hsl(0, 0%, 88%);
+  --input: hsl(0, 0%, 88%);
+  --primary: hsl(40, 95%, 48%);
+  --primary-foreground: hsl(0, 0%, 8%);
+  --secondary: hsl(0, 0%, 93%);
+  --secondary-foreground: hsl(0, 0%, 9%);
+  --accent: hsl(40, 95%, 48%);
+  --accent-foreground: hsl(0, 0%, 8%);
   --destructive: hsl(0, 72%, 51%);
   --destructive-foreground: hsl(0, 0%, 100%);
-  --ring: hsl(230, 70%, 55%);
+  --ring: hsl(40, 95%, 48%);
   --radius: 0.75rem;
 }
 
 .dark {
-  --background: hsl(225, 15%, 8%);
-  --foreground: hsl(220, 15%, 95%);
-  --muted: hsl(225, 12%, 15%);
-  --muted-foreground: hsl(220, 10%, 55%);
-  --popover: hsl(225, 15%, 10%);
-  --popover-foreground: hsl(220, 15%, 95%);
-  --card: hsl(225, 12%, 11%);
-  --card-foreground: hsl(220, 15%, 95%);
-  --border: hsl(225, 10%, 18%);
-  --input: hsl(225, 10%, 18%);
-  --primary: hsl(230, 70%, 60%);
-  --primary-foreground: hsl(0, 0%, 100%);
-  --secondary: hsl(225, 12%, 15%);
-  --secondary-foreground: hsl(220, 15%, 95%);
-  --accent: hsl(225, 12%, 15%);
-  --accent-foreground: hsl(220, 15%, 95%);
+  --background: hsl(0, 0%, 8%);
+  --foreground: hsl(0, 0%, 95%);
+  --muted: hsl(0, 0%, 14%);
+  --muted-foreground: hsl(0, 0%, 54%);
+  --popover: hsl(0, 0%, 11%);
+  --popover-foreground: hsl(0, 0%, 95%);
+  --card: hsl(0, 0%, 11%);
+  --card-foreground: hsl(0, 0%, 95%);
+  --border: hsl(0, 0%, 18%);
+  --input: hsl(0, 0%, 18%);
+  --primary: hsl(40, 92%, 52%);
+  --primary-foreground: hsl(0, 0%, 8%);
+  --secondary: hsl(0, 0%, 14%);
+  --secondary-foreground: hsl(0, 0%, 95%);
+  --accent: hsl(40, 92%, 52%);
+  --accent-foreground: hsl(0, 0%, 8%);
   --destructive: hsl(0, 62%, 40%);
   --destructive-foreground: hsl(0, 0%, 100%);
-  --ring: hsl(230, 70%, 60%);
+  --ring: hsl(40, 92%, 52%);
   --radius: 0.75rem;
 }
 
@@ -90,7 +90,11 @@
 
 .score-circle {
   position: relative;
-  background: conic-gradient(from 0deg, var(--color) var(--percentage), hsl(220, 14%, 90%) var(--percentage));
+  background: conic-gradient(from 0deg, var(--color) var(--percentage), hsl(0, 0%, 88%) var(--percentage));
+}
+
+.dark .score-circle {
+  background: conic-gradient(from 0deg, var(--color) var(--percentage), hsl(0, 0%, 18%) var(--percentage));
 }
 
 .journal-entry {

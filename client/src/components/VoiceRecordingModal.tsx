@@ -156,20 +156,20 @@ export default function VoiceRecordingModal({
           <div className={`w-20 h-20 mx-auto mb-4 rounded-full flex items-center justify-center transition-all duration-300 ${
             isRecording 
               ? 'bg-red-500 animate-pulse shadow-lg shadow-red-200' 
-              : 'bg-gray-500 hover:bg-gray-600'
+              : 'bg-muted hover:bg-muted/80'
           }`}>
             {isRecording ? (
               <Mic className="h-8 w-8 text-white" />
             ) : (
-              <MicOff className="h-8 w-8 text-white" />
+              <MicOff className="h-8 w-8 text-muted-foreground" />
             )}
           </div>
           
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">
+          <h3 className="text-xl font-semibold text-foreground mb-2">
             {isRecording ? "Recording..." : "Voice Recording"}
           </h3>
           
-          <p className="text-gray-600 mb-6">
+          <p className="text-muted-foreground mb-6">
             {isRecording 
               ? "Speak clearly and we'll transcribe your words"
               : "Click the microphone to start recording"
@@ -177,11 +177,11 @@ export default function VoiceRecordingModal({
           </p>
           
           {/* Transcription Display */}
-          <Card className="bg-gray-50 p-4 mb-6 min-h-[100px] text-left">
+          <Card className="bg-muted/50 p-4 mb-6 min-h-[100px] text-left">
             {transcription ? (
-              <p className="text-gray-700">{transcription}</p>
+              <p className="text-foreground">{transcription}</p>
             ) : (
-              <p className="text-gray-400 italic">
+              <p className="text-muted-foreground italic">
                 {isRecording ? "Listening..." : "Your transcription will appear here"}
               </p>
             )}

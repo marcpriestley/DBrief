@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
+import { useQuery } from "@tanstack/react-query";
 import AppLayout from "@/components/AppLayout";
 import ScoreDashboard from "@/components/ScoreDashboard";
 import DebriefPanel from "@/components/DebriefPanel";
@@ -8,6 +9,7 @@ import AIInsights from "@/components/AIInsights";
 import GoalsSection from "@/components/GoalsSection";
 import InfiniteGoalBanner from "@/components/InfiniteGoalBanner";
 import LongTermGoals from "@/components/LongTermGoals";
+import { haptic } from "@/lib/haptics";
 
 function getTodayStr() {
   const now = new Date();
@@ -22,22 +24,43 @@ function getYesterdayStr() {
 
 type DayView = "today" | "yesterday";
 
+function getSmartDefault(journalPreference?: string): DayView {
+  const hour = new Date().getHours();
+  if (journalPreference === "morning" && hour < 12) return "yesterday";
+  return "today";
+}
+
 export default function Dashboard() {
   const [dayView, setDayView] = useState<DayView>("today");
+  const [defaultApplied, setDefaultApplied] = useState(false);
   const [location] = useLocation();
+
+  const { data: user } = useQuery<any>({ queryKey: ["/api/auth/me"] });
 
   const todayStr = getTodayStr();
   const yesterdayStr = getYesterdayStr();
   const selectedDate = dayView === "today" ? todayStr : yesterdayStr;
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const dateParam = params.get("date");
-    if (dateParam === yesterdayStr) {
-      setDayView("yesterday");
-      window.history.replaceState({}, "", window.location.pathname);
+    if (user && !defaultApplied) {
+      setDefaultApplied(true);
+      const params = new URLSearchParams(window.location.search);
+      const dateParam = params.get("date");
+      if (dateParam === yesterdayStr) {
+        setDayView("yesterday");
+        window.history.replaceState({}, "", window.location.pathname);
+      } else {
+        setDayView(getSmartDefault(user.journalPreference));
+      }
     }
-  }, []);
+  }, [user, defaultApplied, yesterdayStr]);
+
+  const switchView = (view: DayView) => {
+    if (view !== dayView) {
+      haptic("select");
+      setDayView(view);
+    }
+  };
 
   const yesterdayLabel = new Date(yesterdayStr + "T12:00:00").toLocaleDateString("en-US", {
     weekday: "short",
@@ -47,13 +70,13 @@ export default function Dashboard() {
 
   return (
     <AppLayout>
-      <div className="space-y-4">
+      <div className="space-y-3">
         <InfiniteGoalBanner />
 
         <div className="flex items-center justify-between">
-          <div className="inline-flex items-center bg-muted rounded-lg p-0.5">
+          <div className="inline-flex items-center bg-muted rounded-lg p-0.5 gap-0.5">
             <button
-              onClick={() => setDayView("yesterday")}
+              onClick={() => switchView("yesterday")}
               className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
                 dayView === "yesterday"
                   ? "bg-background text-foreground shadow-sm"
@@ -63,7 +86,7 @@ export default function Dashboard() {
               Yesterday
             </button>
             <button
-              onClick={() => setDayView("today")}
+              onClick={() => switchView("today")}
               className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
                 dayView === "today"
                   ? "bg-background text-foreground shadow-sm"
@@ -86,14 +109,12 @@ export default function Dashboard() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.15 }}
-            className="space-y-4"
+            className="space-y-3"
           >
             <ScoreDashboard selectedDate={selectedDate} />
 
-            <div className="bg-card rounded-xl border border-border/50 shadow-sm">
-              <div className="p-4">
-                <GoalsSection selectedDate={selectedDate} />
-              </div>
+            <div className="bg-card rounded-xl border border-border/50 shadow-sm p-4">
+              <GoalsSection selectedDate={selectedDate} />
             </div>
 
             <LongTermGoals />

@@ -5,6 +5,7 @@ import { Check, Plus, X, Trash2, Edit2, PartyPopper } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { apiRequest } from "@/lib/queryClient";
+import { haptic } from "@/lib/haptics";
 import type { DailyGoal, GoalTemplate } from "@shared/schema";
 
 interface GoalsSectionProps {
@@ -13,17 +14,8 @@ interface GoalsSectionProps {
 
 const MIN_VISIBLE_SLOTS = 3;
 
-function triggerHaptic() {
-  if (navigator.vibrate) {
-    navigator.vibrate([50, 30, 50]);
-  }
-}
-
-function triggerCelebrationHaptic() {
-  if (navigator.vibrate) {
-    navigator.vibrate([100, 50, 100, 50, 200]);
-  }
-}
+function triggerHaptic() { haptic("medium"); }
+function triggerCelebrationHaptic() { haptic("success"); }
 
 export default function GoalsSection({ selectedDate }: GoalsSectionProps) {
   const queryClient = useQueryClient();
@@ -167,9 +159,9 @@ export default function GoalsSection({ selectedDate }: GoalsSectionProps) {
   return (
     <div className="relative">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
           Daily Goals
-          <span className="text-sm font-normal text-gray-500">
+          <span className="text-xs font-normal text-muted-foreground">
             {completedCount}/{displayTotal}
           </span>
         </h3>
@@ -184,9 +176,9 @@ export default function GoalsSection({ selectedDate }: GoalsSectionProps) {
         </Button>
       </div>
 
-      <div className="w-full bg-gray-200 rounded-full h-1.5 mb-4">
+      <div className="w-full bg-muted rounded-full h-1 mb-3">
         <motion.div
-          className="h-1.5 rounded-full bg-primary"
+          className="h-1 rounded-full bg-primary"
           initial={{ width: 0 }}
           animate={{ width: `${(completedCount / displayTotal) * 100}%` }}
           transition={{ duration: 0.3 }}
@@ -202,19 +194,19 @@ export default function GoalsSection({ selectedDate }: GoalsSectionProps) {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.05 }}
-              className={`group flex items-center gap-3 p-3 rounded-lg border transition-all ${
+              className={`group flex items-center gap-3 p-2.5 rounded-lg border transition-all ${
                 goal.completed
-                  ? "bg-green-50 border-green-200"
-                  : "bg-white border-gray-100 hover:border-gray-200"
+                  ? "bg-primary/8 border-primary/20 opacity-70"
+                  : "bg-card border-border/60 hover:border-border"
               }`}
             >
               <button
                 onClick={() => toggleMutation.mutate(goal.id)}
                 onTouchEnd={(e) => { e.preventDefault(); toggleMutation.mutate(goal.id); }}
-                className={`flex-shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all touch-manipulation ${
+                className={`flex-shrink-0 w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all touch-manipulation ${
                   goal.completed
-                    ? "bg-green-500 border-green-500"
-                    : "border-gray-300 hover:border-primary"
+                    ? "bg-primary border-primary"
+                    : "border-border hover:border-primary"
                 }`}
               >
                 <AnimatePresence>
@@ -242,7 +234,7 @@ export default function GoalsSection({ selectedDate }: GoalsSectionProps) {
               ) : (
                 <span
                   className={`flex-1 text-sm ${
-                    goal.completed ? "line-through text-gray-400" : "text-gray-700"
+                    goal.completed ? "line-through text-muted-foreground" : "text-foreground"
                   }`}
                   onDoubleClick={() => {
                     setEditingId(goal.goalTemplateId);
@@ -260,13 +252,13 @@ export default function GoalsSection({ selectedDate }: GoalsSectionProps) {
                       setEditingId(goal.goalTemplateId);
                       setEditTitle(goal.title);
                     }}
-                    className="p-1 text-gray-300 hover:text-gray-600"
+                    className="p-1 text-muted-foreground/40 hover:text-foreground"
                   >
                     <Edit2 className="h-3 w-3" />
                   </button>
                   <button
                     onClick={() => deleteTemplateMutation.mutate(goal.goalTemplateId)}
-                    className="p-1 text-gray-300 hover:text-red-500"
+                    className="p-1 text-muted-foreground/40 hover:text-destructive"
                   >
                     <Trash2 className="h-3 w-3" />
                   </button>
@@ -282,22 +274,22 @@ export default function GoalsSection({ selectedDate }: GoalsSectionProps) {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: (totalGoals + i) * 0.05 }}
-            className="flex items-center gap-3 p-3 rounded-lg border border-dashed border-gray-200 bg-gray-50/50"
+            className="flex items-center gap-3 p-2.5 rounded-lg border border-dashed border-border/50 bg-muted/30"
           >
-            <div className="flex-shrink-0 w-6 h-6 rounded-full border-2 border-gray-200" />
+            <div className="flex-shrink-0 w-7 h-7 rounded-full border-2 border-border/40" />
             <Input
               value={placeholderValues[i] || ""}
               onChange={(e) => setPlaceholderValues(prev => ({ ...prev, [i]: e.target.value }))}
               onKeyDown={(e) => handlePlaceholderKeyDown(e, i)}
               disabled={submittingPlaceholder === i}
               placeholder={`Add goal ${totalGoals + i + 1}...`}
-              className="flex-1 h-7 text-sm border-none bg-transparent shadow-none focus-visible:ring-0 placeholder:text-gray-300"
+              className="flex-1 h-7 text-sm border-none bg-transparent shadow-none focus-visible:ring-0 placeholder:text-muted-foreground/40"
             />
           </motion.div>
         ))}
 
         {isLoading && (
-          <div className="text-center py-4 text-gray-400 text-sm">Loading goals...</div>
+          <div className="text-center py-4 text-muted-foreground text-sm">Loading goals...</div>
         )}
       </div>
 
@@ -382,11 +374,11 @@ export default function GoalsSection({ selectedDate }: GoalsSectionProps) {
                 initial={{ scale: 0 }}
                 animate={{ scale: [0, 1.3, 1] }}
                 transition={{ duration: 0.5 }}
-                className="bg-white shadow-xl rounded-2xl p-6 text-center border border-green-200"
+                className="bg-card shadow-xl rounded-2xl p-6 text-center border border-border"
               >
-                <PartyPopper className="h-12 w-12 text-amber-500 mx-auto mb-2" />
-                <p className="text-lg font-bold text-gray-900">All Goals Complete!</p>
-                <p className="text-sm text-gray-500 mt-1">Amazing work today!</p>
+                <PartyPopper className="h-12 w-12 text-primary mx-auto mb-2" />
+                <p className="text-lg font-bold text-foreground">All Goals Complete!</p>
+                <p className="text-sm text-muted-foreground mt-1">Session complete. Outstanding execution.</p>
               </motion.div>
             </div>
           </motion.div>
