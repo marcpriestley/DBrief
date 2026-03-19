@@ -50,14 +50,12 @@ function useInlineVoice() {
   startRecognitionRef.current = () => {
     if (!isSupported || !shouldListenRef.current) return;
 
+    // If a recognition is already running, don't double-start
+    if (recognitionRef.current) return;
+
     if (restartTimerRef.current) {
       clearTimeout(restartTimerRef.current);
       restartTimerRef.current = null;
-    }
-
-    if (recognitionRef.current) {
-      try { recognitionRef.current.abort(); } catch {}
-      recognitionRef.current = null;
     }
 
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -92,14 +90,21 @@ function useInlineVoice() {
         shouldListenRef.current = false;
         setIsListening(false);
       }
+      // All other errors: let onend handle the restart naturally
     };
 
     recognition.onend = () => {
       setInterimText("");
+      // Guard: ignore stale onend callbacks from replaced/stopped instances
+      if (recognitionRef.current !== recognition) return;
+      // Clear ref FIRST so the next startRecognitionRef.current() sees a clean slate
+      recognitionRef.current = null;
+
       if (shouldListenRef.current) {
+        // Give the browser 300ms to fully release the audio device before reopening
         restartTimerRef.current = setTimeout(() => {
-          startRecognitionRef.current();
-        }, 150);
+          if (shouldListenRef.current) startRecognitionRef.current();
+        }, 300);
       } else {
         setIsListening(false);
       }
@@ -109,9 +114,10 @@ function useInlineVoice() {
     try {
       recognition.start();
     } catch {
+      recognitionRef.current = null;
       if (shouldListenRef.current) {
         restartTimerRef.current = setTimeout(() => {
-          startRecognitionRef.current();
+          if (shouldListenRef.current) startRecognitionRef.current();
         }, 500);
       }
     }
@@ -136,15 +142,19 @@ function useInlineVoice() {
     }
     setInterimText("");
     setIsListening(false);
-    try { recognitionRef.current?.stop(); } catch {}
+    // Clear ref BEFORE stopping so onend guard sees recognitionRef !== instance
+    const old = recognitionRef.current;
     recognitionRef.current = null;
+    try { old?.stop(); } catch {}
   }, []);
 
   useEffect(() => {
     return () => {
       shouldListenRef.current = false;
       if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
-      try { recognitionRef.current?.abort(); } catch {}
+      const old = recognitionRef.current;
+      recognitionRef.current = null;
+      try { old?.abort(); } catch {}
     };
   }, []);
 

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { haptic } from "@/lib/haptics";
 import { Mic, Paperclip, Save, X, FileText, Image, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -102,6 +103,7 @@ export default function JournalPanel({ selectedDate, onVoiceRecord }: JournalPan
       return response.json() as Promise<JournalEntry>;
     },
     onSuccess: (data: JournalEntry, variables) => {
+      haptic("success");
       setContent(data.content);
       setInitialContent(data.content);
       queryClient.invalidateQueries({ queryKey: ["/api/journal-entries"] });

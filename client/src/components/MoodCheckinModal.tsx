@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { haptic } from "@/lib/haptics";
 import { motion } from "framer-motion";
 import { Smile, Frown, Meh, Heart } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -57,6 +58,7 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
       return res.json();
     },
     onSuccess: () => {
+      haptic("success");
       toast({ title: "Mood logged", description: `Your ${timeLabels[timeOfDay].toLowerCase()} has been saved.` });
       queryClient.invalidateQueries({ queryKey: ["/api/mood-checkins"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dates-with-data"] });

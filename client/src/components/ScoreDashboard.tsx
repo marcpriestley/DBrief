@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { haptic } from "@/lib/haptics";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -86,6 +87,7 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
       return apiRequest("POST", "/api/daily-scores", data);
     },
     onSuccess: () => {
+      haptic("success");
       queryClient.invalidateQueries({ queryKey: ["/api/daily-scores", selectedDate] });
       queryClient.invalidateQueries({ queryKey: ["/api/dates-with-data"] });
       queryClient.invalidateQueries({ queryKey: ["/api/streak"] });
