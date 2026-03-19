@@ -72,7 +72,7 @@ export default function GoalsSection({ selectedDate }: GoalsSectionProps) {
 
   const addTemplateMutation = useMutation({
     mutationFn: async (title: string) => {
-      const res = await apiRequest("POST", "/api/goal-templates", { title });
+      const res = await apiRequest("POST", "/api/goal-templates", { title, date: selectedDate });
       return res.json();
     },
     onSuccess: () => {

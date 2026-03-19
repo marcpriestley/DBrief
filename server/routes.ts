@@ -507,7 +507,7 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
   app.post("/api/goal-templates", async (req, res) => {
     try {
       const userId = getUserId(req);
-      const { title } = req.body;
+      const { title, date: requestedDate } = req.body;
       if (!title) return res.status(400).json({ message: "Title is required" });
       const existing = await storage.getGoalTemplates(userId);
       const template = await storage.createGoalTemplate({
@@ -519,16 +519,24 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
 
       const now = new Date();
       const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-      const todayGoals = await storage.getDailyGoals(userId, todayStr);
-      const alreadyExists = todayGoals.some(g => g.goalTemplateId === template.id);
-      if (!alreadyExists) {
-        await storage.createDailyGoal({
-          userId,
-          date: todayStr,
-          goalTemplateId: template.id,
-          title: template.title,
-          completed: false,
-        });
+
+      const datesToCreate = new Set<string>([todayStr]);
+      if (requestedDate && typeof requestedDate === "string") {
+        datesToCreate.add(requestedDate);
+      }
+
+      for (const date of datesToCreate) {
+        const dateGoals = await storage.getDailyGoals(userId, date);
+        const alreadyExists = dateGoals.some(g => g.goalTemplateId === template.id);
+        if (!alreadyExists) {
+          await storage.createDailyGoal({
+            userId,
+            date,
+            goalTemplateId: template.id,
+            title: template.title,
+            completed: false,
+          });
+        }
       }
 
       res.json(template);
