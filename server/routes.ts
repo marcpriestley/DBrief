@@ -525,17 +525,21 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
         datesToCreate.add(requestedDate);
       }
 
+      console.log(`[Goals] Creating template id:${template.id} "${template.title}" for dates:`, [...datesToCreate]);
+
       for (const date of datesToCreate) {
         const dateGoals = await storage.getDailyGoals(userId, date);
         const alreadyExists = dateGoals.some(g => g.goalTemplateId === template.id);
+        console.log(`[Goals] date=${date}, existing=${dateGoals.length}, alreadyExists=${alreadyExists}`);
         if (!alreadyExists) {
-          await storage.createDailyGoal({
+          const created = await storage.createDailyGoal({
             userId,
             date,
             goalTemplateId: template.id,
             title: template.title,
             completed: false,
           });
+          console.log(`[Goals] Created daily goal id:${created.id} for date ${date}`);
         }
       }
 
@@ -577,6 +581,7 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
     try {
       const userId = getUserId(req);
       const { date } = req.params;
+      res.set("Cache-Control", "no-store");
       const goals = await storage.ensureDailyGoals(userId, date);
       res.json(goals);
     } catch (error) {

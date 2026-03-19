@@ -31,7 +31,7 @@ export default function GoalsSection({ selectedDate }: GoalsSectionProps) {
 
   const { data: goals = [], isLoading } = useQuery<DailyGoal[]>({
     queryKey: ["/api/daily-goals", selectedDate],
-    queryFn: () => fetch(`/api/daily-goals/${selectedDate}`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetch(`/api/daily-goals/${selectedDate}`, { credentials: "include", cache: "no-store" }).then(r => r.json()),
   });
 
   const { data: templates = [] } = useQuery<GoalTemplate[]>({
