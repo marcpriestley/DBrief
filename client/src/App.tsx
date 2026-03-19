@@ -9,6 +9,7 @@ import CalendarPage from "@/pages/calendar";
 import Welcome from "@/pages/welcome";
 import OnboardingFlow from "@/components/OnboardingFlow";
 import NotFound from "@/pages/not-found";
+import PrivacyPolicy from "@/pages/privacy";
 
 function AuthenticatedRouter() {
   const { data: user, isLoading } = useQuery<any>({
@@ -55,7 +56,10 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
-        <AuthenticatedRouter />
+        <Switch>
+          <Route path="/privacy" component={PrivacyPolicy} />
+          <Route component={AuthenticatedRouter} />
+        </Switch>
       </TooltipProvider>
     </QueryClientProvider>
   );
