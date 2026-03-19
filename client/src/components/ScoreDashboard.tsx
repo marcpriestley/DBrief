@@ -70,13 +70,13 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
       queryClient.invalidateQueries({ queryKey: ["/api/user-metrics"] });
       toast({
         title: "Health data synced",
-        description: "Your Apple Health data has been updated.",
+        description: "Your health data has been updated.",
       });
     },
     onError: () => {
       toast({
         title: "Sync failed",
-        description: "Could not sync health data. Make sure the app has HealthKit permissions.",
+        description: "Could not sync health data. Make sure the app has health permissions.",
         variant: "destructive",
       });
     },

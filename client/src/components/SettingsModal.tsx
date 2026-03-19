@@ -317,14 +317,15 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             <div className="rounded-lg bg-muted/50 border border-border/50 p-3 space-y-3">
               <div className="flex items-center gap-1.5">
                 <Heart className="h-3 w-3 text-red-500" />
-                <p className="text-xs font-medium text-foreground">Apple Health Metrics</p>
+                <p className="text-xs font-medium text-foreground">Health Metrics</p>
               </div>
 
               <div className="rounded-md bg-blue-500/10 border border-blue-500/20 p-2.5 flex gap-2">
                 <Info className="h-3.5 w-3.5 text-blue-600 shrink-0 mt-0.5" />
                 <div className="text-[11px] text-blue-700 leading-relaxed space-y-1">
-                  <p><strong>Auto-sync requires the native iOS app.</strong> DBrief is currently a web app — Apple HealthKit only works inside a native iOS app distributed through the App Store.</p>
-                  <p>You can still select any metrics below to <strong>manually track them</strong> on your dashboard. When the iOS app is built, these will auto-sync from your Health data.</p>
+                  <p><strong>Auto-sync requires the native app.</strong> DBrief is currently running as a web app — health data access requires a native build.</p>
+                  <p>On <strong>iOS</strong> this syncs from Apple Health (HealthKit). On <strong>Android</strong> it syncs from Google Health Connect. All the same metrics are supported on both platforms.</p>
+                  <p>Select metrics below to <strong>manually track them now</strong>. Once the native app is installed, they'll auto-sync from your device's health data.</p>
                 </div>
               </div>
 
