@@ -69,7 +69,7 @@ export default function Dashboard() {
   return (
     <AppLayout>
       {/* Sticky day selector — pinned just below the main header */}
-      <div className="sticky top-[82px] z-40 -mx-4 px-4 py-2 bg-background border-b border-border/40">
+      <div className="sticky top-[90px] z-40 -mx-4 px-4 py-2 bg-background border-b border-border/40">
         <div className="flex w-full bg-muted rounded-xl p-1 gap-1">
           <button
             onClick={() => switchView("yesterday")}

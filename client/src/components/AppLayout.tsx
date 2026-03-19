@@ -8,6 +8,7 @@ import SettingsModal from "@/components/SettingsModal";
 import MoodCheckinModal from "@/components/MoodCheckinModal";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { haptic } from "@/lib/haptics";
+import logoSrc from "@assets/Gemini_Generated_Image_urmwx2urmwx2urmw_1773926066552.png";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -48,12 +49,14 @@ export default function AppLayout({ children }: AppLayoutProps) {
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-xl border-b border-border/60">
         <div className="max-w-2xl mx-auto px-4">
-          <div className="flex justify-between items-center h-12">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "hsl(40, 95%, 48%)" }}>
-                <span className="text-[11px] font-black tracking-tight" style={{ color: "hsl(0,0%,8%)" }}>DB</span>
-              </div>
-              <span className="text-sm font-bold text-foreground tracking-tight">DBrief</span>
+          <div className="flex justify-between items-center h-14">
+            <div className="flex items-center gap-2.5">
+              <img
+                src={logoSrc}
+                alt="DBrief"
+                className="w-9 h-9 rounded-xl object-cover shadow-sm"
+              />
+              <span className="text-lg font-black text-foreground tracking-tight">DBrief</span>
             </div>
             <div className="flex items-center gap-0.5">
               <StreakDisplay streak={streak} />
