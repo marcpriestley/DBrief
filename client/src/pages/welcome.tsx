@@ -31,20 +31,12 @@ export default function Welcome() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [googleReady, setGoogleReady] = useState(false);
   const googleScriptLoaded = useRef(false);
   const { toast } = useToast();
   const [, setLocation] = useLocation();
 
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
-
-  useEffect(() => {
-    if (!googleClientId || googleScriptLoaded.current) return;
-    googleScriptLoaded.current = true;
-    const script = document.createElement("script");
-    script.src = "https://accounts.google.com/gsi/client";
-    script.async = true;
-    document.head.appendChild(script);
-  }, [googleClientId]);
 
   const authMutation = useMutation({
     mutationFn: async (data: { email: string; password: string; isLogin: boolean }) => {
@@ -85,6 +77,35 @@ export default function Welcome() {
     },
   });
 
+  // Load and initialize Google Identity Services as soon as the script is ready
+  useEffect(() => {
+    if (!googleClientId || googleScriptLoaded.current) return;
+    googleScriptLoaded.current = true;
+
+    const initGoogle = () => {
+      window.google?.accounts?.id?.initialize({
+        client_id: googleClientId,
+        callback: (response: { credential: string }) => {
+          googleMutation.mutate(response.credential);
+        },
+        cancel_on_tap_outside: true,
+      });
+      setGoogleReady(true);
+    };
+
+    if (window.google?.accounts?.id) {
+      initGoogle();
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.onload = initGoogle;
+    document.head.appendChild(script);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [googleClientId]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -116,24 +137,29 @@ export default function Welcome() {
       return;
     }
 
-    if (!window.google?.accounts?.id) {
-      toast({
-        title: "Google Sign-In loading",
-        description: "Please try again in a moment.",
-      });
+    if (!googleReady || !window.google?.accounts?.id) {
+      // Not ready yet — try to initialize on the spot
+      if (window.google?.accounts?.id) {
+        window.google.accounts.id.initialize({
+          client_id: googleClientId,
+          callback: (response: { credential: string }) => {
+            googleMutation.mutate(response.credential);
+          },
+          cancel_on_tap_outside: true,
+        });
+        window.google.accounts.id.prompt();
+        setGoogleLoading(true);
+        setTimeout(() => setGoogleLoading(false), 3000);
+      } else {
+        toast({
+          title: "Google Sign-In not ready",
+          description: "Please check your internet connection and try again.",
+        });
+      }
       return;
     }
 
     setGoogleLoading(true);
-
-    window.google.accounts.id.initialize({
-      client_id: googleClientId,
-      callback: (response: { credential: string }) => {
-        googleMutation.mutate(response.credential);
-      },
-      cancel_on_tap_outside: true,
-    });
-
     window.google.accounts.id.prompt();
     setTimeout(() => setGoogleLoading(false), 3000);
   };

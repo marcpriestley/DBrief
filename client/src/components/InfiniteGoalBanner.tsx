@@ -79,7 +79,6 @@ export default function InfiniteGoalBanner() {
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative group"
       >
         <div className="bg-gradient-to-r from-primary/8 via-primary/5 to-transparent border border-primary/15 rounded-xl px-4 py-3">
           <div className="flex items-start gap-3">
@@ -96,7 +95,7 @@ export default function InfiniteGoalBanner() {
                 setInput(infiniteGoal.content);
                 setIsSetupOpen(true);
               }}
-              className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 text-muted-foreground hover:text-foreground"
+              className="p-1.5 text-muted-foreground/50 hover:text-foreground transition-colors"
             >
               <Edit2 className="h-3 w-3" />
             </button>

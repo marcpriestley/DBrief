@@ -144,20 +144,27 @@ export function registerDebriefRoutes(app: Express): void {
 
     try {
       const { date } = req.params;
-      const [debrief] = await db.select().from(debriefs)
-        .where(and(eq(debriefs.userId, userId), eq(debriefs.date, date)));
+      const allDebriefs = await db.select().from(debriefs)
+        .where(and(eq(debriefs.userId, userId), eq(debriefs.date, date)))
+        .orderBy(debriefs.createdAt);
 
-      if (!debrief) {
-        return res.json(null);
+      if (allDebriefs.length === 0) {
+        return res.json([]);
       }
 
-      const msgs = await db.select().from(debriefMessages)
-        .where(eq(debriefMessages.debriefId, debrief.id))
-        .orderBy(debriefMessages.createdAt);
+      const result = await Promise.all(allDebriefs.map(async (debrief) => {
+        const msgs = await db.select().from(debriefMessages)
+          .where(eq(debriefMessages.debriefId, debrief.id))
+          .orderBy(debriefMessages.createdAt);
+        const decryptedMsgs = msgs.map(m => ({ ...m, content: decrypt(m.content) }));
+        return {
+          ...debrief,
+          summary: debrief.summary ? decrypt(debrief.summary) : debrief.summary,
+          messages: decryptedMsgs,
+        };
+      }));
 
-      const decryptedMsgs = msgs.map(m => ({ ...m, content: decrypt(m.content) }));
-      const decryptedDebrief = { ...debrief, summary: debrief.summary ? decrypt(debrief.summary) : debrief.summary };
-      res.json({ ...decryptedDebrief, messages: decryptedMsgs });
+      res.json(result);
     } catch (error) {
       console.error("Error fetching debrief:", error);
       res.status(500).json({ error: "Failed to fetch debrief" });
@@ -171,20 +178,21 @@ export function registerDebriefRoutes(app: Express): void {
     try {
       const { date, fresh } = req.body;
 
-      const [existing] = await db.select().from(debriefs)
-        .where(and(eq(debriefs.userId, userId), eq(debriefs.date, date)));
-
-      if (existing && !fresh) {
-        const msgs = await db.select().from(debriefMessages)
-          .where(eq(debriefMessages.debriefId, existing.id))
-          .orderBy(debriefMessages.createdAt);
-        return res.json({ ...existing, messages: msgs });
+      // When fresh=false, resume the existing active (incomplete) debrief if one exists
+      if (!fresh) {
+        const existingAll = await db.select().from(debriefs)
+          .where(and(eq(debriefs.userId, userId), eq(debriefs.date, date)))
+          .orderBy(debriefs.createdAt);
+        const active = existingAll.find(d => !d.isComplete);
+        if (active) {
+          const msgs = await db.select().from(debriefMessages)
+            .where(eq(debriefMessages.debriefId, active.id))
+            .orderBy(debriefMessages.createdAt);
+          const decryptedMsgs = msgs.map(m => ({ ...m, content: decrypt(m.content) }));
+          return res.json({ ...active, messages: decryptedMsgs });
+        }
       }
-
-      if (existing && fresh) {
-        await db.delete(debriefMessages).where(eq(debriefMessages.debriefId, existing.id));
-        await db.delete(debriefs).where(eq(debriefs.id, existing.id));
-      }
+      // fresh=true OR no active debrief found — always create a new one, never delete old ones
 
       const context = await gatherDayContext(userId, date);
       const [user] = await db.select().from(users).where(eq(users.id, userId));
@@ -330,7 +338,7 @@ export function registerDebriefRoutes(app: Express): void {
           messages: [
             {
               role: "system",
-              content: "Summarize this daily debrief conversation in 2-3 concise sentences. Capture the key themes, feelings, and any notable insights. Write in third person about 'they/their day'.",
+              content: "Summarize this daily performance debrief in 2-3 concise sentences. Capture the key themes and any notable insights. Write in second person — address the user as 'you' (e.g. 'You focused on...'). Use high-performance F1 framing, not therapy speak.",
             },
             { role: "user", content: conversationText },
           ],

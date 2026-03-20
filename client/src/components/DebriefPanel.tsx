@@ -100,7 +100,7 @@ function useInlineVoice() {
       if (e.error === "not-allowed" || e.error === "service-not-allowed") {
         shouldListenRef.current = false;
         setIsListening(false);
-        setMicError("Microphone access denied. Go to Settings > DBrief > Microphone to enable it.");
+        setMicError("Microphone access denied. Enable microphone access for DBrief in your device Settings app.");
       }
       // All other errors: let onend handle the restart naturally
     };
@@ -146,7 +146,7 @@ function useInlineVoice() {
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
           stream.getTracks().forEach((t) => t.stop()); // release immediately, we only needed the prompt
         } catch {
-          setMicError("Microphone access denied. Go to Settings > DBrief > Microphone to enable it.");
+          setMicError("Microphone access denied. Enable microphone access for DBrief in your device Settings app.");
           return;
         }
       }
@@ -209,15 +209,25 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const { toast } = useToast();
   const voice = useInlineVoice();
 
-  const { data: debrief, isLoading } = useQuery<Debrief | null>({
+  const { data: allDebriefs = [], isLoading } = useQuery<Debrief[]>({
     queryKey: ["/api/debriefs", selectedDate],
     queryFn: async () => {
       const response = await fetch(`/api/debriefs/${selectedDate}`, { credentials: "include" });
-      if (!response.ok) return null;
-      return response.json();
+      if (!response.ok) return [];
+      const data = await response.json();
+      return Array.isArray(data) ? data : (data ? [data] : []);
     },
     staleTime: 5 * 60 * 1000,
   });
+
+  // Normalise — old cache entries could be a single object or null; always work with an array
+  const safeDebriefs: Debrief[] = Array.isArray(allDebriefs)
+    ? allDebriefs
+    : allDebriefs ? [allDebriefs as unknown as Debrief] : [];
+  // Active = the one in-progress debrief for this day (if any)
+  const debrief = safeDebriefs.find(d => !d.isComplete) ?? null;
+  // All completed debriefs, oldest first
+  const completedDebriefs = safeDebriefs.filter(d => d.isComplete);
 
   const userMessageCount = debrief?.messages?.filter(m => m.role === "user").length || 0;
   const assistantMessageCount = debrief?.messages?.filter(m => m.role === "assistant").length || 0;
@@ -245,7 +255,16 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
       return response.json() as Promise<Debrief>;
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/debriefs", selectedDate], data);
+      queryClient.setQueryData(["/api/debriefs", selectedDate], (old: Debrief[] | undefined) => {
+        const existing = old || [];
+        const idx = existing.findIndex(d => d.id === data.id);
+        if (idx >= 0) {
+          const updated = [...existing];
+          updated[idx] = data;
+          return updated;
+        }
+        return [...existing, data];
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/dates-with-data"] });
       setContinuedPastCheckpoint(false);
     },
@@ -284,9 +303,14 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
       createdAt: new Date().toISOString(),
     };
 
-    queryClient.setQueryData(["/api/debriefs", selectedDate], (old: Debrief | null) => {
+    queryClient.setQueryData(["/api/debriefs", selectedDate], (old: Debrief[] | undefined) => {
       if (!old) return old;
-      return { ...old, messages: [...old.messages, optimisticMsg] };
+      return old.map(d => {
+        if (!d.isComplete && d.id === (debrief?.id ?? d.id)) {
+          return { ...d, messages: [...d.messages, optimisticMsg] };
+        }
+        return d;
+      });
     });
 
     try {
@@ -404,7 +428,8 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     );
   }
 
-  if (!debrief) {
+  // No debriefs at all — show the start prompt
+  if (!debrief && completedDebriefs.length === 0) {
     return (
       <Card className="border border-border/50 shadow-sm bg-card overflow-hidden">
         <CardContent className="p-0">
@@ -444,37 +469,50 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     );
   }
 
-  if (debrief.isComplete) {
+  // All debriefs complete — show full history + start new button
+  if (!debrief && completedDebriefs.length > 0) {
     return (
       <Card className="border border-border/50 shadow-sm bg-card">
         <CardContent className="p-6">
           <div className="flex items-center gap-2 mb-4">
             <CheckCircle className="h-5 w-5 text-emerald-500" />
-            <h3 className="text-lg font-semibold text-foreground">Debrief Complete</h3>
+            <h3 className="text-lg font-semibold text-foreground">
+              {completedDebriefs.length === 1 ? "Debrief Complete" : `${completedDebriefs.length} Sessions`}
+            </h3>
             <span className="text-xs text-muted-foreground ml-auto">{dateLabel}</span>
           </div>
 
-          {debrief.summary && (
-            <p className="text-sm text-muted-foreground mb-4 italic leading-relaxed">
-              {debrief.summary}
-            </p>
-          )}
-
-          <div className="space-y-3 max-h-[400px] overflow-y-auto">
-            {debrief.messages.map((msg) => (
-              <div key={msg.id} className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
-                <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
-                  msg.role === "user"
-                    ? "bg-primary text-primary-foreground rounded-br-md"
-                    : "bg-muted text-foreground rounded-bl-md"
-                }`}>
-                  {msg.content}
-                </div>
-                {msg.createdAt && (
-                  <span className="text-[10px] text-muted-foreground/60 mt-0.5 px-1">
-                    {formatMsgTime(msg.createdAt)}
-                  </span>
+          <div className="space-y-5 max-h-[500px] overflow-y-auto">
+            {completedDebriefs.map((d, idx) => (
+              <div key={d.id} className={completedDebriefs.length > 1 ? "pb-4 border-b border-border/50 last:border-0 last:pb-0" : ""}>
+                {completedDebriefs.length > 1 && (
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                    Session {idx + 1}
+                  </p>
                 )}
+                {d.summary && (
+                  <p className="text-sm text-muted-foreground mb-3 italic leading-relaxed">
+                    {d.summary}
+                  </p>
+                )}
+                <div className="space-y-2">
+                  {d.messages.map((msg) => (
+                    <div key={msg.id} className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
+                      <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+                        msg.role === "user"
+                          ? "bg-primary text-primary-foreground rounded-br-md"
+                          : "bg-muted text-foreground rounded-bl-md"
+                      }`}>
+                        {msg.content}
+                      </div>
+                      {msg.createdAt && (
+                        <span className="text-[10px] text-muted-foreground/60 mt-0.5 px-1">
+                          {formatMsgTime(msg.createdAt)}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
@@ -487,8 +525,12 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
               disabled={startDebriefMutation.isPending}
               className="text-muted-foreground hover:text-foreground"
             >
-              <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
-              New Debrief
+              {startDebriefMutation.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              ) : (
+                <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              Start New Session
             </Button>
           </div>
         </CardContent>
@@ -503,6 +545,24 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const progressDots = Math.min(userMessageCount, CORE_EXCHANGES);
 
   return (
+    <div className="space-y-3">
+      {/* Completed sessions from earlier in the day — collapsed summaries */}
+      {completedDebriefs.map((d, idx) => (
+        <Card key={d.id} className="border border-border/30 shadow-sm bg-card/60">
+          <CardContent className="px-5 py-3">
+            <div className="flex items-center gap-2 mb-1.5">
+              <CheckCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+              <span className="text-xs font-medium text-muted-foreground">
+                Session {idx + 1} — {formatMsgTime(d.createdAt)}
+              </span>
+            </div>
+            {d.summary && (
+              <p className="text-xs text-muted-foreground italic leading-relaxed">{d.summary}</p>
+            )}
+          </CardContent>
+        </Card>
+      ))}
+
     <Card className="border border-border/50 shadow-sm bg-card">
       <CardContent className="p-0">
         <div className="px-5 py-3 border-b border-border/50 flex items-center justify-between">
@@ -694,5 +754,6 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
         </div>
       </CardContent>
     </Card>
+    </div>
   );
 }
