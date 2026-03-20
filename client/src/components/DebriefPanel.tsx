@@ -100,7 +100,7 @@ function useInlineVoice() {
       if (e.error === "not-allowed" || e.error === "service-not-allowed") {
         shouldListenRef.current = false;
         setIsListening(false);
-        setMicError("Microphone access denied. Check your browser permissions and try again.");
+        setMicError("Microphone access denied. Go to Settings > DBrief > Microphone to enable it.");
       }
       // All other errors: let onend handle the restart naturally
     };
@@ -136,8 +136,21 @@ function useInlineVoice() {
   };
 
   const start = useCallback(
-    (onFinal: (text: string) => void) => {
+    async (onFinal: (text: string) => void) => {
       if (!isSupported) return;
+
+      // Request microphone permission first — this triggers the native iOS permission dialog
+      // rather than immediately firing "not-allowed" inside the speech recogniser
+      if (navigator.mediaDevices?.getUserMedia) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          stream.getTracks().forEach((t) => t.stop()); // release immediately, we only needed the prompt
+        } catch {
+          setMicError("Microphone access denied. Go to Settings > DBrief > Microphone to enable it.");
+          return;
+        }
+      }
+
       accumulatedRef.current = "";
       onFinalRef.current = onFinal;
       shouldListenRef.current = true;
@@ -372,7 +385,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
       return;
     }
     if (!voice.isListening && !isStreaming) {
-      inputRef.current?.focus();
+      inputRef.current?.focus({ preventScroll: true });
     }
   }, [voice.isListening, isStreaming]);
 

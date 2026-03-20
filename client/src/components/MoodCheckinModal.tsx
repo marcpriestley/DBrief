@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { haptic } from "@/lib/haptics";
 import { motion } from "framer-motion";
@@ -46,6 +46,14 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
   const [moodValue, setMoodValue] = useState(50);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Callback ref attaches touch listeners the moment the element mounts (even inside a lazy-rendered Dialog)
+  const sliderRef = useCallback((el: HTMLInputElement | null) => {
+    if (!el) return;
+    const stop = (e: TouchEvent) => e.stopPropagation();
+    el.addEventListener("touchstart", stop, { passive: false });
+    el.addEventListener("touchmove", stop, { passive: false });
+  }, []);
 
   const mood = getMoodEmoji(moodValue);
   const MoodIcon = mood.icon;
@@ -102,6 +110,7 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
 
           <div className="px-2">
             <input
+              ref={sliderRef}
               type="range"
               value={moodValue}
               onChange={(e) => setMoodValue(Number(e.target.value))}
@@ -109,10 +118,7 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
               max={100}
               step={1}
               className="w-full h-2 rounded-full appearance-none cursor-pointer"
-              style={{
-                touchAction: "none",
-                accentColor: "hsl(40, 95%, 48%)",
-              }}
+              style={{ touchAction: "none", accentColor: "hsl(40, 95%, 48%)" }}
             />
             <div className="flex justify-between mt-1.5 text-[10px] text-muted-foreground">
               <span>0</span>

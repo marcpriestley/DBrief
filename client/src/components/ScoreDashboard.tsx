@@ -1,16 +1,42 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { haptic } from "@/lib/haptics";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { DailyScore, UserMetric } from "@shared/schema";
 import { Heart, Edit, Plus, Settings, Trash2 } from "lucide-react";
 import MetricTrendChart from "./MetricTrendChart";
+
+function NativeSlider({ value, onChange, min = 0, max = 100, color = "hsl(40, 95%, 48%)" }: {
+  value: number; onChange: (v: number) => void; min?: number; max?: number; color?: string;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const stop = (e: TouchEvent) => e.stopPropagation();
+    el.addEventListener("touchstart", stop, { passive: false });
+    el.addEventListener("touchmove", stop, { passive: false });
+    return () => { el.removeEventListener("touchstart", stop); el.removeEventListener("touchmove", stop); };
+  }, []);
+  return (
+    <input
+      ref={ref}
+      type="range"
+      min={min}
+      max={max}
+      step={1}
+      value={value}
+      onChange={(e) => onChange(Number(e.target.value))}
+      className="w-full h-2 rounded-full appearance-none cursor-pointer"
+      style={{ touchAction: "none", accentColor: color }}
+    />
+  );
+}
 
 interface ScoreDashboardProps {
   selectedDate: string;
@@ -381,13 +407,12 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
                     <span className="font-medium text-foreground">{parseInt(scoreValue) || 0} / {selectedMetric?.maxValue || 100}</span>
                     <span>{selectedMetric?.maxValue || 100}</span>
                   </div>
-                  <Slider
+                  <NativeSlider
                     min={0}
                     max={selectedMetric?.maxValue || 100}
-                    step={1}
-                    value={[parseInt(scoreValue) || 0]}
-                    onValueChange={([val]) => setScoreValue(String(val))}
-                    className="w-full"
+                    value={parseInt(scoreValue) || 0}
+                    onChange={(val) => setScoreValue(String(val))}
+                    color={selectedMetric?.color || "hsl(40, 95%, 48%)"}
                   />
                 </div>
 
