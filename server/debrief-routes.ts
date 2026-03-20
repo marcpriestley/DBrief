@@ -34,7 +34,12 @@ async function gatherDayContext(userId: number, date: string) {
     db.select().from(longTermGoals).where(and(eq(longTermGoals.userId, userId), eq(longTermGoals.isActive, true))),
   ]);
 
-  const scoreMap = scores.map(s => `${s.metricName}: ${s.value}/100`).join(", ");
+  // Exclude zero scores — a value of 0 almost always means the user didn't log that
+  // metric, not that they deliberately scored it as a zero. Treat missing data as absent.
+  const loggedScores = scores.filter(s => s.value > 0);
+  const scoreMap = loggedScores.length > 0
+    ? loggedScores.map(s => `${s.metricName}: ${s.value}/100`).join(", ")
+    : "";
   const goalSummary = goals.length > 0
     ? `Daily goals: ${goals.filter(g => g.completed).length}/${goals.length} completed (${goals.map(g => `${g.title}: ${g.completed ? "done" : "not done"}`).join(", ")})`
     : "No daily goals set today";
@@ -51,7 +56,7 @@ async function gatherDayContext(userId: number, date: string) {
 
   return {
     scoreMap, goalSummary, moodAvg, journalContent,
-    hasScores: scores.length > 0, hasGoals: goals.length > 0, hasMoods: moods.length > 0,
+    hasScores: loggedScores.length > 0, hasGoals: goals.length > 0, hasMoods: moods.length > 0,
     infiniteGoalContent, longTermGoalsList, isWeeklyAlignmentDay,
   };
 }
@@ -84,8 +89,8 @@ ROLE: Run a daily performance debrief. One focused question at a time. Listen to
 TIMING: ${timingContext}
 ${isToday ? "This is today's debrief." : `This is a retrospective debrief for ${debriefDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}.`}
 
-TELEMETRY:
-${context.hasScores ? `Performance scores: ${context.scoreMap}` : "No scores logged yet."}
+TELEMETRY (scores are only shown if the user explicitly logged them — a missing metric means no data, not a zero score. Never reference or penalise a metric that isn't listed):
+${context.hasScores ? `Performance scores: ${context.scoreMap}` : "No scores logged yet — don't reference scores."}
 ${context.goalSummary}
 ${context.moodAvg}
 ${context.journalContent ? `Session notes: "${context.journalContent}"` : ""}${infiniteGoalSection}${ltGoalsSection}

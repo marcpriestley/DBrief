@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
-import { useSearch } from "wouter";
 import { ChevronLeft } from "lucide-react";
 import AppLayout from "@/components/AppLayout";
 import ScoreDashboard from "@/components/ScoreDashboard";
@@ -40,7 +39,6 @@ export default function Dashboard() {
   const [dayView, setDayView] = useState<DayView>("today");
   const [historicalDate, setHistoricalDate] = useState<string | null>(null);
   const [defaultApplied, setDefaultApplied] = useState(false);
-  const search = useSearch();
 
   const { data: user } = useQuery<any>({ queryKey: ["/api/auth/me"] });
 
@@ -52,17 +50,17 @@ export default function Dashboard() {
     dayView === "yesterday" ? yesterdayStr :
     (historicalDate ?? todayStr);
 
-  // Single initialisation effect — reads `search` BEFORE clearing the URL
-  // so there's no race between URL-param handling and the smart default.
+  // Initialisation effect — reads window.location.search directly (not the reactive
+  // wouter hook which may not have initialised yet on first mount).
   useEffect(() => {
     if (!user || defaultApplied) return;
     setDefaultApplied(true);
 
-    const params = new URLSearchParams(search);
+    // Read the real URL at this moment — before we clear it
+    const params = new URLSearchParams(window.location.search);
     const dateParam = params.get("date");
 
     if (dateParam) {
-      // Always clear the param from the URL first
       window.history.replaceState({}, "", "/");
       window.scrollTo({ top: 0, behavior: "instant" });
 
@@ -79,7 +77,7 @@ export default function Dashboard() {
     } else {
       setDayView(getSmartDefault(user.journalPreference));
     }
-  }, [user, defaultApplied, search, todayStr, yesterdayStr]);
+  }, [user, defaultApplied, todayStr, yesterdayStr]);
 
   const switchView = (view: DayView) => {
     if (view !== dayView) {

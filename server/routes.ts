@@ -738,8 +738,10 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
       const recentEntries = entries.filter(e => e.date >= fourteenDaysAgo);
       const recentScores = scores.filter(s => s.date >= fourteenDaysAgo);
 
+      // Exclude zeros — a score of 0 almost always means no input was logged, not a
+      // deliberate zero. Only include scores that were actually entered by the user.
       const scoresByDate: Record<string, Record<string, number>> = {};
-      recentScores.forEach(score => {
+      recentScores.filter(s => s.value > 0).forEach(score => {
         if (!scoresByDate[score.date]) scoresByDate[score.date] = {};
         scoresByDate[score.date][score.metricName] = score.value;
       });
@@ -759,15 +761,17 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
         if (g.completed) goalsByDate[g.date].completed++;
       });
 
-      const prompt = `You are an experienced data analyst and wellbeing coach. Analyze the user's daily tracking data below. All scores are on a 0-100 scale.
+      const prompt = `You are an experienced performance analyst. Analyze the user's daily tracking data below. All scores are on a 0-100 scale.
+
+IMPORTANT: Only scores that were explicitly logged by the user are included below. A missing score for a date means the user did not log it that day — do NOT assume it was zero or poor performance. Only analyse dates and metrics that have actual data.
 
 JOURNAL ENTRIES (last 14 days):
 ${recentEntries.length > 0 ? recentEntries.map(entry => `${entry.date}: ${entry.content}`).join('\n') : 'No journal entries yet.'}
 
-DAILY SCORES BY DATE (0-100 scale):
+DAILY SCORES BY DATE (0-100 scale, only days with logged data):
 ${Object.entries(scoresByDate).map(([date, s]) => 
   `${date}: ${Object.entries(s).map(([name, val]) => `${name}=${val}`).join(', ')}`
-).join('\n') || 'No scores yet.'}
+).join('\n') || 'No scores logged yet.'}
 
 MOOD CHECK-INS BY DATE (0-100 scale, daily averages):
 ${Object.entries(moodByDate).map(([date, vals]) => 
