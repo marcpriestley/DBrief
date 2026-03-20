@@ -133,6 +133,10 @@ export function ProfileQuestionsSettings() {
     }
   }, [profileData, initialised]);
 
+  if (!initialised) {
+    return <div className="py-4 text-center text-xs text-muted-foreground">Loading profile...</div>;
+  }
+
   const allAnswered = PROFILE_QUESTIONS.every(q => answers[q.key]);
 
   return (

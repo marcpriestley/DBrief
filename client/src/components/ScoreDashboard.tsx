@@ -23,6 +23,7 @@ function NativeSlider({ value, onChange, min = 0, max = 100, color = "hsl(40, 95
     el.addEventListener("touchmove", stop, { passive: false });
     return () => { el.removeEventListener("touchstart", stop); el.removeEventListener("touchmove", stop); };
   }, []);
+  const handleTouch = (e: React.TouchEvent) => { e.stopPropagation(); };
   return (
     <input
       ref={ref}
@@ -32,8 +33,11 @@ function NativeSlider({ value, onChange, min = 0, max = 100, color = "hsl(40, 95
       step={1}
       value={value}
       onChange={(e) => onChange(Number(e.target.value))}
+      onTouchStart={handleTouch}
+      onTouchMove={handleTouch}
+      onTouchEnd={handleTouch}
       className="w-full h-2 rounded-full appearance-none cursor-pointer"
-      style={{ touchAction: "none", accentColor: color }}
+      style={{ touchAction: "none", accentColor: color, WebkitAppearance: "none" } as React.CSSProperties}
     />
   );
 }
@@ -58,6 +62,7 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
   const [newMetricColor, setNewMetricColor] = useState(METRIC_COLORS[0]);
   const [editMetricName, setEditMetricName] = useState("");
   const [editMetricColor, setEditMetricColor] = useState("");
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
@@ -257,7 +262,16 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
           <h2 className="text-sm font-semibold text-foreground tracking-tight">
             {isToday ? "Daily Scores" : `Scores — ${new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
           </h2>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => { setNewMetricName(""); setNewMetricColor(METRIC_COLORS[0]); setDialogMode('addMetric'); }}
+              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+              title="Add metric"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </Button>
             <Button
               variant="ghost"
               size="sm"
@@ -448,28 +462,36 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
           {dialogMode === 'manage' && (
             <div className="space-y-1.5 py-1">
               {metrics.filter(m => m.isActive).map((metric) => (
-                <div key={metric.id} className="flex items-center justify-between p-2.5 rounded-lg border border-border/60 hover:border-border transition-colors">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: metric.color }} />
-                    <span className="text-sm font-medium text-foreground">{metric.name}</span>
-                  </div>
-                  <div className="flex items-center gap-0.5">
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleOpenEditMetric(metric)}>
-                      <Edit className="h-3 w-3" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-destructive/60 hover:text-destructive hover:bg-destructive/10"
-                      onClick={() => {
-                        if (confirm(`Remove "${metric.name}"? This won't delete any saved scores.`)) {
-                          deleteMetricMutation.mutate(metric.id);
-                        }
-                      }}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </div>
+                <div key={metric.id} className="rounded-lg border border-border/60 overflow-hidden">
+                  {confirmDeleteId === metric.id ? (
+                    <div className="flex items-center justify-between p-2.5 bg-destructive/5">
+                      <span className="text-xs text-foreground">Remove "{metric.name}"?</span>
+                      <div className="flex gap-1.5">
+                        <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setConfirmDeleteId(null)}>Cancel</Button>
+                        <Button size="sm" variant="destructive" className="h-6 px-2 text-xs" onClick={() => { deleteMetricMutation.mutate(metric.id); setConfirmDeleteId(null); }}>Remove</Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between p-2.5">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: metric.color }} />
+                        <span className="text-sm font-medium text-foreground">{metric.name}</span>
+                      </div>
+                      <div className="flex items-center gap-0.5">
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleOpenEditMetric(metric)}>
+                          <Edit className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-destructive/60 hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => setConfirmDeleteId(metric.id)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
               <Button variant="outline" className="w-full mt-2 h-9 text-xs" onClick={handleOpenAddMetric}>

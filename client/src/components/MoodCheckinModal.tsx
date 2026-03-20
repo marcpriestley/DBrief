@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { haptic } from "@/lib/haptics";
 import { motion } from "framer-motion";
@@ -47,13 +47,18 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Callback ref attaches touch listeners the moment the element mounts (even inside a lazy-rendered Dialog)
-  const sliderRef = useCallback((el: HTMLInputElement | null) => {
+  const sliderRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const el = sliderRef.current;
     if (!el) return;
     const stop = (e: TouchEvent) => { e.stopPropagation(); e.preventDefault(); };
     el.addEventListener("touchstart", stop, { passive: false });
     el.addEventListener("touchmove", stop, { passive: false });
+    return () => { el.removeEventListener("touchstart", stop); el.removeEventListener("touchmove", stop); };
   }, []);
+
+  const handleSliderTouch = (e: React.TouchEvent) => { e.stopPropagation(); };
 
   const mood = getMoodEmoji(moodValue);
   const MoodIcon = mood.icon;
@@ -114,11 +119,14 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
               type="range"
               value={moodValue}
               onChange={(e) => setMoodValue(Number(e.target.value))}
+              onTouchStart={handleSliderTouch}
+              onTouchMove={handleSliderTouch}
+              onTouchEnd={handleSliderTouch}
               min={0}
               max={100}
               step={1}
               className="w-full h-2 rounded-full appearance-none cursor-pointer"
-              style={{ touchAction: "none", accentColor: "hsl(40, 95%, 48%)" }}
+              style={{ touchAction: "none", accentColor: "hsl(40, 95%, 48%)", WebkitAppearance: "none" } as React.CSSProperties}
             />
             <div className="flex justify-between mt-1.5 text-[10px] text-muted-foreground">
               <span>0</span>
