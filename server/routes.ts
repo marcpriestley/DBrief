@@ -11,6 +11,7 @@ import OpenAI from "openai";
 import type { HealthData } from "./oura";
 import { sendPushNotification, getVapidPublicKey } from "./notifications";
 import bcrypt from "bcrypt";
+import { OAuth2Client } from "google-auth-library";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { registerChatRoutes } from "./replit_integrations/chat/routes";
 import { registerDebriefRoutes } from "./debrief-routes";
@@ -86,6 +87,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       res.status(500).json({ message: "Failed to sign in" });
+    }
+  });
+
+  // Google Sign-In — validates an ID token issued by Google's Identity Services SDK on the client
+  app.post("/api/auth/google", async (req, res) => {
+    try {
+      const { credential } = req.body;
+      if (!credential) return res.status(400).json({ message: "Missing credential" });
+
+      const clientId = process.env.GOOGLE_CLIENT_ID;
+      if (!clientId) return res.status(503).json({ message: "Google Sign-In is not configured on this server." });
+
+      const googleClient = new OAuth2Client(clientId);
+      const ticket = await googleClient.verifyIdToken({ idToken: credential, audience: clientId });
+      const payload = ticket.getPayload();
+      if (!payload?.email) return res.status(400).json({ message: "No email in Google token" });
+
+      const email = payload.email.toLowerCase();
+      let user = await storage.getUserByUsername(email);
+
+      if (!user) {
+        // Create new account — store a random unusable password (Google users authenticate via token)
+        const randomPw = await bcrypt.hash(Math.random().toString(36), 10);
+        user = await storage.createUser({ username: email, password: randomPw });
+        await storage.createStreak({ userId: user.id, currentStreak: 0, longestStreak: 0, lastEntryDate: null });
+        await storage.createGoalTemplate({ userId: user.id, title: "Make my bed", sortOrder: 0, isActive: true, recurring: true });
+      }
+
+      (req.session as any).userId = user.id;
+      res.json({
+        id: user.id,
+        username: user.username,
+        hasCompletedOnboarding: user.hasCompletedOnboarding ?? false,
+        journalPreference: user.journalPreference ?? "evening",
+      });
+    } catch (error: any) {
+      console.error("Google auth error:", error);
+      res.status(401).json({ message: "Google sign-in failed. Please try again." });
     }
   });
 

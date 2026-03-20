@@ -36,7 +36,7 @@ DBrief is a personal performance engineering app built around the F1 debrief fra
 ## System Architecture
 **Frontend**: React with TypeScript, Wouter for routing, and TanStack Query for data fetching, utilizing Shadcn/ui components and Tailwind CSS for styling.
 **Backend**: Express server with Drizzle ORM and express-session for authentication.
-**Authentication**: Session-based email/password authentication, with UI support for Google/Apple social sign-in.
+**Authentication**: Session-based email/password authentication. Google Sign-In implemented via Google Identity Services SDK (requires `GOOGLE_CLIENT_ID` + `VITE_GOOGLE_CLIENT_ID` env vars). Apple Sign-In available in the native iOS app only.
 **Database**: PostgreSQL for persistent storage, managed by Drizzle ORM.
 **AI Integration**: OpenAI API powers conversational debriefs, journal insights, pattern analysis, infinite goal refinement, and habit suggestions. Voice recording uses Web Speech API for speech-to-text.
 **Health Tracking**: Apple Health (HealthKit via Capacitor) integration for automatic synchronization of Sleep Quality, Readiness, and Activity metrics, normalized to a 0-100 scale.

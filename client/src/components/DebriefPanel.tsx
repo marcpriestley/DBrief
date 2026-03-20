@@ -32,9 +32,19 @@ interface DebriefPanelProps {
 
 const CORE_EXCHANGES = 3;
 
+function formatMsgTime(isoStr: string) {
+  try {
+    const d = new Date(isoStr);
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return "";
+  }
+}
+
 function useInlineVoice() {
   const [isListening, setIsListening] = useState(false);
   const [interimText, setInterimText] = useState("");
+  const [micError, setMicError] = useState<string | null>(null);
   const recognitionRef = useRef<any>(null);
   const accumulatedRef = useRef("");
   const shouldListenRef = useRef(false);
@@ -90,6 +100,7 @@ function useInlineVoice() {
       if (e.error === "not-allowed" || e.error === "service-not-allowed") {
         shouldListenRef.current = false;
         setIsListening(false);
+        setMicError("Microphone access denied. Check your browser permissions and try again.");
       }
       // All other errors: let onend handle the restart naturally
     };
@@ -168,7 +179,8 @@ function useInlineVoice() {
     };
   }, []);
 
-  return { isListening, interimText, isSupported, start, stop };
+  const clearMicError = useCallback(() => setMicError(null), []);
+  return { isListening, interimText, isSupported, start, stop, micError, clearMicError };
 }
 
 export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
@@ -330,6 +342,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
       voice.stop();
     } else {
       haptic("medium");
+      voice.clearMicError();
       setUserInput("");
       voice.start((finalText) => {
         setUserInput(finalText);
@@ -396,7 +409,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
               }
             </p>
             <Button
-              onClick={() => startDebriefMutation.mutate()}
+              onClick={() => startDebriefMutation.mutate(false)}
               disabled={startDebriefMutation.isPending}
               className="px-6"
             >
@@ -436,7 +449,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
 
           <div className="space-y-3 max-h-[400px] overflow-y-auto">
             {debrief.messages.map((msg) => (
-              <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+              <div key={msg.id} className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
                 <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
                   msg.role === "user"
                     ? "bg-primary text-primary-foreground rounded-br-md"
@@ -444,6 +457,11 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                 }`}>
                   {msg.content}
                 </div>
+                {msg.createdAt && (
+                  <span className="text-[10px] text-muted-foreground/60 mt-0.5 px-1">
+                    {formatMsgTime(msg.createdAt)}
+                  </span>
+                )}
               </div>
             ))}
           </div>
@@ -520,7 +538,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.2 }}
-                className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}
               >
                 <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
                   msg.role === "user"
@@ -529,6 +547,11 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                 }`}>
                   {msg.content}
                 </div>
+                {msg.createdAt && (
+                  <span className="text-[10px] text-muted-foreground/60 mt-0.5 px-1">
+                    {formatMsgTime(msg.createdAt)}
+                  </span>
+                )}
               </motion.div>
             ))}
           </AnimatePresence>
@@ -613,6 +636,12 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                 <span className="w-1 h-3.5 bg-red-500 rounded-full animate-pulse" style={{ animationDelay: "100ms" }} />
               </div>
               <span className="text-xs text-red-500 font-medium">Listening...</span>
+            </div>
+          )}
+          {voice.micError && (
+            <div className="flex items-center gap-2 mb-2 px-2 py-1.5 bg-destructive/10 rounded-lg">
+              <span className="text-xs text-destructive flex-1">{voice.micError}</span>
+              <button onClick={voice.clearMicError} className="text-destructive/60 hover:text-destructive text-xs">✕</button>
             </div>
           )}
           <div className="flex items-center gap-2 bg-muted/50 rounded-xl border border-border/50 p-2">

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useMutation } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
@@ -7,8 +7,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Eye, EyeOff, ArrowRight } from "lucide-react";
+import { Eye, EyeOff, ArrowRight, Loader2 } from "lucide-react";
 import { SiApple, SiGoogle } from "react-icons/si";
+
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (config: any) => void;
+          prompt: () => void;
+          cancel: () => void;
+        };
+      };
+    };
+  }
+}
 
 export default function Welcome() {
   const [isLogin, setIsLogin] = useState(true);
@@ -16,8 +30,21 @@ export default function Welcome() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const googleScriptLoaded = useRef(false);
   const { toast } = useToast();
   const [, setLocation] = useLocation();
+
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+
+  useEffect(() => {
+    if (!googleClientId || googleScriptLoaded.current) return;
+    googleScriptLoaded.current = true;
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    document.head.appendChild(script);
+  }, [googleClientId]);
 
   const authMutation = useMutation({
     mutationFn: async (data: { email: string; password: string; isLogin: boolean }) => {
@@ -35,6 +62,24 @@ export default function Welcome() {
       toast({
         title: isLogin ? "Login failed" : "Registration failed",
         description: error.message || "Please check your credentials and try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const googleMutation = useMutation({
+    mutationFn: async (credential: string) => {
+      const res = await apiRequest("POST", "/api/auth/google", { credential });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/auth/me"], data);
+    },
+    onError: (error: Error) => {
+      setGoogleLoading(false);
+      toast({
+        title: "Google Sign-In failed",
+        description: error.message || "Please try again.",
         variant: "destructive",
       });
     },
@@ -61,10 +106,42 @@ export default function Welcome() {
     authMutation.mutate({ email, password, isLogin });
   };
 
-  const handleSocialLogin = (provider: string) => {
+  const handleGoogleLogin = () => {
+    if (!googleClientId) {
+      toast({
+        title: "Google Sign-In not available",
+        description: "Please use email and password to sign in.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!window.google?.accounts?.id) {
+      toast({
+        title: "Google Sign-In loading",
+        description: "Please try again in a moment.",
+      });
+      return;
+    }
+
+    setGoogleLoading(true);
+
+    window.google.accounts.id.initialize({
+      client_id: googleClientId,
+      callback: (response: { credential: string }) => {
+        googleMutation.mutate(response.credential);
+      },
+      cancel_on_tap_outside: true,
+    });
+
+    window.google.accounts.id.prompt();
+    setTimeout(() => setGoogleLoading(false), 3000);
+  };
+
+  const handleAppleLogin = () => {
     toast({
-      title: `${provider} Sign In`,
-      description: `${provider} sign-in will be available soon.`,
+      title: "Apple Sign-In",
+      description: "Available in the native iOS app. Use email/password to sign in on web.",
     });
   };
 
@@ -180,15 +257,18 @@ export default function Welcome() {
             <div className="grid grid-cols-2 gap-2">
               <Button
                 variant="outline"
-                onClick={() => handleSocialLogin("Google")}
+                onClick={handleGoogleLogin}
+                disabled={googleLoading || googleMutation.isPending}
                 className="w-full h-9 text-xs"
               >
-                <SiGoogle className="h-3.5 w-3.5 mr-1.5" />
-                Google
+                {(googleLoading || googleMutation.isPending)
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <SiGoogle className="h-3.5 w-3.5 mr-1.5" />}
+                {!googleLoading && !googleMutation.isPending && "Google"}
               </Button>
               <Button
                 variant="outline"
-                onClick={() => handleSocialLogin("Apple")}
+                onClick={handleAppleLogin}
                 className="w-full h-9 text-xs"
               >
                 <SiApple className="h-3.5 w-3.5 mr-1.5" />

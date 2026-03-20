@@ -62,16 +62,36 @@ async function gatherDayContext(userId: number, date: string) {
 }
 
 function buildSystemPrompt(context: Awaited<ReturnType<typeof gatherDayContext>>, date: string, userMessageCount: number, journalPreference: string = "evening") {
-  const today = new Date();
+  const now = new Date();
+  const currentHour = now.getHours();
+
+  // Compute actual today and yesterday date strings for comparison
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const yd = new Date(now);
+  yd.setDate(yd.getDate() - 1);
+  const yesterdayStr = `${yd.getFullYear()}-${String(yd.getMonth() + 1).padStart(2, '0')}-${String(yd.getDate()).padStart(2, '0')}`;
+
+  const isToday = date === todayStr;
+  const isYesterday = date === yesterdayStr;
   const debriefDate = new Date(date + "T12:00:00");
-  const isToday = date === `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-  const isMorning = journalPreference === "morning";
 
   const phase = userMessageCount < 3 ? "core" : "extended";
 
-  const timingContext = isMorning
-    ? "The user journals in the morning, reflecting on yesterday. Frame questions about 'yesterday' rather than 'today'."
-    : "The user journals in the evening, reflecting on today while it's fresh.";
+  // Determine timing context from the ACTUAL date being debriefed, not from journalPreference.
+  // journalPreference only affects smart default tab — not whether the AI says "today" or "yesterday".
+  let timingContext: string;
+  if (isToday) {
+    const timeOfDay = currentHour < 12 ? "morning" : currentHour < 17 ? "afternoon" : "evening";
+    const dayStillOpen = currentHour < 20;
+    timingContext = `This is TODAY's debrief — current time is ${timeOfDay} (hour ${currentHour}).
+${dayStillOpen
+  ? `IMPORTANT: The day is still in progress. For any daily goals not yet marked complete, treat them as still achievable — do NOT ask why they weren't done or imply failure. Note what's been done and encourage completing the remaining goals before end of day. Phrase open goals as in-progress, not missed.`
+  : `It is late in the day — remaining open goals are unlikely to be completed today. You can analyse them as session outcomes.`}`;
+  } else if (isYesterday) {
+    timingContext = `This is a debrief for YESTERDAY — a completed session. Frame it as a post-race review. Treat all uncompleted goals as session outcomes to reflect on and learn from.`;
+  } else {
+    timingContext = `This is a retrospective debrief for ${debriefDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} — a historical session. Frame it as reviewing archived telemetry from a past race.`;
+  }
 
   const infiniteGoalSection = context.infiniteGoalContent
     ? `\nINFINITE GOAL: "${context.infiniteGoalContent}"
@@ -82,12 +102,12 @@ ${context.isWeeklyAlignmentDay ? `TODAY IS THE WEEKLY ALIGNMENT CHECK. At some p
     ? `\nLong-term targets: ${context.longTermGoalsList.join(", ")}`
     : "";
 
-  return `You are the user's performance engineer — like an F1 race engineer reviewing telemetry with their driver after a session. Your job is to help them extract maximum performance from their day. You're warm but direct, perceptive, and focused on what moves the needle. No therapy speak. No corporate platitudes. Just sharp, genuine analysis of how they're performing and where they can gain an edge.
+  return `You are the user's performance engineer — like an F1 race engineer reviewing telemetry with their driver after a session. Your job is to help them extract maximum performance from their day. You're warm but direct, perceptive, and focused on what moves the needle. No therapy speak. No corporate platitudes. Just sharp, genuine analysis of how they're performing and where you can gain an edge.
 
-ROLE: Run a daily performance debrief. One focused question at a time. Listen to their response. Follow up on what matters before moving on. Everything connects back to helping them perform better tomorrow.
+ROLE: Run a daily performance debrief. One focused question at a time. Listen to their response. Follow up on what matters before moving on. Everything connects back to helping them perform better.
 
-TIMING: ${timingContext}
-${isToday ? "This is today's debrief." : `This is a retrospective debrief for ${debriefDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}.`}
+TIMING:
+${timingContext}
 
 TELEMETRY (scores are only shown if the user explicitly logged them — a missing metric means no data, not a zero score. Never reference or penalise a metric that isn't listed):
 ${context.hasScores ? `Performance scores: ${context.scoreMap}` : "No scores logged yet — don't reference scores."}
