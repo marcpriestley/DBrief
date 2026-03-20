@@ -254,17 +254,9 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
       const response = await apiRequest("POST", "/api/debriefs/start", { date: selectedDate, fresh: !!fresh });
       return response.json() as Promise<Debrief>;
     },
-    onSuccess: (data) => {
-      queryClient.setQueryData(["/api/debriefs", selectedDate], (old: Debrief[] | undefined) => {
-        const existing = old || [];
-        const idx = existing.findIndex(d => d.id === data.id);
-        if (idx >= 0) {
-          const updated = [...existing];
-          updated[idx] = data;
-          return updated;
-        }
-        return [...existing, data];
-      });
+    onSuccess: () => {
+      // Always re-fetch from server so all sessions (including previous ones) are in the list
+      queryClient.invalidateQueries({ queryKey: ["/api/debriefs", selectedDate] });
       queryClient.invalidateQueries({ queryKey: ["/api/dates-with-data"] });
       setContinuedPastCheckpoint(false);
     },

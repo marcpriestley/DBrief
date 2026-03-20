@@ -3,6 +3,8 @@ import { useMutation } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import ProfileQuestions from "./ProfileQuestions";
+import { PROFILE_QUESTIONS } from "@/lib/profileData";
 import {
   Shield,
   BarChart3,
@@ -19,6 +21,7 @@ const STEPS = [
   "welcome",
   "features",
   "privacy",
+  "profile",
   "preference",
 ] as const;
 
@@ -31,10 +34,12 @@ interface OnboardingFlowProps {
 export default function OnboardingFlow({ username }: OnboardingFlowProps) {
   const [currentStep, setCurrentStep] = useState<Step>("welcome");
   const [journalPreference, setJournalPreference] = useState<"morning" | "evening" | null>(null);
+  const [goalPreference, setGoalPreference] = useState<"morning" | "evening">("morning");
+  const [profileAnswers, setProfileAnswers] = useState<Record<string, string>>({});
 
   const completeMutation = useMutation({
-    mutationFn: async (pref: string) => {
-      return apiRequest("POST", "/api/onboarding/complete", { journalPreference: pref });
+    mutationFn: async (data: { journalPreference: string; goalPreference: string; userProfile: Record<string, string> }) => {
+      return apiRequest("POST", "/api/onboarding/complete", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
@@ -51,10 +56,15 @@ export default function OnboardingFlow({ username }: OnboardingFlowProps) {
 
   const handleComplete = () => {
     if (journalPreference) {
-      completeMutation.mutate(journalPreference);
+      completeMutation.mutate({
+        journalPreference,
+        goalPreference,
+        userProfile: profileAnswers,
+      });
     }
   };
 
+  const profileComplete = PROFILE_QUESTIONS.every(q => profileAnswers[q.key]);
   const firstName = username.split("@")[0];
 
   return (
@@ -178,22 +188,10 @@ export default function OnboardingFlow({ username }: OnboardingFlowProps) {
               </div>
 
               <div className="space-y-2.5 max-w-xs mx-auto">
-                <PrivacyItem
-                  icon={<Lock className="h-3.5 w-3.5" />}
-                  text="Journal entries encrypted at rest"
-                />
-                <PrivacyItem
-                  icon={<Lock className="h-3.5 w-3.5" />}
-                  text="Debrief conversations encrypted"
-                />
-                <PrivacyItem
-                  icon={<Lock className="h-3.5 w-3.5" />}
-                  text="AI summaries encrypted"
-                />
-                <PrivacyItem
-                  icon={<Shield className="h-3.5 w-3.5" />}
-                  text="Your data is never sold or shared"
-                />
+                <PrivacyItem icon={<Lock className="h-3.5 w-3.5" />} text="Journal entries encrypted at rest" />
+                <PrivacyItem icon={<Lock className="h-3.5 w-3.5" />} text="Debrief conversations encrypted" />
+                <PrivacyItem icon={<Lock className="h-3.5 w-3.5" />} text="AI summaries encrypted" />
+                <PrivacyItem icon={<Shield className="h-3.5 w-3.5" />} text="Your data is never sold or shared" />
               </div>
 
               <p className="text-xs text-muted-foreground/60 max-w-xs mx-auto">
@@ -207,6 +205,50 @@ export default function OnboardingFlow({ username }: OnboardingFlowProps) {
             </motion.div>
           )}
 
+          {currentStep === "profile" && (
+            <motion.div
+              key="profile"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+              className="space-y-5"
+            >
+              <div className="text-center space-y-2">
+                <h2 className="text-xl font-bold text-foreground">Driver profile</h2>
+                <p className="text-sm text-muted-foreground leading-relaxed max-w-xs mx-auto">
+                  7 quick questions so your AI engineer knows how to work with you. Updatable anytime in Settings.
+                </p>
+              </div>
+
+              <div className="max-h-[55vh] overflow-y-auto pr-1">
+                <ProfileQuestions
+                  initialAnswers={profileAnswers}
+                  onComplete={setProfileAnswers}
+                  compact
+                />
+              </div>
+
+              <Button
+                onClick={next}
+                disabled={!profileComplete}
+                className="w-full h-11"
+              >
+                {profileComplete ? "Continue" : `${Object.keys(profileAnswers).length}/${PROFILE_QUESTIONS.length} answered`}
+                {profileComplete && <ArrowRight className="ml-2 h-4 w-4" />}
+              </Button>
+
+              {!profileComplete && (
+                <button
+                  onClick={next}
+                  className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors underline-offset-2 hover:underline"
+                >
+                  Skip for now
+                </button>
+              )}
+            </motion.div>
+          )}
+
           {currentStep === "preference" && (
             <motion.div
               key="preference"
@@ -217,13 +259,14 @@ export default function OnboardingFlow({ username }: OnboardingFlowProps) {
               className="text-center space-y-6"
             >
               <div className="space-y-3">
-                <h2 className="text-xl font-bold text-foreground">When do you debrief?</h2>
+                <h2 className="text-xl font-bold text-foreground">How do you operate?</h2>
                 <p className="text-sm text-muted-foreground leading-relaxed max-w-xs mx-auto">
-                  This shapes how your performance engineer frames the conversation. You can change this anytime.
+                  This shapes your default view and how your engineer frames the conversation. Change it anytime.
                 </p>
               </div>
 
-              <div className="space-y-3 max-w-xs mx-auto">
+              <div className="space-y-3 max-w-xs mx-auto text-left">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-1">Debrief timing</p>
                 <button
                   onClick={() => setJournalPreference("morning")}
                   className={`w-full flex items-start gap-3.5 p-4 rounded-xl border-2 text-left transition-all ${
@@ -240,7 +283,7 @@ export default function OnboardingFlow({ username }: OnboardingFlowProps) {
                   <div>
                     <p className="text-sm font-semibold text-foreground">Morning debrief</p>
                     <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                      Review yesterday's performance with fresh eyes. Like analysing last race's data before the next session.
+                      Review yesterday with fresh eyes. Default view shows Yesterday.
                     </p>
                   </div>
                 </button>
@@ -261,10 +304,31 @@ export default function OnboardingFlow({ username }: OnboardingFlowProps) {
                   <div>
                     <p className="text-sm font-semibold text-foreground">Evening debrief</p>
                     <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                      Debrief while the session is still fresh. Process the day and extract what matters most.
+                      Debrief while the session is fresh. Default view shows Today.
                     </p>
                   </div>
                 </button>
+
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-1 pt-2">Goal prep timing</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { key: "morning" as const, label: "Morning", sub: "Set goals for today" },
+                    { key: "evening" as const, label: "Evening", sub: "Prep tomorrow's goals" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.key}
+                      onClick={() => setGoalPreference(opt.key)}
+                      className={`p-3 rounded-xl border-2 text-left transition-all ${
+                        goalPreference === opt.key
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:border-border/80"
+                      }`}
+                    >
+                      <p className="text-xs font-semibold text-foreground">{opt.label}</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">{opt.sub}</p>
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <Button
@@ -284,17 +348,9 @@ export default function OnboardingFlow({ username }: OnboardingFlowProps) {
 }
 
 function FeatureCard({
-  icon,
-  iconBg,
-  iconColor,
-  title,
-  description,
+  icon, iconBg, iconColor, title, description,
 }: {
-  icon: React.ReactNode;
-  iconBg: string;
-  iconColor: string;
-  title: string;
-  description: string;
+  icon: React.ReactNode; iconBg: string; iconColor: string; title: string; description: string;
 }) {
   return (
     <div className="flex items-start gap-3 p-3 rounded-xl bg-card border border-border/50">

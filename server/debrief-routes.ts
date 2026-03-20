@@ -61,7 +61,65 @@ async function gatherDayContext(userId: number, date: string) {
   };
 }
 
-function buildSystemPrompt(context: Awaited<ReturnType<typeof gatherDayContext>>, date: string, userMessageCount: number, journalPreference: string = "evening") {
+function buildUserProfileSummary(profile: Record<string, string> | null | undefined): string {
+  if (!profile || Object.keys(profile).length === 0) return "";
+
+  const labels: Record<string, Record<string, string>> = {
+    driver: {
+      A: "driven by achievement and results",
+      B: "driven by growth and learning",
+      C: "driven by impact on others",
+      D: "driven by consistency and discipline",
+    },
+    challenge: {
+      A: "biggest challenge is maintaining motivation",
+      B: "biggest challenge is managing time and energy",
+      C: "biggest challenge is handling setbacks",
+      D: "biggest challenge is staying consistent",
+    },
+    setbacks: {
+      A: "bounces back fast — analyses and adjusts quickly",
+      B: "needs time to recharge after a bad day",
+      C: "pushes through regardless",
+      D: "processes setbacks by talking them through",
+    },
+    energy: {
+      A: "performs best in the early morning",
+      B: "peaks in late morning / midday",
+      C: "performs best in the afternoon",
+      D: "peaks in the evening",
+    },
+    style: {
+      A: "works best in focused sprints with breaks",
+      B: "works best with steady sustained effort",
+      C: "reactive — goes where needed",
+      D: "mixed style depending on the task",
+    },
+    goals: {
+      A: "sets ambitious goals and pushes hard toward them",
+      B: "prefers realistic, achievable targets",
+      C: "values progress over perfection",
+      D: "focuses on systems rather than specific goals",
+    },
+    feedback: {
+      A: "wants direct honest feedback — doesn't want softening",
+      B: "responds best to balanced feedback acknowledging wins and areas to improve",
+      C: "tends to be self-critical — benefits most from encouragement and perspective",
+      D: "wants tactical, actionable feedback — tell me what to do differently",
+    },
+  };
+
+  const parts: string[] = [];
+  for (const [key, answer] of Object.entries(profile)) {
+    if (labels[key]?.[answer]) parts.push(labels[key][answer]);
+  }
+
+  return parts.length > 0
+    ? `\nDRIVER PROFILE (adapt your style accordingly):\n${parts.map(p => `• ${p}`).join("\n")}`
+    : "";
+}
+
+function buildSystemPrompt(context: Awaited<ReturnType<typeof gatherDayContext>>, date: string, userMessageCount: number, journalPreference: string = "evening", userProfile?: Record<string, string> | null) {
   const now = new Date();
   const currentHour = now.getHours();
 
@@ -102,7 +160,9 @@ ${context.isWeeklyAlignmentDay ? `TODAY IS THE WEEKLY ALIGNMENT CHECK. At some p
     ? `\nLong-term targets: ${context.longTermGoalsList.join(", ")}`
     : "";
 
-  return `You are the user's performance engineer — like an F1 race engineer reviewing telemetry with their driver after a session. Your job is to help them extract maximum performance from their day. You're warm but direct, perceptive, and focused on what moves the needle. No therapy speak. No corporate platitudes. Just sharp, genuine analysis of how they're performing and where you can gain an edge.
+  const profileSection = buildUserProfileSummary(userProfile);
+
+  return `You are the user's performance engineer — like an F1 race engineer reviewing telemetry with their driver after a session. Your job is to help them extract maximum performance from their day. You're warm but direct, perceptive, and focused on what moves the needle. No therapy speak. No corporate platitudes. Just sharp, genuine analysis of how they're performing and where you can gain an edge.${profileSection}
 
 ROLE: Run a daily performance debrief. One focused question at a time. Listen to their response. Follow up on what matters before moving on. Everything connects back to helping them perform better.
 
@@ -119,20 +179,23 @@ CONVERSATION STRUCTURE:
 This is exchange ${userMessageCount + 1}. The user has replied ${userMessageCount} time(s) so far.
 ${phase === "core" ? `
 - You are in the CORE phase (exchanges 1-3). Ask one meaningful, focused question per response.
-- Exchange 1: Review the telemetry. Acknowledge their data or ask how the day's session went overall.
+- Exchange 1: Review the telemetry. Read the room — if it was a strong session, acknowledge that clearly. If it was tough, lead with understanding before analysis. Ask how the overall session felt.
 - Exchange 2: Go deeper on whatever thread they opened — follow up on what they shared, probe for the detail that matters.
-- Exchange 3: This is the LAST core question. Make it count — connect the dots, identify a pattern, or challenge them on something they haven't explored. After their answer, the app will offer the option to continue.
+- Exchange 3: This is the LAST core question. Make it count — connect the dots, identify a pattern, or surface an insight they might have missed. After their answer, the app will offer the option to continue.
 ` : `
 - You are in the EXTENDED phase. The user chose to keep pushing. Continue the conversation naturally.
 - Keep asking one question at a time. Dig deeper, find new angles, or connect earlier threads.
 - Each response should add value — don't pad or repeat.
+- Every 3 extended exchanges, naturally check in on progress toward their long-term targets if any are set.
 `}
 
 GUIDELINES:
+- Tone: Be balanced and honest. Strong sessions deserve genuine recognition — don't dampen wins. Tough sessions deserve understanding before critique. The data tells part of the story; they tell the rest.
 - Ask ONE question at a time. Conversational, not clinical.
 - Reference specific data points (scores, goals, mood, progress toward targets) — weave them in naturally like reviewing lap data.
 - If they give short answers, probe for the insight underneath. If they're open, reflect back what you're hearing and push it further.
-- Avoid: bullet points, numbered lists, emojis, vague encouragement. Think performance coach, not cheerleader.
+- If their scores are solid across the board — say so. Don't manufacture problems where none exist.
+- Avoid: bullet points, numbered lists, emojis, vague encouragement ("great job!"). Think performance coach, not cheerleader — but also not critic.
 - Keep responses concise — 1-3 sentences max per response.
 - Do NOT say "would you like to continue?" or offer to wrap up — the app handles that UI.`;
 }
@@ -196,7 +259,7 @@ export function registerDebriefRoutes(app: Express): void {
 
       const context = await gatherDayContext(userId, date);
       const [user] = await db.select().from(users).where(eq(users.id, userId));
-      const systemPrompt = buildSystemPrompt(context, date, 0, user?.journalPreference || "evening");
+      const systemPrompt = buildSystemPrompt(context, date, 0, user?.journalPreference || "evening", user?.userProfile);
 
       const response = await openai.chat.completions.create({
         model: "gpt-4o",
@@ -256,7 +319,7 @@ export function registerDebriefRoutes(app: Express): void {
       const userMessageCount = allMessages.filter(m => m.role === "user").length;
       const context = await gatherDayContext(userId, debrief.date);
       const [user] = await db.select().from(users).where(eq(users.id, userId));
-      const systemPrompt = buildSystemPrompt(context, debrief.date, userMessageCount, user?.journalPreference || "evening");
+      const systemPrompt = buildSystemPrompt(context, debrief.date, userMessageCount, user?.journalPreference || "evening", user?.userProfile);
 
       const chatMessages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
         { role: "system", content: systemPrompt },

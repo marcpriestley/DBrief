@@ -13,8 +13,9 @@ import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Bell, BellOff, AlertCircle, CheckCircle2, Heart, Plus, Check, Info } from "lucide-react";
+import { Bell, BellOff, AlertCircle, CheckCircle2, Heart, Plus, Check, Info, User } from "lucide-react";
 import type { UserMetric } from "@shared/schema";
+import { ProfileQuestionsSettings } from "./ProfileQuestions";
 
 const APPLE_HEALTH_METRICS: {
   name: string;
@@ -368,6 +369,15 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   </div>
                 ))}
               </div>
+            </div>
+
+            <div className="border-t border-border pt-4">
+              <div className="flex items-center gap-2 mb-3">
+                <User className="h-3.5 w-3.5 text-muted-foreground" />
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Driver Profile</p>
+              </div>
+              <p className="text-xs text-muted-foreground mb-3">Your answers personalise how the AI engineer debriefs you.</p>
+              <ProfileQuestionsSettings />
             </div>
 
             <div className="flex justify-end gap-2 pt-2">

@@ -14,6 +14,8 @@ export const users = pgTable("users", {
   healthMetricsEnabled: text("health_metrics_enabled").array().default(["sleep", "readiness", "activity"]),
   hasCompletedOnboarding: boolean("has_completed_onboarding").default(false),
   journalPreference: text("journal_preference").default("evening"),
+  goalPreference: text("goal_preference").default("morning"),
+  userProfile: jsonb("user_profile").$type<Record<string, string>>(),
 });
 
 export const journalEntries = pgTable("journal_entries", {

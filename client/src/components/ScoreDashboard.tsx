@@ -18,7 +18,7 @@ function NativeSlider({ value, onChange, min = 0, max = 100, color = "hsl(40, 95
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const stop = (e: TouchEvent) => e.stopPropagation();
+    const stop = (e: TouchEvent) => { e.stopPropagation(); e.preventDefault(); };
     el.addEventListener("touchstart", stop, { passive: false });
     el.addEventListener("touchmove", stop, { passive: false });
     return () => { el.removeEventListener("touchstart", stop); el.removeEventListener("touchmove", stop); };

@@ -1,0 +1,95 @@
+import { Target, Zap, Clock, Battery, BarChart2, MessageSquare } from "lucide-react";
+
+export const PROFILE_QUESTIONS = [
+  {
+    key: "driver",
+    icon: Target,
+    iconColor: "text-amber-500",
+    iconBg: "bg-amber-500/10",
+    question: "What drives you most?",
+    options: [
+      { key: "A", label: "Achievement & results" },
+      { key: "B", label: "Growth & learning" },
+      { key: "C", label: "Impact on others" },
+      { key: "D", label: "Consistency & discipline" },
+    ],
+  },
+  {
+    key: "challenge",
+    icon: Zap,
+    iconColor: "text-red-500",
+    iconBg: "bg-red-500/10",
+    question: "Your biggest performance challenge?",
+    options: [
+      { key: "A", label: "Maintaining motivation" },
+      { key: "B", label: "Managing time & energy" },
+      { key: "C", label: "Dealing with setbacks" },
+      { key: "D", label: "Staying consistent" },
+    ],
+  },
+  {
+    key: "setbacks",
+    icon: BarChart2,
+    iconColor: "text-blue-500",
+    iconBg: "bg-blue-500/10",
+    question: "How do you handle a tough day?",
+    options: [
+      { key: "A", label: "Analyse and adjust fast" },
+      { key: "B", label: "Take time to recharge" },
+      { key: "C", label: "Push through regardless" },
+      { key: "D", label: "Talk it through" },
+    ],
+  },
+  {
+    key: "energy",
+    icon: Battery,
+    iconColor: "text-emerald-500",
+    iconBg: "bg-emerald-500/10",
+    question: "When do you perform at your best?",
+    options: [
+      { key: "A", label: "Early morning" },
+      { key: "B", label: "Late morning / midday" },
+      { key: "C", label: "Afternoon" },
+      { key: "D", label: "Evening" },
+    ],
+  },
+  {
+    key: "style",
+    icon: Clock,
+    iconColor: "text-violet-500",
+    iconBg: "bg-violet-500/10",
+    question: "Your natural working style?",
+    options: [
+      { key: "A", label: "Focused sprints with breaks" },
+      { key: "B", label: "Steady, sustained effort" },
+      { key: "C", label: "Reactive — go where needed" },
+      { key: "D", label: "Mixed — depends on the task" },
+    ],
+  },
+  {
+    key: "goals",
+    icon: Target,
+    iconColor: "text-orange-500",
+    iconBg: "bg-orange-500/10",
+    question: "When it comes to targets...",
+    options: [
+      { key: "A", label: "Set ambitious goals, push hard" },
+      { key: "B", label: "Prefer realistic, achievable targets" },
+      { key: "C", label: "Progress over perfection" },
+      { key: "D", label: "Focus on systems, not goals" },
+    ],
+  },
+  {
+    key: "feedback",
+    icon: MessageSquare,
+    iconColor: "text-pink-500",
+    iconBg: "bg-pink-500/10",
+    question: "What kind of debrief helps you most?",
+    options: [
+      { key: "A", label: "Direct and honest — don't hold back" },
+      { key: "B", label: "Balanced — wins and areas to improve" },
+      { key: "C", label: "Encouraging — I'm already hard on myself" },
+      { key: "D", label: "Tactical — just tell me what to change" },
+    ],
+  },
+];

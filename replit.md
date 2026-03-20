@@ -49,7 +49,8 @@ DBrief is a personal performance engineering app built around the F1 debrief fra
 - Streak Tracking: Duolingo-style system with milestone celebrations and motivational messages.
 - Trends & Analytics: Dedicated page with various timeline options and AI-driven insights, focusing on user-input data.
 - Daily Goals System: Goal templates with daily instances, one-tap completion, and tracking on the Trends page.
-- Onboarding: 4-step flow (welcome, performance toolkit, privacy/encryption, debrief timing preference) with F1 high-performance language.
+- Onboarding: 5-step flow (welcome, performance toolkit, privacy/encryption, driver profile, debrief timing preference) with F1 high-performance language.
+- Driver Profile: 7 multiple-choice questions (`client/src/lib/profileData.ts`) stored in `users.userProfile` jsonb. Step 4 of onboarding (skippable). Editable in Settings modal. `GET /api/user/profile`, `PUT /api/user/profile`. `buildSystemPrompt` receives `userProfile` for personalised AI debrief tone.
 - Retrospective Editing: Users can input scores and journal entries for past dates.
 - Mood Check-in: Slider-based modal with time-of-day labels, integrated into trends.
 - Data Encryption: AES-256-GCM encryption for sensitive user data at rest.

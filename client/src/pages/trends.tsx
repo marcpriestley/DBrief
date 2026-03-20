@@ -58,9 +58,16 @@ export default function TrendsEnhanced() {
       const res = await apiRequest("POST", "/api/ai-insights/generate");
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/ai-insights"] });
-      toast({ title: "Insights generated", description: "New AI insights are ready." });
+    onSuccess: (data) => {
+      if (data?.needsStreak) {
+        toast({
+          title: "Keep going!",
+          description: `Build a 7-day streak to unlock AI Insights. You're at ${data.currentStreak || 0} days.`,
+        });
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["/api/ai-insights"] });
+        toast({ title: "Insight generated", description: "New pattern analysis is ready." });
+      }
     },
     onError: () => {
       toast({ title: "Could not generate insights", description: "Please try again later.", variant: "destructive" });

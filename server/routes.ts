@@ -165,11 +165,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/onboarding/complete", async (req, res) => {
     try {
       const userId = getUserId(req);
-      const { journalPreference } = req.body;
+      const { journalPreference, goalPreference, userProfile } = req.body;
       const pref = journalPreference === "morning" ? "morning" : "evening";
+      const goalPref = goalPreference === "evening" ? "evening" : "morning";
       const updatedUser = await storage.updateUserSettings(userId, {
         hasCompletedOnboarding: true,
         journalPreference: pref,
+        goalPreference: goalPref,
+        ...(userProfile && { userProfile }),
       });
       if (!updatedUser) {
         return res.status(404).json({ message: "User not found" });
@@ -177,6 +180,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true, journalPreference: pref });
     } catch (error) {
       res.status(500).json({ message: "Failed to complete onboarding" });
+    }
+  });
+
+  app.get("/api/user/profile", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      res.json({ userProfile: user.userProfile || {}, goalPreference: user.goalPreference || "morning" });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch profile" });
+    }
+  });
+
+  app.put("/api/user/profile", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { userProfile, goalPreference } = req.body;
+      const updated = await storage.updateUserSettings(userId, {
+        ...(userProfile !== undefined && { userProfile }),
+        ...(goalPreference !== undefined && { goalPreference }),
+      });
+      if (!updated) return res.status(404).json({ message: "User not found" });
+      res.json({ success: true, userProfile: updated.userProfile || {}, goalPreference: updated.goalPreference || "morning" });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update profile" });
     }
   });
 
@@ -988,7 +1017,8 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
         reminderTime: user.reminderTime,
         reminderTime2: user.reminderTime2,
         timezone: user.timezone,
-        healthMetricsEnabled: user.healthMetricsEnabled ?? ["sleep", "readiness", "activity"]
+        healthMetricsEnabled: user.healthMetricsEnabled ?? ["sleep", "readiness", "activity"],
+        goalPreference: user.goalPreference || "morning",
       });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch user settings" });
@@ -998,14 +1028,15 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
   app.patch("/api/user/settings", async (req, res) => {
     try {
       const userId = getUserId(req);
-      const { notificationsEnabled, reminderTime, reminderTime2, timezone, healthMetricsEnabled } = req.body;
+      const { notificationsEnabled, reminderTime, reminderTime2, timezone, healthMetricsEnabled, goalPreference } = req.body;
 
       const updatedUser = await storage.updateUserSettings(userId, {
         ...(notificationsEnabled !== undefined && { notificationsEnabled }),
         ...(reminderTime !== undefined && { reminderTime }),
         ...(reminderTime2 !== undefined && { reminderTime2 }),
         ...(timezone !== undefined && { timezone }),
-        ...(healthMetricsEnabled !== undefined && { healthMetricsEnabled })
+        ...(healthMetricsEnabled !== undefined && { healthMetricsEnabled }),
+        ...(goalPreference !== undefined && { goalPreference }),
       });
 
       if (!updatedUser) {

@@ -50,7 +50,7 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
   // Callback ref attaches touch listeners the moment the element mounts (even inside a lazy-rendered Dialog)
   const sliderRef = useCallback((el: HTMLInputElement | null) => {
     if (!el) return;
-    const stop = (e: TouchEvent) => e.stopPropagation();
+    const stop = (e: TouchEvent) => { e.stopPropagation(); e.preventDefault(); };
     el.addEventListener("touchstart", stop, { passive: false });
     el.addEventListener("touchmove", stop, { passive: false });
   }, []);

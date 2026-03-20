@@ -10,6 +10,7 @@ import type { DailyGoal, GoalTemplate } from "@shared/schema";
 
 interface GoalsSectionProps {
   selectedDate: string;
+  tomorrowMode?: boolean;
 }
 
 const MIN_VISIBLE_SLOTS = 3;
@@ -17,7 +18,7 @@ const MIN_VISIBLE_SLOTS = 3;
 function triggerHaptic() { haptic("medium"); }
 function triggerCelebrationHaptic() { haptic("success"); }
 
-export default function GoalsSection({ selectedDate }: GoalsSectionProps) {
+export default function GoalsSection({ selectedDate, tomorrowMode = false }: GoalsSectionProps) {
   const queryClient = useQueryClient();
   const [showAddInput, setShowAddInput] = useState(false);
   const [newGoalTitle, setNewGoalTitle] = useState("");
@@ -160,7 +161,7 @@ export default function GoalsSection({ selectedDate }: GoalsSectionProps) {
     <div className="relative">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-          Daily Goals
+          {tomorrowMode ? "Tomorrow's Goals" : "Daily Goals"}
           <span className="text-xs font-normal text-muted-foreground">
             {completedCount}/{displayTotal}
           </span>
