@@ -752,7 +752,20 @@ export class DatabaseStorage implements IStorage {
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     if (date < todayStr) return existing;
 
-    const templates = await this.getGoalTemplates(userId);
+    let templates = await this.getGoalTemplates(userId);
+
+    // Seed "Make my bed" as the default recurring goal if user has no templates at all
+    if (templates.length === 0) {
+      await db.insert(goalTemplates).values({
+        userId,
+        title: "Make my bed",
+        sortOrder: 0,
+        isActive: true,
+        recurring: true,
+      });
+      templates = await this.getGoalTemplates(userId);
+    }
+
     const recurringTemplates = templates.filter(t => t.recurring);
     if (recurringTemplates.length === 0) return existing;
 

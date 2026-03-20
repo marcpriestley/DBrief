@@ -100,7 +100,7 @@ function useInlineVoice() {
       if (e.error === "not-allowed" || e.error === "service-not-allowed") {
         shouldListenRef.current = false;
         setIsListening(false);
-        setMicError("Microphone access denied. Enable microphone access for DBrief in your device Settings app.");
+        setMicError("Microphone access denied. In Safari, tap AA in the address bar → Website Settings → Microphone → Allow.");
       }
       // All other errors: let onend handle the restart naturally
     };
@@ -250,8 +250,8 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const showCheckpoint = isAtCheckpoint || isAtExtendedCheckpoint;
 
   const startDebriefMutation = useMutation({
-    mutationFn: async (fresh?: boolean) => {
-      const response = await apiRequest("POST", "/api/debriefs/start", { date: selectedDate, fresh: !!fresh });
+    mutationFn: async (opts: { fresh?: boolean; userLed?: boolean } = {}) => {
+      const response = await apiRequest("POST", "/api/debriefs/start", { date: selectedDate, fresh: !!opts.fresh, userLed: !!opts.userLed });
       return response.json() as Promise<Debrief>;
     },
     onSuccess: () => {
@@ -434,27 +434,41 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
             </h3>
             <p className="text-sm text-muted-foreground mb-5 max-w-xs mx-auto">
               {isToday
-                ? "Three quick prompts to reflect on your day. Talk or type — whatever feels natural."
-                : "Reflect on this day with a guided conversation."
+                ? "How do you want to open your debrief session?"
+                : "Reflect on this day — choose how you want to start."
               }
             </p>
-            <Button
-              onClick={() => startDebriefMutation.mutate(false)}
-              disabled={startDebriefMutation.isPending}
-              className="px-6"
-            >
-              {startDebriefMutation.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Starting...
-                </>
-              ) : (
-                <>
-                  <MessageCircle className="h-4 w-4 mr-2" />
-                  Start Debrief
-                </>
-              )}
-            </Button>
+            <div className="flex items-center justify-center gap-3">
+              <Button
+                onClick={() => startDebriefMutation.mutate({ fresh: false, userLed: true })}
+                disabled={startDebriefMutation.isPending}
+                variant="outline"
+                className="flex-1 max-w-[160px]"
+              >
+                {startDebriefMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <>
+                    <ArrowRight className="h-4 w-4 mr-2" />
+                    I'll start
+                  </>
+                )}
+              </Button>
+              <Button
+                onClick={() => startDebriefMutation.mutate({ fresh: false })}
+                disabled={startDebriefMutation.isPending}
+                className="flex-1 max-w-[160px]"
+              >
+                {startDebriefMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <>
+                    <MessageCircle className="h-4 w-4 mr-2" />
+                    Prompt me
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -513,7 +527,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => startDebriefMutation.mutate(true)}
+              onClick={() => startDebriefMutation.mutate({ fresh: true })}
               disabled={startDebriefMutation.isPending}
               className="text-muted-foreground hover:text-foreground"
             >
@@ -596,6 +610,11 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
         </div>
 
         <div ref={chatContainerRef} className="px-5 py-4 space-y-3 max-h-[350px] overflow-y-auto">
+          {debrief.messages.length === 0 && !isStreaming && (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              Your session, your opening. What's on your mind?
+            </p>
+          )}
           <AnimatePresence initial={false}>
             {debrief.messages.map((msg) => (
               <motion.div

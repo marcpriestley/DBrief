@@ -239,7 +239,7 @@ export function registerDebriefRoutes(app: Express): void {
     if (!userId) return;
 
     try {
-      const { date, fresh } = req.body;
+      const { date, fresh, userLed } = req.body;
 
       // When fresh=false, resume the existing active (incomplete) debrief if one exists
       if (!fresh) {
@@ -257,6 +257,17 @@ export function registerDebriefRoutes(app: Express): void {
       }
       // fresh=true OR no active debrief found — always create a new one, never delete old ones
 
+      const [debrief] = await db.insert(debriefs).values({
+        userId,
+        date,
+        isComplete: false,
+      }).returning();
+
+      // User-led mode: skip the AI opening prompt — user types first
+      if (userLed) {
+        return res.json({ ...debrief, messages: [] });
+      }
+
       const context = await gatherDayContext(userId, date);
       const [user] = await db.select().from(users).where(eq(users.id, userId));
       const systemPrompt = buildSystemPrompt(context, date, 0, user?.journalPreference || "evening", user?.userProfile);
@@ -271,12 +282,6 @@ export function registerDebriefRoutes(app: Express): void {
       });
 
       const openingMessage = response.choices[0].message.content || "How was your day?";
-
-      const [debrief] = await db.insert(debriefs).values({
-        userId,
-        date,
-        isComplete: false,
-      }).returning();
 
       const [msg] = await db.insert(debriefMessages).values({
         debriefId: debrief.id,
