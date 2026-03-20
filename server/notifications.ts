@@ -1,6 +1,7 @@
 import webPush from 'web-push';
 import cron from 'node-cron';
 import { storage } from './storage';
+import { sendApnsNotification } from './apns';
 
 const lastReminderSentDate = new Map<string, string>();
 const lastMoodReminderSent = new Map<string, boolean>();
@@ -149,13 +150,17 @@ export async function sendDailyReminders() {
           };
 
           for (const subscription of user.subscriptions) {
-            await sendPushNotification(
-              {
-                endpoint: subscription.endpoint,
-                keys: { p256dh: subscription.p256dh, auth: subscription.auth }
-              },
-              payload
-            );
+            if (subscription.apnsToken) {
+              await sendApnsNotification(subscription.apnsToken, payload);
+            } else {
+              await sendPushNotification(
+                {
+                  endpoint: subscription.endpoint,
+                  keys: { p256dh: subscription.p256dh, auth: subscription.auth }
+                },
+                payload
+              );
+            }
           }
           
           lastReminderSentDate.set(key, userDateStr);
@@ -200,10 +205,14 @@ export async function sendMoodCheckinReminders() {
           };
 
           for (const subscription of user.subscriptions) {
-            await sendPushNotification(
-              { endpoint: subscription.endpoint, keys: { p256dh: subscription.p256dh, auth: subscription.auth } },
-              payload
-            );
+            if (subscription.apnsToken) {
+              await sendApnsNotification(subscription.apnsToken, payload);
+            } else {
+              await sendPushNotification(
+                { endpoint: subscription.endpoint, keys: { p256dh: subscription.p256dh, auth: subscription.auth } },
+                payload
+              );
+            }
           }
 
           lastMoodReminderSent.set(key, true);

@@ -78,7 +78,9 @@ export interface IStorage {
   // Push subscription methods
   getPushSubscriptions(userId: number): Promise<PushSubscription[]>;
   createPushSubscription(subscription: InsertPushSubscription): Promise<PushSubscription>;
+  saveApnsToken(userId: number, apnsToken: string): Promise<PushSubscription>;
   deletePushSubscription(endpoint: string): Promise<void>;
+  deleteApnsToken(apnsToken: string): Promise<void>;
   getAllUsersForReminder(time: string): Promise<Array<User & { subscriptions: PushSubscription[] }>>;
 }
 
@@ -402,9 +404,36 @@ export class MemStorage implements IStorage {
     return newSubscription;
   }
 
+  async saveApnsToken(userId: number, apnsToken: string): Promise<PushSubscription> {
+    const existing = Array.from(this.pushSubscriptions.values()).find(
+      sub => sub.apnsToken === apnsToken
+    );
+    if (existing) return existing;
+    const newSubscription: PushSubscription = {
+      userId,
+      endpoint: `apns:${apnsToken}`,
+      p256dh: "",
+      auth: "",
+      apnsToken,
+      id: this.currentPushSubscriptionId++,
+      createdAt: new Date(),
+    };
+    this.pushSubscriptions.set(newSubscription.id, newSubscription);
+    return newSubscription;
+  }
+
   async deletePushSubscription(endpoint: string): Promise<void> {
     const subscription = Array.from(this.pushSubscriptions.entries()).find(
       ([_, sub]) => sub.endpoint === endpoint
+    );
+    if (subscription) {
+      this.pushSubscriptions.delete(subscription[0]);
+    }
+  }
+
+  async deleteApnsToken(apnsToken: string): Promise<void> {
+    const subscription = Array.from(this.pushSubscriptions.entries()).find(
+      ([_, sub]) => sub.apnsToken === apnsToken
     );
     if (subscription) {
       this.pushSubscriptions.delete(subscription[0]);
@@ -635,8 +664,27 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
+  async saveApnsToken(userId: number, apnsToken: string): Promise<PushSubscription> {
+    const [existing] = await db.select().from(pushSubscriptions)
+      .where(eq(pushSubscriptions.apnsToken, apnsToken));
+    if (existing) return existing;
+    const endpoint = `apns:${apnsToken}`;
+    const [created] = await db.insert(pushSubscriptions).values({
+      userId,
+      endpoint,
+      p256dh: "",
+      auth: "",
+      apnsToken,
+    }).returning();
+    return created;
+  }
+
   async deletePushSubscription(endpoint: string): Promise<void> {
     await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, endpoint));
+  }
+
+  async deleteApnsToken(apnsToken: string): Promise<void> {
+    await db.delete(pushSubscriptions).where(eq(pushSubscriptions.apnsToken, apnsToken));
   }
 
   async getGoalTemplates(userId: number): Promise<GoalTemplate[]> {

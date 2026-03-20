@@ -105,8 +105,9 @@ export const pushSubscriptions = pgTable("push_subscriptions", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull(),
   endpoint: text("endpoint").notNull().unique(),
-  p256dh: text("p256dh").notNull(),
-  auth: text("auth").notNull(),
+  p256dh: text("p256dh").default("").notNull(),
+  auth: text("auth").default("").notNull(),
+  apnsToken: text("apns_token"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

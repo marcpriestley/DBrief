@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { registerNativePush, isNativePlatform } from "@/hooks/useNativeNotifications";
 import {
   Dialog,
   DialogContent,
@@ -47,15 +48,28 @@ const APPLE_HEALTH_METRICS: {
 const CATEGORY_ORDER = ["Activity", "Sleep", "Heart", "Body", "Mindfulness", "Respiratory", "Nutrition"];
 
 function NotificationPermissionHelper() {
-  const [permissionState, setPermissionState] = useState<NotificationPermission | "unsupported">("default");
+  const [permissionState, setPermissionState] = useState<NotificationPermission | "unsupported" | "native">("default");
 
   useEffect(() => {
+    if (isNativePlatform()) {
+      setPermissionState("native");
+      return;
+    }
     if (!("Notification" in window)) {
       setPermissionState("unsupported");
     } else {
       setPermissionState(Notification.permission);
     }
   }, []);
+
+  if (permissionState === "native") {
+    return (
+      <div className="flex items-start gap-2.5 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+        <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
+        <p className="text-xs text-emerald-700">Native iOS notifications active. Toggle to register your device.</p>
+      </div>
+    );
+  }
 
   if (permissionState === "granted") {
     return (
@@ -176,7 +190,10 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     setNotificationsEnabled(enabled);
     
     if (enabled) {
-      if ('Notification' in window) {
+      if (isNativePlatform()) {
+        await registerNativePush();
+        toast({ title: "Notifications enabled", description: "You'll receive daily reminders." });
+      } else if ('Notification' in window) {
         const permission = await Notification.requestPermission();
         if (permission === 'granted') {
           await registerPushSubscription();

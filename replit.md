@@ -40,7 +40,7 @@ DBrief is a personal performance engineering app built around the F1 debrief fra
 **Database**: PostgreSQL for persistent storage, managed by Drizzle ORM.
 **AI Integration**: OpenAI API powers conversational debriefs, journal insights, pattern analysis, infinite goal refinement, and habit suggestions. Voice recording uses Web Speech API for speech-to-text.
 **Health Tracking**: Apple Health (HealthKit via Capacitor) integration for automatic synchronization of Sleep Quality, Readiness, and Activity metrics, normalized to a 0-100 scale.
-**Notifications**: Web Push API with service workers and VAPID keys for secure push notifications and cron-scheduled daily reminders.
+**Notifications**: Dual-path notification system — Web Push API (VAPID/service worker) for browser users; Apple Push Notifications (APNs via `node-apn`) for native iOS. Uses `@capacitor/push-notifications` for device token registration. Requires `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_AUTH_KEY` env secrets + Push Notifications entitlement in Xcode. Speech recognition uses `@capacitor-community/speech-recognition` natively.
 **Key Features**:
 - AI Debrief: F1-style performance debrief with 3 core exchanges, then opt-in to continue deeper. Performance engineer persona reviews "telemetry" (scores, goals, mood). Weekly infinite goal alignment check on Sundays. Voice + text input. Auto-summarization.
 - Infinite Goal: AI-assisted articulation of an overarching never-completable aspiration. Always displayed at dashboard top. Weekly debrief alignment check. Prompt to set one if unset.
@@ -71,7 +71,7 @@ DBrief is a personal performance engineering app built around the F1 debrief fra
 - `long_term_goals` - Up to 3 long-term targets per user (encrypted)
 - `debriefs` / `debrief_messages` - AI debrief conversations (encrypted)
 - `mood_checkins` - Mood check-in data
-- `push_subscriptions` - Web push notification subscriptions
+- `push_subscriptions` - Web push notification subscriptions + APNs device tokens (`apns_token` column)
 - `journal_attachments` - File attachments for journal entries
 
 ## External Dependencies

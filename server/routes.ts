@@ -10,6 +10,7 @@ import {
 import OpenAI from "openai";
 import type { HealthData } from "./oura";
 import { sendPushNotification, getVapidPublicKey } from "./notifications";
+import { sendApnsNotification, isApnsConfigured } from "./apns";
 import bcrypt from "bcrypt";
 import { OAuth2Client } from "google-auth-library";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
@@ -1000,6 +1001,43 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
     } catch (error) {
       res.status(500).json({ message: "Failed to delete subscription" });
     }
+  });
+
+  // APNs device token registration (native iOS app)
+  app.post("/api/push/register-apns", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { deviceToken } = req.body;
+
+      if (!deviceToken || typeof deviceToken !== 'string') {
+        return res.status(400).json({ message: "deviceToken required" });
+      }
+
+      const saved = await storage.saveApnsToken(userId, deviceToken);
+      res.json({ success: true, id: saved.id });
+    } catch (error) {
+      console.error("APNs token registration error:", error);
+      res.status(500).json({ message: "Failed to register APNs token" });
+    }
+  });
+
+  // Unregister APNs device token
+  app.delete("/api/push/unregister-apns", async (req, res) => {
+    try {
+      const { deviceToken } = req.body;
+      if (!deviceToken) {
+        return res.status(400).json({ message: "deviceToken required" });
+      }
+      await storage.deleteApnsToken(deviceToken);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to unregister APNs token" });
+    }
+  });
+
+  // Check APNs config status
+  app.get("/api/push/apns-status", (_req, res) => {
+    res.json({ configured: isApnsConfigured() });
   });
 
   // User Settings Routes

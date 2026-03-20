@@ -1,6 +1,7 @@
 import { Switch, Route } from "wouter";
 import { queryClient, getQueryFn } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Dashboard from "@/pages/dashboard";
@@ -10,6 +11,7 @@ import Welcome from "@/pages/welcome";
 import OnboardingFlow from "@/components/OnboardingFlow";
 import NotFound from "@/pages/not-found";
 import PrivacyPolicy from "@/pages/privacy";
+import { registerNativePush, isNativePlatform } from "@/hooks/useNativeNotifications";
 
 function AuthenticatedRouter() {
   const { data: user, isLoading } = useQuery<any>({
@@ -18,6 +20,12 @@ function AuthenticatedRouter() {
     retry: false,
     staleTime: 5 * 60 * 1000,
   });
+
+  useEffect(() => {
+    if (user && isNativePlatform() && user.notificationsEnabled !== false) {
+      registerNativePush();
+    }
+  }, [user]);
 
   if (isLoading) {
     return (
