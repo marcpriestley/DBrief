@@ -5,7 +5,8 @@ const config: CapacitorConfig = {
   appName: 'DBrief',
   webDir: 'dist/public',
   server: {
-    androidScheme: 'https',
+    url: 'https://DBrief.replit.app',
+    cleartext: false,
   },
   ios: {
     contentInset: 'automatic',
