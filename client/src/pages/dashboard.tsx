@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { useSearch } from "wouter";
+import { ChevronLeft } from "lucide-react";
 import AppLayout from "@/components/AppLayout";
 import ScoreDashboard from "@/components/ScoreDashboard";
 import DebriefPanel from "@/components/DebriefPanel";
@@ -17,15 +18,17 @@ function getDateStr(offset = 0) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function formatDate(dateStr: string, includeWeekday = true) {
+function formatDate(dateStr: string) {
   const d = new Date(dateStr + "T12:00:00");
-  if (includeWeekday) {
-    return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-  }
+  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+}
+
+function formatDateShort(dateStr: string) {
+  const d = new Date(dateStr + "T12:00:00");
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-type DayView = "today" | "yesterday";
+type DayView = "today" | "yesterday" | "historical";
 
 function getSmartDefault(journalPreference?: string): DayView {
   const hour = new Date().getHours();
@@ -35,6 +38,7 @@ function getSmartDefault(journalPreference?: string): DayView {
 
 export default function Dashboard() {
   const [dayView, setDayView] = useState<DayView>("today");
+  const [historicalDate, setHistoricalDate] = useState<string | null>(null);
   const [defaultApplied, setDefaultApplied] = useState(false);
   const search = useSearch();
 
@@ -42,21 +46,31 @@ export default function Dashboard() {
 
   const todayStr = getDateStr(0);
   const yesterdayStr = getDateStr(-1);
-  const selectedDate = dayView === "today" ? todayStr : yesterdayStr;
 
-  // Handle URL date param (e.g. when navigating from calendar)
+  const selectedDate =
+    dayView === "today" ? todayStr :
+    dayView === "yesterday" ? yesterdayStr :
+    (historicalDate ?? todayStr);
+
+  // Handle URL date param — supports any historical date from calendar
   useEffect(() => {
     const params = new URLSearchParams(search);
     const dateParam = params.get("date");
     if (dateParam) {
-      if (dateParam === yesterdayStr) {
-        setDayView("yesterday");
-      } else {
-        setDayView("today");
-      }
       window.history.replaceState({}, "", "/");
+      window.scrollTo({ top: 0, behavior: "instant" });
+      if (dateParam === todayStr) {
+        setDayView("today");
+        setHistoricalDate(null);
+      } else if (dateParam === yesterdayStr) {
+        setDayView("yesterday");
+        setHistoricalDate(null);
+      } else {
+        setHistoricalDate(dateParam);
+        setDayView("historical");
+      }
     }
-  }, [search, yesterdayStr]);
+  }, [search, todayStr, yesterdayStr]);
 
   // Smart default on first load
   useEffect(() => {
@@ -74,16 +88,31 @@ export default function Dashboard() {
       haptic("select");
       window.scrollTo({ top: 0, behavior: "instant" });
       setDayView(view);
+      if (view !== "historical") setHistoricalDate(null);
     }
   };
 
-  const todayLabel = formatDate(todayStr);
-  const yesterdayLabel = formatDate(yesterdayStr);
-
   return (
     <AppLayout>
-      {/* Sticky day selector — pinned just below the main header */}
+      {/* Sticky day selector */}
       <div className="sticky top-[90px] z-40 -mx-4 px-4 py-2 bg-background border-b border-border/40">
+
+        {/* Historical date banner — shown when viewing any date older than yesterday */}
+        {dayView === "historical" && historicalDate && (
+          <div className="flex items-center gap-2 mb-2 px-1">
+            <button
+              onClick={() => switchView(getSmartDefault(user?.journalPreference))}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+              Back
+            </button>
+            <span className="text-xs font-semibold text-primary">
+              Viewing {formatDate(historicalDate)}
+            </span>
+          </div>
+        )}
+
         <div className="flex w-full bg-muted rounded-xl p-1 gap-1">
           <button
             onClick={() => switchView("yesterday")}
@@ -97,7 +126,7 @@ export default function Dashboard() {
             <span className={`text-sm font-bold mt-0.5 transition-colors ${
               dayView === "yesterday" ? "text-foreground" : "text-muted-foreground"
             }`}>
-              {yesterdayLabel}
+              {formatDateShort(yesterdayStr)}
             </span>
             <div className={`h-0.5 rounded-full mt-1.5 transition-all duration-200 ${
               dayView === "yesterday" ? "w-6 bg-primary" : "w-0 bg-transparent"
@@ -118,7 +147,7 @@ export default function Dashboard() {
             <span className={`text-sm font-bold mt-0.5 transition-colors ${
               dayView === "today" ? "text-foreground" : "text-muted-foreground"
             }`}>
-              {todayLabel}
+              {formatDateShort(todayStr)}
             </span>
             <div className={`h-0.5 rounded-full mt-1.5 transition-all duration-200 ${
               dayView === "today" ? "w-6 bg-primary" : "w-0 bg-transparent"
@@ -132,7 +161,7 @@ export default function Dashboard() {
 
         <AnimatePresence mode="wait">
           <motion.div
-            key={dayView}
+            key={selectedDate}
             initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
