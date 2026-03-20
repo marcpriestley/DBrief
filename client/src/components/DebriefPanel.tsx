@@ -179,6 +179,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const hasMountedRef = useRef(false);
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const voice = useInlineVoice();
@@ -353,6 +354,10 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   }, [debrief?.messages, streamingContent, showCheckpoint]);
 
   useEffect(() => {
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true;
+      return;
+    }
     if (!voice.isListening && !isStreaming) {
       inputRef.current?.focus();
     }

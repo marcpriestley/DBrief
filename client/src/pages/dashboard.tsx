@@ -52,13 +52,20 @@ export default function Dashboard() {
     dayView === "yesterday" ? yesterdayStr :
     (historicalDate ?? todayStr);
 
-  // Handle URL date param — supports any historical date from calendar
+  // Single initialisation effect — reads `search` BEFORE clearing the URL
+  // so there's no race between URL-param handling and the smart default.
   useEffect(() => {
+    if (!user || defaultApplied) return;
+    setDefaultApplied(true);
+
     const params = new URLSearchParams(search);
     const dateParam = params.get("date");
+
     if (dateParam) {
+      // Always clear the param from the URL first
       window.history.replaceState({}, "", "/");
       window.scrollTo({ top: 0, behavior: "instant" });
+
       if (dateParam === todayStr) {
         setDayView("today");
         setHistoricalDate(null);
@@ -69,19 +76,10 @@ export default function Dashboard() {
         setHistoricalDate(dateParam);
         setDayView("historical");
       }
+    } else {
+      setDayView(getSmartDefault(user.journalPreference));
     }
-  }, [search, todayStr, yesterdayStr]);
-
-  // Smart default on first load
-  useEffect(() => {
-    if (user && !defaultApplied) {
-      setDefaultApplied(true);
-      const params = new URLSearchParams(window.location.search);
-      if (!params.get("date")) {
-        setDayView(getSmartDefault(user.journalPreference));
-      }
-    }
-  }, [user, defaultApplied]);
+  }, [user, defaultApplied, search, todayStr, yesterdayStr]);
 
   const switchView = (view: DayView) => {
     if (view !== dayView) {
