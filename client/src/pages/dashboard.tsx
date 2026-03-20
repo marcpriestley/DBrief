@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
+import { useSearch } from "wouter";
 import AppLayout from "@/components/AppLayout";
 import ScoreDashboard from "@/components/ScoreDashboard";
 import DebriefPanel from "@/components/DebriefPanel";
@@ -35,6 +36,7 @@ function getSmartDefault(journalPreference?: string): DayView {
 export default function Dashboard() {
   const [dayView, setDayView] = useState<DayView>("today");
   const [defaultApplied, setDefaultApplied] = useState(false);
+  const search = useSearch();
 
   const { data: user } = useQuery<any>({ queryKey: ["/api/auth/me"] });
 
@@ -42,23 +44,35 @@ export default function Dashboard() {
   const yesterdayStr = getDateStr(-1);
   const selectedDate = dayView === "today" ? todayStr : yesterdayStr;
 
+  // Handle URL date param (e.g. when navigating from calendar)
+  useEffect(() => {
+    const params = new URLSearchParams(search);
+    const dateParam = params.get("date");
+    if (dateParam) {
+      if (dateParam === yesterdayStr) {
+        setDayView("yesterday");
+      } else {
+        setDayView("today");
+      }
+      window.history.replaceState({}, "", "/");
+    }
+  }, [search, yesterdayStr]);
+
+  // Smart default on first load
   useEffect(() => {
     if (user && !defaultApplied) {
       setDefaultApplied(true);
       const params = new URLSearchParams(window.location.search);
-      const dateParam = params.get("date");
-      if (dateParam === yesterdayStr) {
-        setDayView("yesterday");
-        window.history.replaceState({}, "", window.location.pathname);
-      } else {
+      if (!params.get("date")) {
         setDayView(getSmartDefault(user.journalPreference));
       }
     }
-  }, [user, defaultApplied, yesterdayStr]);
+  }, [user, defaultApplied]);
 
   const switchView = (view: DayView) => {
     if (view !== dayView) {
       haptic("select");
+      window.scrollTo({ top: 0, behavior: "instant" });
       setDayView(view);
     }
   };
@@ -135,7 +149,7 @@ export default function Dashboard() {
 
             <DebriefPanel selectedDate={selectedDate} />
 
-            {dayView === "today" && <AIInsights />}
+            <AIInsights />
           </motion.div>
         </AnimatePresence>
       </div>

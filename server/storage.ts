@@ -662,20 +662,24 @@ export class DatabaseStorage implements IStorage {
     await db.update(goalTemplates)
       .set({ isActive: false })
       .where(and(eq(goalTemplates.id, id), eq(goalTemplates.userId, userId)));
-    const now = new Date();
-    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    const { gte } = await import("drizzle-orm");
     await db.delete(dailyGoals)
       .where(and(
         eq(dailyGoals.userId, userId),
         eq(dailyGoals.goalTemplateId, id),
-        gte(dailyGoals.date, todayStr)
       ));
   }
 
   async getDailyGoals(userId: number, date: string): Promise<DailyGoal[]> {
-    return await db.select().from(dailyGoals)
-      .where(and(eq(dailyGoals.userId, userId), eq(dailyGoals.date, date)));
+    const { asc } = await import("drizzle-orm");
+    const goals = await db.select().from(dailyGoals)
+      .where(and(eq(dailyGoals.userId, userId), eq(dailyGoals.date, date)))
+      .orderBy(asc(dailyGoals.id));
+    const seen = new Set<number>();
+    return goals.filter(g => {
+      if (seen.has(g.goalTemplateId)) return false;
+      seen.add(g.goalTemplateId);
+      return true;
+    });
   }
 
   async createDailyGoal(goal: InsertDailyGoal): Promise<DailyGoal> {

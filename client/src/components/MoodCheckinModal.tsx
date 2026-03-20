@@ -5,7 +5,6 @@ import { motion } from "framer-motion";
 import { Smile, Frown, Meh, Heart } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Slider } from "@/components/ui/slider";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -102,13 +101,18 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
           </div>
 
           <div className="px-2">
-            <Slider
-              value={[moodValue]}
-              onValueChange={(v) => setMoodValue(v[0])}
+            <input
+              type="range"
+              value={moodValue}
+              onChange={(e) => setMoodValue(Number(e.target.value))}
               min={0}
               max={100}
               step={1}
-              className="w-full"
+              className="w-full h-2 rounded-full appearance-none cursor-pointer"
+              style={{
+                touchAction: "none",
+                accentColor: "hsl(40, 95%, 48%)",
+              }}
             />
             <div className="flex justify-between mt-1.5 text-[10px] text-muted-foreground">
               <span>0</span>

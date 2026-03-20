@@ -202,7 +202,6 @@ export default function GoalsSection({ selectedDate }: GoalsSectionProps) {
             >
               <button
                 onClick={() => toggleMutation.mutate(goal.id)}
-                onTouchEnd={(e) => { e.preventDefault(); toggleMutation.mutate(goal.id); }}
                 className={`flex-shrink-0 w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all touch-manipulation ${
                   goal.completed
                     ? "bg-primary border-primary"
@@ -246,7 +245,7 @@ export default function GoalsSection({ selectedDate }: GoalsSectionProps) {
               )}
 
               {!isEditing && (
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex items-center gap-1">
                   <button
                     onClick={() => {
                       setEditingId(goal.goalTemplateId);
@@ -285,6 +284,15 @@ export default function GoalsSection({ selectedDate }: GoalsSectionProps) {
               placeholder={`Add goal ${totalGoals + i + 1}...`}
               className="flex-1 h-7 text-sm border-none bg-transparent shadow-none focus-visible:ring-0 placeholder:text-muted-foreground/40"
             />
+            {placeholderValues[i]?.trim() && (
+              <button
+                onClick={() => handlePlaceholderSubmit(i)}
+                disabled={submittingPlaceholder === i}
+                className="flex-shrink-0 w-7 h-7 rounded-full bg-primary flex items-center justify-center disabled:opacity-50"
+              >
+                <Check className="h-3.5 w-3.5 text-white" />
+              </button>
+            )}
           </motion.div>
         ))}
 
