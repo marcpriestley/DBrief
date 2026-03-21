@@ -45,6 +45,7 @@ function getTimeOfDayLabel(): string {
 function MoodSlider({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
+  const activePointer = useRef<number | null>(null);
   const pct = value;
 
   const computeValue = (clientX: number) => {
@@ -54,17 +55,23 @@ function MoodSlider({ value, onChange }: { value: number; onChange: (v: number) 
   };
 
   const onPointerDown = (e: React.PointerEvent) => {
+    if (activePointer.current !== null) return;
     e.preventDefault();
+    activePointer.current = e.pointerId;
     isDragging.current = true;
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    trackRef.current?.setPointerCapture(e.pointerId);
     onChange(computeValue(e.clientX));
   };
   const onPointerMove = (e: React.PointerEvent) => {
-    if (!isDragging.current) return;
+    if (!isDragging.current || e.pointerId !== activePointer.current) return;
     e.preventDefault();
     onChange(computeValue(e.clientX));
   };
-  const onPointerUp = () => { isDragging.current = false; };
+  const onPointerUp = (e: React.PointerEvent) => {
+    if (e.pointerId !== activePointer.current) return;
+    isDragging.current = false;
+    activePointer.current = null;
+  };
 
   return (
     <div
@@ -74,7 +81,7 @@ function MoodSlider({ value, onChange }: { value: number; onChange: (v: number) 
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
+      onPointerCancel={() => { isDragging.current = false; activePointer.current = null; }}
     >
       <div className="absolute inset-x-0 h-2 rounded-full bg-border" />
       <div className="absolute h-2 rounded-full transition-none" style={{ width: `${pct}%`, backgroundColor: getMoodColor(value) }} />

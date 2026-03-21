@@ -173,9 +173,16 @@ function useInlineVoice() {
             partialResults: true,
             popup: false,
           });
-        } catch (err) {
+        } catch (err: any) {
           console.error("Native speech recognition error:", err);
-          setMicError("Voice input unavailable. Please type your response.");
+          const msg = String(err?.message || err || "");
+          if (msg.toLowerCase().includes("not implemented") || msg.toLowerCase().includes("not available")) {
+            setMicError("Voice requires a new app build. Please update DBrief from TestFlight.");
+          } else if (msg.toLowerCase().includes("denied") || msg.toLowerCase().includes("permission")) {
+            setMicError("Microphone blocked. Go to Settings → DBrief → Microphone and allow access.");
+          } else {
+            setMicError("Voice unavailable. Go to Settings → DBrief → Microphone to enable it.");
+          }
           setIsListening(false);
         }
         return;

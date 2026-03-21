@@ -66,7 +66,10 @@ function NotificationPermissionHelper() {
     return (
       <div className="flex items-start gap-2.5 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
         <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
-        <p className="text-xs text-emerald-700">Native iOS notifications active. Toggle to register your device.</p>
+        <div className="text-xs text-emerald-700 space-y-1.5">
+          <p>Use the <strong>Daily Reminders</strong> toggle above to request notification permission from iOS. The app will then appear in your iPhone's notification settings.</p>
+          <p className="text-[11px] opacity-80">If already enabled but not appearing, tap the toggle off then back on.</p>
+        </div>
       </div>
     );
   }
