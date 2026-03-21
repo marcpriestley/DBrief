@@ -8,6 +8,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import { Capacitor } from "@capacitor/core";
+import { openAppSettings } from "@/hooks/useNativeNotifications";
 
 interface DebriefMessage {
   id: number;
@@ -150,13 +151,29 @@ function useInlineVoice() {
       if (isNative) {
         try {
           const { SpeechRecognition } = await import("@capacitor-community/speech-recognition");
-          const permResult = await SpeechRecognition.requestPermissions();
-          if (permResult.speechRecognition !== "granted") {
-            setMicError("Microphone access denied. Go to Settings → DBrief → Microphone to enable it.");
+
+          // Check current permission state first — if denied, iOS won't show dialog again
+          let permResult = await SpeechRecognition.checkPermissions();
+          console.log("[Voice] Permission state:", permResult);
+
+          if (permResult.speechRecognition === "denied" || permResult.microphone === "denied") {
+            setMicError("SETTINGS_NEEDED");
+            setIsListening(false);
             return;
           }
+
+          // If not yet granted, request it
+          if (permResult.speechRecognition !== "granted" || permResult.microphone !== "granted") {
+            permResult = await SpeechRecognition.requestPermissions();
+          }
+
+          if (permResult.speechRecognition !== "granted" || permResult.microphone !== "granted") {
+            setMicError("SETTINGS_NEEDED");
+            setIsListening(false);
+            return;
+          }
+
           setIsListening(true);
-          // Remove any previous listener
           if (nativeListenerRef.current) {
             nativeListenerRef.current.remove();
             nativeListenerRef.current = null;
@@ -177,11 +194,9 @@ function useInlineVoice() {
           console.error("Native speech recognition error:", err);
           const msg = String(err?.message || err || "");
           if (msg.toLowerCase().includes("not implemented") || msg.toLowerCase().includes("not available")) {
-            setMicError("Voice requires a new app build. Please update DBrief from TestFlight.");
-          } else if (msg.toLowerCase().includes("denied") || msg.toLowerCase().includes("permission")) {
-            setMicError("Microphone blocked. Go to Settings → DBrief → Microphone and allow access.");
+            setMicError("Voice requires a newer app build — update from TestFlight.");
           } else {
-            setMicError("Voice unavailable. Go to Settings → DBrief → Microphone to enable it.");
+            setMicError("SETTINGS_NEEDED");
           }
           setIsListening(false);
         }
@@ -787,9 +802,21 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
             </div>
           )}
           {voice.micError && (
-            <div className="flex items-center gap-2 mb-2 px-2 py-1.5 bg-destructive/10 rounded-lg">
-              <span className="text-xs text-destructive flex-1">{voice.micError}</span>
-              <button onClick={voice.clearMicError} className="text-destructive/60 hover:text-destructive text-xs">✕</button>
+            <div className="flex items-start gap-2 mb-2 px-2 py-1.5 bg-destructive/10 rounded-lg">
+              {voice.micError === "SETTINGS_NEEDED" ? (
+                <div className="flex-1 space-y-1.5">
+                  <span className="text-xs text-destructive block">Microphone blocked. iOS won't ask again once denied.</span>
+                  <button
+                    onClick={() => { openAppSettings(); voice.clearMicError(); }}
+                    className="text-[11px] font-medium text-destructive underline underline-offset-2"
+                  >
+                    Open DBrief Settings →
+                  </button>
+                </div>
+              ) : (
+                <span className="text-xs text-destructive flex-1">{voice.micError}</span>
+              )}
+              <button onClick={voice.clearMicError} className="text-destructive/60 hover:text-destructive text-xs shrink-0">✕</button>
             </div>
           )}
           <div className="flex items-center gap-2 bg-muted/50 rounded-xl border border-border/50 p-2">

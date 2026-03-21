@@ -12,21 +12,30 @@ export function useNativeNotifications(enabled: boolean) {
   }, [enabled]);
 }
 
-export async function registerNativePush(): Promise<void> {
-  if (!Capacitor.isNativePlatform()) return;
+export type PushPermissionResult = "granted" | "denied" | "error";
+
+export async function registerNativePush(): Promise<PushPermissionResult> {
+  if (!Capacitor.isNativePlatform()) return "error";
 
   try {
     const { PushNotifications } = await import("@capacitor/push-notifications");
 
     let permission = await PushNotifications.checkPermissions();
+    console.log("[APNs] Current permission state:", permission.receive);
 
-    if (permission.receive === "prompt") {
+    if (permission.receive === "prompt" || permission.receive === "prompt-with-rationale") {
       permission = await PushNotifications.requestPermissions();
+      console.log("[APNs] After request:", permission.receive);
+    }
+
+    if (permission.receive === "denied") {
+      console.log("[APNs] Permission denied — user must enable in iOS Settings");
+      return "denied";
     }
 
     if (permission.receive !== "granted") {
       console.log("[APNs] Permission not granted:", permission.receive);
-      return;
+      return "error";
     }
 
     PushNotifications.addListener("registration", async (token) => {
@@ -50,9 +59,15 @@ export async function registerNativePush(): Promise<void> {
     });
 
     await PushNotifications.register();
+    return "granted";
   } catch (err) {
     console.error("[APNs] Failed to initialise push notifications:", err);
+    return "error";
   }
+}
+
+export function openAppSettings() {
+  window.open("app-settings:", "_system");
 }
 
 export function isNativePlatform(): boolean {

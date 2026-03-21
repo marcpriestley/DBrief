@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { registerNativePush, isNativePlatform } from "@/hooks/useNativeNotifications";
+import { registerNativePush, isNativePlatform, openAppSettings } from "@/hooks/useNativeNotifications";
 import {
   Dialog,
   DialogContent,
@@ -48,28 +48,54 @@ const APPLE_HEALTH_METRICS: {
 const CATEGORY_ORDER = ["Activity", "Sleep", "Heart", "Body", "Mindfulness", "Respiratory", "Nutrition"];
 
 function NotificationPermissionHelper() {
-  const [permissionState, setPermissionState] = useState<NotificationPermission | "unsupported" | "native">("default");
+  const [permissionState, setPermissionState] = useState<NotificationPermission | "unsupported" | "native-unknown" | "native-denied" | "native-granted">("default");
 
   useEffect(() => {
-    if (isNativePlatform()) {
-      setPermissionState("native");
+    if (!isNativePlatform()) {
+      if (!("Notification" in window)) {
+        setPermissionState("unsupported");
+      } else {
+        setPermissionState(Notification.permission);
+      }
       return;
     }
-    if (!("Notification" in window)) {
-      setPermissionState("unsupported");
-    } else {
-      setPermissionState(Notification.permission);
-    }
+    import("@capacitor/push-notifications").then(({ PushNotifications }) => {
+      PushNotifications.checkPermissions().then((result) => {
+        if (result.receive === "granted") setPermissionState("native-granted");
+        else if (result.receive === "denied") setPermissionState("native-denied");
+        else setPermissionState("native-unknown");
+      }).catch(() => setPermissionState("native-unknown"));
+    }).catch(() => setPermissionState("native-unknown"));
   }, []);
 
-  if (permissionState === "native") {
+  if (permissionState === "native-granted") {
     return (
       <div className="flex items-start gap-2.5 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
         <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
-        <div className="text-xs text-emerald-700 space-y-1.5">
-          <p>Use the <strong>Daily Reminders</strong> toggle above to request notification permission from iOS. The app will then appear in your iPhone's notification settings.</p>
-          <p className="text-[11px] opacity-80">If already enabled but not appearing, tap the toggle off then back on.</p>
+        <p className="text-xs text-emerald-700">Notifications are active. DBrief will appear in your iPhone notification settings.</p>
+      </div>
+    );
+  }
+
+  if (permissionState === "native-denied") {
+    return (
+      <div className="flex items-start gap-2.5 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+        <AlertCircle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+        <div className="text-xs text-amber-700 space-y-2 flex-1">
+          <p>iOS notifications are blocked. You need to allow them in iPhone Settings.</p>
+          <Button size="sm" variant="outline" className="h-7 text-xs border-amber-500/40 text-amber-700" onClick={openAppSettings}>
+            Open DBrief Settings →
+          </Button>
         </div>
+      </div>
+    );
+  }
+
+  if (permissionState === "native-unknown") {
+    return (
+      <div className="flex items-start gap-2.5 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+        <AlertCircle className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
+        <p className="text-xs text-blue-700">Toggle <strong>Daily Reminders</strong> on to request notification permission from iOS.</p>
       </div>
     );
   }
@@ -194,8 +220,19 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     
     if (enabled) {
       if (isNativePlatform()) {
-        await registerNativePush();
-        toast({ title: "Notifications enabled", description: "You'll receive daily reminders." });
+        const result = await registerNativePush();
+        if (result === "granted") {
+          toast({ title: "Notifications enabled", description: "You'll receive daily reminders." });
+        } else if (result === "denied") {
+          toast({
+            title: "Notifications blocked by iOS",
+            description: "Go to iPhone Settings → DBrief → Notifications and enable them.",
+            variant: "destructive",
+          });
+          openAppSettings();
+        } else {
+          toast({ title: "Notifications unavailable", description: "Could not register for notifications.", variant: "destructive" });
+        }
       } else if ('Notification' in window) {
         const permission = await Notification.requestPermission();
         if (permission === 'granted') {
