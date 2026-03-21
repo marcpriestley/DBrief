@@ -338,14 +338,22 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 <p className="text-xs font-medium text-foreground">Health Metrics</p>
               </div>
 
-              <div className="rounded-md bg-blue-500/10 border border-blue-500/20 p-2.5 flex gap-2">
-                <Info className="h-3.5 w-3.5 text-blue-600 shrink-0 mt-0.5" />
-                <div className="text-[11px] text-blue-700 leading-relaxed space-y-1">
-                  <p><strong>Auto-sync requires the native app.</strong> DBrief is currently running as a web app — health data access requires a native build.</p>
-                  <p>On <strong>iOS</strong> this syncs from Apple Health (HealthKit). On <strong>Android</strong> it syncs from Google Health Connect. All the same metrics are supported on both platforms.</p>
-                  <p>Select metrics below to <strong>manually track them now</strong>. Once the native app is installed, they'll auto-sync from your device's health data.</p>
+              {isNativePlatform() ? (
+                <div className="rounded-md bg-muted/80 border border-border/50 p-2.5 flex gap-2">
+                  <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    Metrics are currently tracked manually. Apple Health auto-sync will be added in a future update — select any metrics below to add them to your dashboard now.
+                  </p>
                 </div>
-              </div>
+              ) : (
+                <div className="rounded-md bg-blue-500/10 border border-blue-500/20 p-2.5 flex gap-2">
+                  <Info className="h-3.5 w-3.5 text-blue-600 shrink-0 mt-0.5" />
+                  <div className="text-[11px] text-blue-700 leading-relaxed space-y-1">
+                    <p><strong>Auto-sync requires the native app.</strong> DBrief is currently running in a browser — health data access requires the iOS app.</p>
+                    <p>Select metrics below to <strong>manually track them now</strong>. Once the native app is installed, they'll auto-sync from Apple Health.</p>
+                  </div>
+                </div>
+              )}
 
               <p className="text-[11px] text-muted-foreground font-medium">Tap to add metrics to your dashboard:</p>
 

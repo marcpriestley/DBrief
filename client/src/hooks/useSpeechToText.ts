@@ -83,7 +83,7 @@ export function useSpeechToText(): SpeechToTextHook {
       try {
         const { SpeechRecognition } = await import("@capacitor-community/speech-recognition");
 
-        const permResult = await SpeechRecognition.requestPermission();
+        const permResult = await SpeechRecognition.requestPermissions();
         if (permResult.speechRecognition !== "granted") {
           console.error("Speech recognition permission denied");
           return;
@@ -122,10 +122,7 @@ export function useSpeechToText(): SpeechToTextHook {
     if (isNative) {
       try {
         const { SpeechRecognition } = await import("@capacitor-community/speech-recognition");
-        const result = await SpeechRecognition.stop();
-        if (result?.matches?.[0]) {
-          setTranscript(result.matches[0]);
-        }
+        await SpeechRecognition.stop();
         setIsRecording(false);
       } catch (error) {
         console.error("Error stopping native speech recognition:", error);

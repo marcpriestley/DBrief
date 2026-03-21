@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
+import { Capacitor } from "@capacitor/core";
 
 interface DebriefMessage {
   id: number;
@@ -51,10 +52,13 @@ function useInlineVoice() {
   const onFinalRef = useRef<((text: string) => void) | null>(null);
   const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const watchdogRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const nativeListenerRef = useRef<any>(null);
 
+  const isNative = Capacitor.isNativePlatform();
   const isSupported =
-    typeof window !== "undefined" &&
-    ("webkitSpeechRecognition" in window || "SpeechRecognition" in window);
+    isNative ||
+    (typeof window !== "undefined" &&
+      ("webkitSpeechRecognition" in window || "SpeechRecognition" in window));
 
   const startRecognitionRef = useRef<() => void>(() => {});
 
@@ -139,23 +143,58 @@ function useInlineVoice() {
     async (onFinal: (text: string) => void) => {
       if (!isSupported) return;
 
-      // Request microphone permission first — this triggers the native iOS permission dialog
-      // rather than immediately firing "not-allowed" inside the speech recogniser
+      accumulatedRef.current = "";
+      onFinalRef.current = onFinal;
+
+      // --- Native iOS path via Capacitor plugin ---
+      if (isNative) {
+        try {
+          const { SpeechRecognition } = await import("@capacitor-community/speech-recognition");
+          const permResult = await SpeechRecognition.requestPermissions();
+          if (permResult.speechRecognition !== "granted") {
+            setMicError("Microphone access denied. Go to Settings → DBrief → Microphone to enable it.");
+            return;
+          }
+          setIsListening(true);
+          // Remove any previous listener
+          if (nativeListenerRef.current) {
+            nativeListenerRef.current.remove();
+            nativeListenerRef.current = null;
+          }
+          nativeListenerRef.current = await SpeechRecognition.addListener("partialResults", (data: { matches: string[] }) => {
+            const partial = data.matches?.[0] || "";
+            setInterimText(partial);
+            accumulatedRef.current = partial;
+            onFinalRef.current?.(partial);
+          });
+          await SpeechRecognition.start({
+            language: "en-US",
+            maxResults: 1,
+            partialResults: true,
+            popup: false,
+          });
+        } catch (err) {
+          console.error("Native speech recognition error:", err);
+          setMicError("Voice input unavailable. Please type your response.");
+          setIsListening(false);
+        }
+        return;
+      }
+
+      // --- Web path via Web Speech API ---
+      // Request microphone permission first — this triggers the browser permission dialog
       if (navigator.mediaDevices?.getUserMedia) {
         try {
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          stream.getTracks().forEach((t) => t.stop()); // release immediately, we only needed the prompt
+          stream.getTracks().forEach((t) => t.stop());
         } catch {
-          setMicError("Microphone access denied. Enable microphone access for DBrief in your device Settings app.");
+          setMicError("Microphone access denied. In Safari, tap AA in the address bar → Website Settings → Microphone → Allow.");
           return;
         }
       }
 
-      accumulatedRef.current = "";
-      onFinalRef.current = onFinal;
       shouldListenRef.current = true;
       startRecognitionRef.current();
-      // Watchdog: every 2s, if we should be listening but nothing is running, force restart
       if (watchdogRef.current) clearInterval(watchdogRef.current);
       watchdogRef.current = setInterval(() => {
         if (shouldListenRef.current && !recognitionRef.current && !restartTimerRef.current) {
@@ -163,23 +202,32 @@ function useInlineVoice() {
         }
       }, 2000);
     },
-    [isSupported],
+    [isSupported, isNative],
   );
 
-  const stop = useCallback(() => {
-    shouldListenRef.current = false;
-    if (watchdogRef.current) { clearInterval(watchdogRef.current); watchdogRef.current = null; }
-    if (restartTimerRef.current) {
-      clearTimeout(restartTimerRef.current);
-      restartTimerRef.current = null;
-    }
+  const stop = useCallback(async () => {
     setInterimText("");
     setIsListening(false);
-    // Clear ref BEFORE stopping so onend guard sees recognitionRef !== instance
+
+    if (isNative) {
+      try {
+        const { SpeechRecognition } = await import("@capacitor-community/speech-recognition");
+        await SpeechRecognition.stop();
+      } catch {}
+      if (nativeListenerRef.current) {
+        nativeListenerRef.current.remove();
+        nativeListenerRef.current = null;
+      }
+      return;
+    }
+
+    shouldListenRef.current = false;
+    if (watchdogRef.current) { clearInterval(watchdogRef.current); watchdogRef.current = null; }
+    if (restartTimerRef.current) { clearTimeout(restartTimerRef.current); restartTimerRef.current = null; }
     const old = recognitionRef.current;
     recognitionRef.current = null;
     try { old?.stop(); } catch {}
-  }, []);
+  }, [isNative]);
 
   useEffect(() => {
     return () => {
@@ -189,8 +237,17 @@ function useInlineVoice() {
       const old = recognitionRef.current;
       recognitionRef.current = null;
       try { old?.abort(); } catch {}
+      if (nativeListenerRef.current) {
+        nativeListenerRef.current.remove();
+        nativeListenerRef.current = null;
+      }
+      if (isNative) {
+        import("@capacitor-community/speech-recognition").then(({ SpeechRecognition }) => {
+          SpeechRecognition.stop().catch(() => {});
+        });
+      }
     };
-  }, []);
+  }, [isNative]);
 
   const clearMicError = useCallback(() => setMicError(null), []);
   return { isListening, interimText, isSupported, start, stop, micError, clearMicError };
