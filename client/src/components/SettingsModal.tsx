@@ -231,7 +231,8 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           });
           openAppSettings();
         } else {
-          toast({ title: "Notifications need a new build", description: "Run 'npx cap sync ios' and re-archive from Xcode to activate push notifications.", variant: "destructive" });
+          const detail = typeof result === "string" && result.startsWith("error:") ? result.slice(6) : "unknown error";
+          toast({ title: "Notification setup failed", description: `Debug: ${detail}`, variant: "destructive" });
         }
       } else if ('Notification' in window) {
         const permission = await Notification.requestPermission();

@@ -35,7 +35,7 @@ export async function registerNativePush(): Promise<PushPermissionResult> {
 
     if (permission.receive !== "granted") {
       console.log("[APNs] Permission not granted:", permission.receive);
-      return "error";
+      return "error:" + permission.receive;
     }
 
     PushNotifications.addListener("registration", async (token) => {
@@ -60,9 +60,10 @@ export async function registerNativePush(): Promise<PushPermissionResult> {
 
     await PushNotifications.register();
     return "granted";
-  } catch (err) {
-    console.error("[APNs] Failed to initialise push notifications:", err);
-    return "error";
+  } catch (err: any) {
+    const msg = String(err?.message || err || "unknown");
+    console.error("[APNs] Failed to initialise push notifications:", msg);
+    return "error:" + msg;
   }
 }
 

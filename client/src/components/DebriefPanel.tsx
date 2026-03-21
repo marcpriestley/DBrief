@@ -195,8 +195,10 @@ function useInlineVoice() {
           const msg = String(err?.message || err || "");
           if (msg.toLowerCase().includes("not implemented") || msg.toLowerCase().includes("not available")) {
             setMicError("Voice requires a newer app build — update from TestFlight.");
-          } else {
+          } else if (msg.toLowerCase().includes("denied") || msg.toLowerCase().includes("permission") || msg.toLowerCase().includes("not authorized")) {
             setMicError("SETTINGS_NEEDED");
+          } else {
+            setMicError("ERR:" + msg);
           }
           setIsListening(false);
         }
@@ -813,6 +815,8 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                     Open DBrief Settings →
                   </button>
                 </div>
+              ) : voice.micError?.startsWith("ERR:") ? (
+                <span className="text-xs text-destructive flex-1">Voice error: {voice.micError.slice(4)}</span>
               ) : (
                 <span className="text-xs text-destructive flex-1">{voice.micError}</span>
               )}
