@@ -14,31 +14,47 @@ import MetricTrendChart from "./MetricTrendChart";
 function NativeSlider({ value, onChange, min = 0, max = 100, color = "hsl(40, 95%, 48%)" }: {
   value: number; onChange: (v: number) => void; min?: number; max?: number; color?: string;
 }) {
-  const ref = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const stop = (e: TouchEvent) => { e.stopPropagation(); e.preventDefault(); };
-    el.addEventListener("touchstart", stop, { passive: false });
-    el.addEventListener("touchmove", stop, { passive: false });
-    return () => { el.removeEventListener("touchstart", stop); el.removeEventListener("touchmove", stop); };
-  }, []);
-  const handleTouch = (e: React.TouchEvent) => { e.stopPropagation(); };
+  const trackRef = useRef<HTMLDivElement>(null);
+  const isDragging = useRef(false);
+  const pct = Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100));
+
+  const computeValue = (clientX: number) => {
+    const rect = trackRef.current?.getBoundingClientRect();
+    if (!rect) return value;
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    return Math.round(min + ratio * (max - min));
+  };
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    e.preventDefault();
+    isDragging.current = true;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    onChange(computeValue(e.clientX));
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!isDragging.current) return;
+    e.preventDefault();
+    onChange(computeValue(e.clientX));
+  };
+  const onPointerUp = () => { isDragging.current = false; };
+
   return (
-    <input
-      ref={ref}
-      type="range"
-      min={min}
-      max={max}
-      step={1}
-      value={value}
-      onChange={(e) => onChange(Number(e.target.value))}
-      onTouchStart={handleTouch}
-      onTouchMove={handleTouch}
-      onTouchEnd={handleTouch}
-      className="w-full h-2 rounded-full appearance-none cursor-pointer"
-      style={{ touchAction: "none", accentColor: color, WebkitAppearance: "none" } as React.CSSProperties}
-    />
+    <div
+      ref={trackRef}
+      className="relative w-full h-10 flex items-center cursor-pointer select-none"
+      style={{ touchAction: "none" }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+    >
+      <div className="absolute inset-x-0 h-2 rounded-full bg-border" />
+      <div className="absolute h-2 rounded-full transition-none" style={{ width: `${pct}%`, backgroundColor: color }} />
+      <div
+        className="absolute w-6 h-6 rounded-full shadow-md border-2 border-white transition-none"
+        style={{ left: `calc(${pct}% - 12px)`, backgroundColor: color }}
+      />
+    </div>
   );
 }
 

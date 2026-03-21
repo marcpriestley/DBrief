@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { Capacitor } from "@capacitor/core";
 import { useLocation } from "wouter";
 import { useMutation } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
@@ -37,6 +38,7 @@ export default function Welcome() {
   const [, setLocation] = useLocation();
 
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+  const isNative = Capacitor.isNativePlatform();
 
   const authMutation = useMutation({
     mutationFn: async (data: { email: string; password: string; isLogin: boolean }) => {
@@ -280,27 +282,38 @@ export default function Welcome() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                variant="outline"
-                onClick={handleGoogleLogin}
-                disabled={googleLoading || googleMutation.isPending}
-                className="w-full h-9 text-xs"
-              >
-                {(googleLoading || googleMutation.isPending)
-                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  : <SiGoogle className="h-3.5 w-3.5 mr-1.5" />}
-                {!googleLoading && !googleMutation.isPending && "Google"}
-              </Button>
+            {isNative ? (
               <Button
                 variant="outline"
                 onClick={handleAppleLogin}
                 className="w-full h-9 text-xs"
               >
                 <SiApple className="h-3.5 w-3.5 mr-1.5" />
-                Apple
+                Sign in with Apple
               </Button>
-            </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  variant="outline"
+                  onClick={handleGoogleLogin}
+                  disabled={googleLoading || googleMutation.isPending}
+                  className="w-full h-9 text-xs"
+                >
+                  {(googleLoading || googleMutation.isPending)
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    : <SiGoogle className="h-3.5 w-3.5 mr-1.5" />}
+                  {!googleLoading && !googleMutation.isPending && "Google"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleAppleLogin}
+                  className="w-full h-9 text-xs"
+                >
+                  <SiApple className="h-3.5 w-3.5 mr-1.5" />
+                  Apple
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
 

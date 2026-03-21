@@ -764,6 +764,15 @@ export class DatabaseStorage implements IStorage {
         recurring: true,
       });
       templates = await this.getGoalTemplates(userId);
+    } else {
+      // If "Make my bed" exists but is not recurring, fix it
+      const makeMyBed = templates.find(t => t.title.toLowerCase() === "make my bed" && !t.recurring);
+      if (makeMyBed) {
+        await db.update(goalTemplates)
+          .set({ recurring: true })
+          .where(eq(goalTemplates.id, makeMyBed.id));
+        templates = await this.getGoalTemplates(userId);
+      }
     }
 
     const recurringTemplates = templates.filter(t => t.recurring);

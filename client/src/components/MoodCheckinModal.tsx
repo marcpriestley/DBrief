@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { haptic } from "@/lib/haptics";
 import { motion } from "framer-motion";
@@ -42,23 +42,54 @@ function getTimeOfDayLabel(): string {
   return "evening";
 }
 
+function MoodSlider({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const isDragging = useRef(false);
+  const pct = value;
+
+  const computeValue = (clientX: number) => {
+    const rect = trackRef.current?.getBoundingClientRect();
+    if (!rect) return value;
+    return Math.round(Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100)));
+  };
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    e.preventDefault();
+    isDragging.current = true;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    onChange(computeValue(e.clientX));
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!isDragging.current) return;
+    e.preventDefault();
+    onChange(computeValue(e.clientX));
+  };
+  const onPointerUp = () => { isDragging.current = false; };
+
+  return (
+    <div
+      ref={trackRef}
+      className="relative w-full h-10 flex items-center cursor-pointer select-none"
+      style={{ touchAction: "none" }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+    >
+      <div className="absolute inset-x-0 h-2 rounded-full bg-border" />
+      <div className="absolute h-2 rounded-full transition-none" style={{ width: `${pct}%`, backgroundColor: getMoodColor(value) }} />
+      <div
+        className="absolute w-6 h-6 rounded-full shadow-md border-2 border-white transition-none"
+        style={{ left: `calc(${pct}% - 12px)`, backgroundColor: getMoodColor(value) }}
+      />
+    </div>
+  );
+}
+
 export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProps) {
   const [moodValue, setMoodValue] = useState(50);
   const { toast } = useToast();
   const queryClient = useQueryClient();
-
-  const sliderRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const el = sliderRef.current;
-    if (!el) return;
-    const stop = (e: TouchEvent) => { e.stopPropagation(); e.preventDefault(); };
-    el.addEventListener("touchstart", stop, { passive: false });
-    el.addEventListener("touchmove", stop, { passive: false });
-    return () => { el.removeEventListener("touchstart", stop); el.removeEventListener("touchmove", stop); };
-  }, []);
-
-  const handleSliderTouch = (e: React.TouchEvent) => { e.stopPropagation(); };
 
   const mood = getMoodEmoji(moodValue);
   const MoodIcon = mood.icon;
@@ -114,21 +145,8 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
           </div>
 
           <div className="px-2">
-            <input
-              ref={sliderRef}
-              type="range"
-              value={moodValue}
-              onChange={(e) => setMoodValue(Number(e.target.value))}
-              onTouchStart={handleSliderTouch}
-              onTouchMove={handleSliderTouch}
-              onTouchEnd={handleSliderTouch}
-              min={0}
-              max={100}
-              step={1}
-              className="w-full h-2 rounded-full appearance-none cursor-pointer"
-              style={{ touchAction: "none", accentColor: "hsl(40, 95%, 48%)", WebkitAppearance: "none" } as React.CSSProperties}
-            />
-            <div className="flex justify-between mt-1.5 text-[10px] text-muted-foreground">
+            <MoodSlider value={moodValue} onChange={setMoodValue} />
+            <div className="flex justify-between mt-1 text-[10px] text-muted-foreground">
               <span>0</span>
               <span>50</span>
               <span>100</span>
