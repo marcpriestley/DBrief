@@ -231,7 +231,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           });
           openAppSettings();
         } else {
-          toast({ title: "Notifications unavailable", description: "Could not register for notifications.", variant: "destructive" });
+          toast({ title: "Notifications need a new build", description: "Run 'npx cap sync ios' and re-archive from Xcode to activate push notifications.", variant: "destructive" });
         }
       } else if ('Notification' in window) {
         const permission = await Notification.requestPermission();

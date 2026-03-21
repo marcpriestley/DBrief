@@ -167,10 +167,17 @@ export default function Welcome() {
   };
 
   const handleAppleLogin = () => {
-    toast({
-      title: "Apple Sign-In",
-      description: "Available in the native iOS app. Use email/password to sign in on web.",
-    });
+    if (isNative) {
+      toast({
+        title: "Apple Sign-In coming soon",
+        description: "Use your email and password for now. Apple Sign-In will be added in the next update.",
+      });
+    } else {
+      toast({
+        title: "Apple Sign-In",
+        description: "Available in the native iOS app. Use email/password to sign in on web.",
+      });
+    }
   };
 
   return (

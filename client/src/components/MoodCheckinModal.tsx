@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { haptic } from "@/lib/haptics";
 import { motion } from "framer-motion";
@@ -45,49 +45,77 @@ function getTimeOfDayLabel(): string {
 function MoodSlider({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
-  const activePointer = useRef<number | null>(null);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
   const pct = value;
+  const moodColor = getMoodColor(value);
 
-  const computeValue = (clientX: number) => {
-    const rect = trackRef.current?.getBoundingClientRect();
-    if (!rect) return value;
-    return Math.round(Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100)));
-  };
+  useEffect(() => {
+    const el = trackRef.current;
+    if (!el) return;
 
-  const onPointerDown = (e: React.PointerEvent) => {
-    if (activePointer.current !== null) return;
-    e.preventDefault();
-    activePointer.current = e.pointerId;
-    isDragging.current = true;
-    trackRef.current?.setPointerCapture(e.pointerId);
-    onChange(computeValue(e.clientX));
-  };
-  const onPointerMove = (e: React.PointerEvent) => {
-    if (!isDragging.current || e.pointerId !== activePointer.current) return;
-    e.preventDefault();
-    onChange(computeValue(e.clientX));
-  };
-  const onPointerUp = (e: React.PointerEvent) => {
-    if (e.pointerId !== activePointer.current) return;
-    isDragging.current = false;
-    activePointer.current = null;
-  };
+    const getVal = (clientX: number) => {
+      const rect = el.getBoundingClientRect();
+      return Math.round(Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100)));
+    };
+
+    const onTouchStart = (e: TouchEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      isDragging.current = true;
+      if (e.touches[0]) onChangeRef.current(getVal(e.touches[0].clientX));
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      if (!isDragging.current) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.touches[0]) onChangeRef.current(getVal(e.touches[0].clientX));
+    };
+    const onTouchEnd = () => { isDragging.current = false; };
+
+    const onMouseDown = (e: MouseEvent) => {
+      e.preventDefault();
+      isDragging.current = true;
+      onChangeRef.current(getVal(e.clientX));
+      const onMouseMove = (e: MouseEvent) => {
+        if (isDragging.current) onChangeRef.current(getVal(e.clientX));
+      };
+      const onMouseUp = () => {
+        isDragging.current = false;
+        document.removeEventListener("mousemove", onMouseMove);
+        document.removeEventListener("mouseup", onMouseUp);
+      };
+      document.addEventListener("mousemove", onMouseMove);
+      document.addEventListener("mouseup", onMouseUp);
+    };
+
+    el.addEventListener("touchstart", onTouchStart, { passive: false, capture: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: false, capture: true });
+    el.addEventListener("touchend", onTouchEnd, { capture: true });
+    el.addEventListener("touchcancel", onTouchEnd, { capture: true });
+    el.addEventListener("mousedown", onMouseDown);
+
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart, { capture: true });
+      el.removeEventListener("touchmove", onTouchMove, { capture: true });
+      el.removeEventListener("touchend", onTouchEnd, { capture: true });
+      el.removeEventListener("touchcancel", onTouchEnd, { capture: true });
+      el.removeEventListener("mousedown", onMouseDown);
+    };
+  }, []);
 
   return (
     <div
       ref={trackRef}
-      className="relative w-full h-10 flex items-center cursor-pointer select-none"
-      style={{ touchAction: "none" }}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={() => { isDragging.current = false; activePointer.current = null; }}
+      className="relative w-full flex items-center cursor-pointer select-none"
+      style={{ touchAction: "none", userSelect: "none", height: 48 } as React.CSSProperties}
     >
       <div className="absolute inset-x-0 h-2 rounded-full bg-border" />
-      <div className="absolute h-2 rounded-full transition-none" style={{ width: `${pct}%`, backgroundColor: getMoodColor(value) }} />
+      <div className="absolute h-2 rounded-full" style={{ width: `${pct}%`, backgroundColor: moodColor }} />
       <div
-        className="absolute w-6 h-6 rounded-full shadow-md border-2 border-white transition-none"
-        style={{ left: `calc(${pct}% - 12px)`, backgroundColor: getMoodColor(value) }}
+        className="absolute w-7 h-7 rounded-full shadow-md border-2 border-white"
+        style={{ left: `calc(${pct}% - 14px)`, backgroundColor: moodColor }}
       />
     </div>
   );
