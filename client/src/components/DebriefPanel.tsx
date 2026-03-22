@@ -223,7 +223,7 @@ function useInlineVoice() {
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
           stream.getTracks().forEach((t) => t.stop());
         } catch {
-          setMicError("Microphone access denied. Go to iPhone Settings → DBrief → Microphone and enable it.");
+          setMicError("SETTINGS_NEEDED");
           return;
         }
       }
@@ -818,12 +818,12 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
             <div className="flex items-start gap-2 mb-2 px-2 py-1.5 bg-destructive/10 rounded-lg">
               {voice.micError === "SETTINGS_NEEDED" ? (
                 <div className="flex-1 space-y-1.5">
-                  <span className="text-xs text-destructive block">Microphone blocked. iOS won't ask again once denied.</span>
+                  <span className="text-xs text-destructive block">Microphone access denied. Enable it in iPhone Settings → DBrief → Microphone.</span>
                   <button
                     onClick={() => { openAppSettings(); voice.clearMicError(); }}
                     className="text-[11px] font-medium text-destructive underline underline-offset-2"
                   >
-                    Open DBrief Settings →
+                    Open iPhone Settings →
                   </button>
                 </div>
               ) : voice.micError?.startsWith("ERR:") ? (
