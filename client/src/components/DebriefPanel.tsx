@@ -57,7 +57,7 @@ function useInlineVoice() {
 
   const isNative = Capacitor.isNativePlatform();
   const isSupported =
-    isNative ||
+    isNative || // on native we always try (plugin or web speech fallback)
     (typeof window !== "undefined" &&
       ("webkitSpeechRecognition" in window || "SpeechRecognition" in window));
 
@@ -147,14 +147,14 @@ function useInlineVoice() {
       accumulatedRef.current = "";
       onFinalRef.current = onFinal;
 
-      // --- Native iOS path via Capacitor plugin ---
+      // --- Native iOS path via Capacitor plugin (with Web Speech API fallback) ---
       if (isNative) {
+        let pluginWorked = false;
         try {
           const { SpeechRecognition } = await import("@capacitor-community/speech-recognition");
 
-          // Check current permission state first — if denied, iOS won't show dialog again
           let permResult = await SpeechRecognition.checkPermissions();
-          console.log("[Voice] Permission state:", permResult);
+          console.log("[Voice] Capacitor plugin available. Permission state:", permResult);
 
           if (permResult.speechRecognition === "denied" || permResult.microphone === "denied") {
             setMicError("SETTINGS_NEEDED");
@@ -162,7 +162,6 @@ function useInlineVoice() {
             return;
           }
 
-          // If not yet granted, request it
           if (permResult.speechRecognition !== "granted" || permResult.microphone !== "granted") {
             permResult = await SpeechRecognition.requestPermissions();
           }
@@ -173,6 +172,7 @@ function useInlineVoice() {
             return;
           }
 
+          pluginWorked = true;
           setIsListening(true);
           if (nativeListenerRef.current) {
             nativeListenerRef.current.remove();
@@ -190,29 +190,40 @@ function useInlineVoice() {
             partialResults: true,
             popup: false,
           });
+          return;
         } catch (err: any) {
-          console.error("Native speech recognition error:", err);
           const msg = String(err?.message || err || "");
           if (msg.toLowerCase().includes("not implemented") || msg.toLowerCase().includes("not available")) {
-            setMicError("Voice requires a newer app build — update from TestFlight.");
+            // Plugin not registered in this build — fall through to Web Speech API
+            console.log("[Voice] Native plugin not registered, falling back to Web Speech API");
           } else if (msg.toLowerCase().includes("denied") || msg.toLowerCase().includes("permission") || msg.toLowerCase().includes("not authorized")) {
             setMicError("SETTINGS_NEEDED");
+            setIsListening(false);
+            return;
+          } else if (!pluginWorked) {
+            console.log("[Voice] Plugin error, falling back to Web Speech API:", msg);
           } else {
             setMicError("ERR:" + msg);
+            setIsListening(false);
+            return;
           }
-          setIsListening(false);
         }
+      }
+
+      // --- Web Speech API path (browser + native fallback) ---
+      const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SR) {
+        setMicError("Voice not supported in this environment.");
         return;
       }
 
-      // --- Web path via Web Speech API ---
-      // Request microphone permission first — this triggers the browser permission dialog
+      // Request microphone permission — triggers iOS permission dialog in WKWebView
       if (navigator.mediaDevices?.getUserMedia) {
         try {
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
           stream.getTracks().forEach((t) => t.stop());
         } catch {
-          setMicError("Microphone access denied. In Safari, tap AA in the address bar → Website Settings → Microphone → Allow.");
+          setMicError("Microphone access denied. Go to iPhone Settings → DBrief → Microphone and enable it.");
           return;
         }
       }
