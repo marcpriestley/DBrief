@@ -102,12 +102,13 @@ function useInlineVoice() {
 
     recognition.onerror = (e: any) => {
       if (e.error === "aborted" || e.error === "no-speech") return;
+      shouldListenRef.current = false;
+      setIsListening(false);
       if (e.error === "not-allowed" || e.error === "service-not-allowed") {
-        shouldListenRef.current = false;
-        setIsListening(false);
-        setMicError("Microphone access denied. In Safari, tap AA in the address bar → Website Settings → Microphone → Allow.");
+        setMicError("SETTINGS_NEEDED");
+      } else {
+        setMicError("ERR:" + e.error);
       }
-      // All other errors: let onend handle the restart naturally
     };
 
     recognition.onend = () => {
