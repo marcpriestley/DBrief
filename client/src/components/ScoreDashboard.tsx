@@ -1,15 +1,47 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useRef, useEffect } from "react";
 import { haptic } from "@/lib/haptics";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { DailyScore, UserMetric } from "@shared/schema";
-import { Heart, Edit, Plus, Settings, Trash2 } from "lucide-react";
+import { Heart, Edit, Plus, Settings, Trash2, X } from "lucide-react";
 import MetricTrendChart from "./MetricTrendChart";
+
+function NativeOverlay({ open, onClose, title, description, children }: {
+  open: boolean; onClose: () => void; title: string; description?: string; children: React.ReactNode;
+}) {
+  return (
+    <AnimatePresence>
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+          <motion.div
+            className="fixed inset-0 bg-black/50"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onPointerDown={onClose}
+          />
+          <motion.div
+            className="relative bg-background rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-md mx-0 sm:mx-4 z-10 p-5 max-h-[90vh] overflow-y-auto"
+            initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 40 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          >
+            <button className="absolute top-3 right-3 text-muted-foreground hover:text-foreground p-1" onPointerDown={onClose}>
+              <X className="h-4 w-4" />
+            </button>
+            <div className="mb-4 pr-6">
+              <h2 className="text-base font-semibold">{title}</h2>
+              {description && <p className="text-xs text-muted-foreground mt-0.5">{description}</p>}
+            </div>
+            {children}
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+}
 
 function NativeSlider({ value, onChange, min = 0, max = 100, color = "hsl(40, 95%, 48%)" }: {
   value: number; onChange: (v: number) => void; min?: number; max?: number; color?: string;
@@ -412,223 +444,204 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
         )}
       </div>
 
-      <Dialog open={!!selectedMetric && !isManageOpen} onOpenChange={(open) => !open && handleCloseDialog()}>
-        <DialogContent className="max-w-md sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="text-base">
-              {dialogMode === 'trend' ? `${selectedMetric?.name} Trends` : `Update ${selectedMetric?.name}`}
-            </DialogTitle>
-            <DialogDescription className="text-xs">
-              {dialogMode === 'trend' 
-                ? `14-day trend for ${selectedMetric?.name}.`
-                : `Enter a score from 0 to ${selectedMetric?.maxValue || 100}.`
-              }
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="py-2">
-            {dialogMode === 'trend' && selectedMetric ? (
-              <div className="space-y-4">
-                <MetricTrendChart 
-                  metric={selectedMetric} 
-                  history={metricHistory} 
-                  selectedDate={today}
-                />
-                <div className="flex justify-end">
-                  <Button size="sm" onClick={() => setDialogMode('edit')}>
-                    <Edit className="w-3.5 h-3.5 mr-1.5" />
-                    Edit Score
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                <div className="text-center">
-                  {selectedMetric && (() => {
-                    const val = parseInt(scoreValue) || 0;
-                    const maxVal = selectedMetric.maxValue || 100;
-                    const pct = Math.min(100, Math.max(0, (val / maxVal) * 100));
-                    const size = 88;
-                    const sw = 6;
-                    const r = (size - sw) / 2;
-                    const c = 2 * Math.PI * r;
-                    const offset = c - (pct / 100) * c;
-                    return (
-                      <div className="relative inline-block" style={{ width: size, height: size }}>
-                        <svg width={size} height={size} className="-rotate-90">
-                          <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="hsl(var(--border))" strokeWidth={sw} />
-                          <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={selectedMetric.color} strokeWidth={sw} strokeLinecap="round" strokeDasharray={c} strokeDashoffset={offset} className="transition-all duration-300" />
-                        </svg>
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <span className="text-2xl font-bold text-foreground">{val}</span>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-
-                <div className="space-y-3 px-1">
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>0</span>
-                    <span className="font-medium text-foreground">{parseInt(scoreValue) || 0} / {selectedMetric?.maxValue || 100}</span>
-                    <span>{selectedMetric?.maxValue || 100}</span>
-                  </div>
-                  <NativeSlider
-                    min={0}
-                    max={selectedMetric?.maxValue || 100}
-                    value={parseInt(scoreValue) || 0}
-                    onChange={(val) => setScoreValue(String(val))}
-                    color={selectedMetric?.color || "hsl(40, 95%, 48%)"}
-                  />
-                </div>
-
-                <Button
-                  className="w-full"
-                  onClick={handleSaveScore}
-                  disabled={updateScoreMutation.isPending}
-                  size="sm"
-                >
-                  {updateScoreMutation.isPending ? "Saving..." : "Save"}
+      <NativeOverlay
+        open={!!selectedMetric && !isManageOpen}
+        onClose={handleCloseDialog}
+        title={dialogMode === 'trend' ? `${selectedMetric?.name} Trends` : `Update ${selectedMetric?.name}`}
+        description={dialogMode === 'trend' ? `14-day trend for ${selectedMetric?.name}.` : `Enter a score from 0 to ${selectedMetric?.maxValue || 100}.`}
+      >
+        <div className="py-2">
+          {dialogMode === 'trend' && selectedMetric ? (
+            <div className="space-y-4">
+              <MetricTrendChart
+                metric={selectedMetric}
+                history={metricHistory}
+                selectedDate={today}
+              />
+              <div className="flex justify-end">
+                <Button size="sm" onClick={() => setDialogMode('edit')}>
+                  <Edit className="w-3.5 h-3.5 mr-1.5" />
+                  Edit Score
                 </Button>
               </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isManageOpen} onOpenChange={(open) => { if (!open) { setDialogMode('trend'); setSelectedMetric(null); } }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="text-base">
-              {dialogMode === 'addMetric' ? 'Add Metric' : dialogMode === 'editMetric' ? 'Edit Metric' : 'Manage Metrics'}
-            </DialogTitle>
-            <DialogDescription className="text-xs">
-              {dialogMode === 'addMetric' 
-                ? 'Create a new metric to track.'
-                : dialogMode === 'editMetric'
-                ? 'Update the name or color.'
-                : 'Add, edit, or remove your tracked metrics.'}
-            </DialogDescription>
-          </DialogHeader>
-
-          {dialogMode === 'manage' && (
-            <div className="space-y-1.5 py-1">
-              {metrics.filter(m => m.isActive).map((metric) => (
-                <div key={metric.id} className="rounded-lg border border-border/60 overflow-hidden">
-                  {confirmDeleteId === metric.id ? (
-                    <div className="flex items-center justify-between p-2.5 bg-destructive/5">
-                      <span className="text-xs text-foreground">Remove "{metric.name}"?</span>
-                      <div className="flex gap-1.5">
-                        <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setConfirmDeleteId(null)}>Cancel</Button>
-                        <Button size="sm" variant="destructive" className="h-6 px-2 text-xs" onClick={() => { deleteMetricMutation.mutate(metric.id); setConfirmDeleteId(null); }}>Remove</Button>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              <div className="text-center">
+                {selectedMetric && (() => {
+                  const val = parseInt(scoreValue) || 0;
+                  const maxVal = selectedMetric.maxValue || 100;
+                  const pct = Math.min(100, Math.max(0, (val / maxVal) * 100));
+                  const size = 88;
+                  const sw = 6;
+                  const r = (size - sw) / 2;
+                  const c = 2 * Math.PI * r;
+                  const offset = c - (pct / 100) * c;
+                  return (
+                    <div className="relative inline-block" style={{ width: size, height: size }}>
+                      <svg width={size} height={size} className="-rotate-90">
+                        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="hsl(var(--border))" strokeWidth={sw} />
+                        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={selectedMetric.color} strokeWidth={sw} strokeLinecap="round" strokeDasharray={c} strokeDashoffset={offset} className="transition-all duration-300" />
+                      </svg>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="text-2xl font-bold text-foreground">{val}</span>
                       </div>
                     </div>
-                  ) : (
-                    <div className="flex items-center justify-between p-2.5">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: metric.color }} />
-                        <span className="text-sm font-medium text-foreground">{metric.name}</span>
-                      </div>
-                      <div className="flex items-center gap-0.5">
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleOpenEditMetric(metric)}>
-                          <Edit className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-destructive/60 hover:text-destructive hover:bg-destructive/10"
-                          onClick={() => setConfirmDeleteId(metric.id)}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
-                  )}
+                  );
+                })()}
+              </div>
+
+              <div className="space-y-3 px-1">
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>0</span>
+                  <span className="font-medium text-foreground">{parseInt(scoreValue) || 0} / {selectedMetric?.maxValue || 100}</span>
+                  <span>{selectedMetric?.maxValue || 100}</span>
                 </div>
-              ))}
-              <Button variant="outline" className="w-full mt-2 h-9 text-xs" onClick={handleOpenAddMetric}>
-                <Plus className="w-3.5 h-3.5 mr-1.5" />
-                Add Metric
+                <NativeSlider
+                  min={0}
+                  max={selectedMetric?.maxValue || 100}
+                  value={parseInt(scoreValue) || 0}
+                  onChange={(val) => setScoreValue(String(val))}
+                  color={selectedMetric?.color || "hsl(40, 95%, 48%)"}
+                />
+              </div>
+
+              <Button
+                className="w-full"
+                onPointerDown={handleSaveScore}
+                disabled={updateScoreMutation.isPending}
+                size="sm"
+              >
+                {updateScoreMutation.isPending ? "Saving..." : "Save"}
               </Button>
             </div>
           )}
+        </div>
+      </NativeOverlay>
 
-          {dialogMode === 'addMetric' && (
-            <div className="space-y-4 py-1">
-              <div>
-                <Label htmlFor="metric-name" className="text-xs">Name</Label>
-                <Input
-                  id="metric-name"
-                  value={newMetricName}
-                  onChange={(e) => setNewMetricName(e.target.value)}
-                  placeholder="e.g. Focus, Hydration, Exercise"
-                  className="mt-1"
-                />
+      <NativeOverlay
+        open={isManageOpen}
+        onClose={() => { setDialogMode('trend'); setSelectedMetric(null); }}
+        title={dialogMode === 'addMetric' ? 'Add Metric' : dialogMode === 'editMetric' ? 'Edit Metric' : 'Manage Metrics'}
+        description={dialogMode === 'addMetric' ? 'Create a new metric to track.' : dialogMode === 'editMetric' ? 'Update the name or color.' : 'Add, edit, or remove your tracked metrics.'}
+      >
+        {dialogMode === 'manage' && (
+          <div className="space-y-1.5 py-1">
+            {metrics.filter(m => m.isActive).map((metric) => (
+              <div key={metric.id} className="rounded-lg border border-border/60 overflow-hidden">
+                {confirmDeleteId === metric.id ? (
+                  <div className="flex items-center justify-between p-2.5 bg-destructive/5">
+                    <span className="text-xs text-foreground">Remove "{metric.name}"?</span>
+                    <div className="flex gap-1.5">
+                      <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setConfirmDeleteId(null)}>Cancel</Button>
+                      <Button size="sm" variant="destructive" className="h-6 px-2 text-xs" onClick={() => { deleteMetricMutation.mutate(metric.id); setConfirmDeleteId(null); }}>Remove</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between p-2.5">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: metric.color }} />
+                      <span className="text-sm font-medium text-foreground">{metric.name}</span>
+                    </div>
+                    <div className="flex items-center gap-0.5">
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleOpenEditMetric(metric)}>
+                        <Edit className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-destructive/60 hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => setConfirmDeleteId(metric.id)}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
-              <div>
-                <Label className="text-xs">Color</Label>
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {METRIC_COLORS.map((color) => (
-                    <button
-                      key={color}
-                      className={`w-7 h-7 rounded-full border-2 transition-all ${
-                        newMetricColor === color ? 'border-foreground scale-110' : 'border-transparent hover:scale-105'
-                      }`}
-                      style={{ backgroundColor: color }}
-                      onClick={() => setNewMetricColor(color)}
-                    />
-                  ))}
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <Button variant="outline" className="flex-1" size="sm" onClick={() => setDialogMode('manage')}>
-                  Back
-                </Button>
-                <Button className="flex-1" size="sm" onClick={handleSaveNewMetric} disabled={addMetricMutation.isPending}>
-                  {addMetricMutation.isPending ? "Adding..." : "Add Metric"}
-                </Button>
+            ))}
+            <Button variant="outline" className="w-full mt-2 h-9 text-xs" onClick={handleOpenAddMetric}>
+              <Plus className="w-3.5 h-3.5 mr-1.5" />
+              Add Metric
+            </Button>
+          </div>
+        )}
+
+        {dialogMode === 'addMetric' && (
+          <div className="space-y-4 py-1">
+            <div>
+              <Label htmlFor="metric-name" className="text-xs">Name</Label>
+              <Input
+                id="metric-name"
+                value={newMetricName}
+                onChange={(e) => setNewMetricName(e.target.value)}
+                placeholder="e.g. Focus, Hydration, Exercise"
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Color</Label>
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {METRIC_COLORS.map((color) => (
+                  <button
+                    key={color}
+                    className={`w-7 h-7 rounded-full border-2 transition-all ${
+                      newMetricColor === color ? 'border-foreground scale-110' : 'border-transparent hover:scale-105'
+                    }`}
+                    style={{ backgroundColor: color }}
+                    onClick={() => setNewMetricColor(color)}
+                  />
+                ))}
               </div>
             </div>
-          )}
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" size="sm" onClick={() => setDialogMode('manage')}>
+                Back
+              </Button>
+              <Button className="flex-1" size="sm" onClick={handleSaveNewMetric} disabled={addMetricMutation.isPending}>
+                {addMetricMutation.isPending ? "Adding..." : "Add Metric"}
+              </Button>
+            </div>
+          </div>
+        )}
 
-          {dialogMode === 'editMetric' && selectedMetric && (
-            <div className="space-y-4 py-1">
-              <div>
-                <Label htmlFor="edit-metric-name" className="text-xs">Name</Label>
-                <Input
-                  id="edit-metric-name"
-                  value={editMetricName}
-                  onChange={(e) => setEditMetricName(e.target.value)}
-                  className="mt-1"
-                />
-              </div>
-              <div>
-                <Label className="text-xs">Color</Label>
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {METRIC_COLORS.map((color) => (
-                    <button
-                      key={color}
-                      className={`w-7 h-7 rounded-full border-2 transition-all ${
-                        editMetricColor === color ? 'border-foreground scale-110' : 'border-transparent hover:scale-105'
-                      }`}
-                      style={{ backgroundColor: color }}
-                      onClick={() => setEditMetricColor(color)}
-                    />
-                  ))}
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <Button variant="outline" className="flex-1" size="sm" onClick={() => setDialogMode('manage')}>
-                  Back
-                </Button>
-                <Button className="flex-1" size="sm" onClick={handleSaveEditMetric} disabled={updateMetricMutation.isPending}>
-                  {updateMetricMutation.isPending ? "Saving..." : "Save Changes"}
-                </Button>
+        {dialogMode === 'editMetric' && selectedMetric && (
+          <div className="space-y-4 py-1">
+            <div>
+              <Label htmlFor="edit-metric-name" className="text-xs">Name</Label>
+              <Input
+                id="edit-metric-name"
+                value={editMetricName}
+                onChange={(e) => setEditMetricName(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Color</Label>
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {METRIC_COLORS.map((color) => (
+                  <button
+                    key={color}
+                    className={`w-7 h-7 rounded-full border-2 transition-all ${
+                      editMetricColor === color ? 'border-foreground scale-110' : 'border-transparent hover:scale-105'
+                    }`}
+                    style={{ backgroundColor: color }}
+                    onClick={() => setEditMetricColor(color)}
+                  />
+                ))}
               </div>
             </div>
-          )}
-        </DialogContent>
-      </Dialog>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" size="sm" onClick={() => setDialogMode('manage')}>
+                Back
+              </Button>
+              <Button className="flex-1" size="sm" onClick={handleSaveEditMetric} disabled={updateMetricMutation.isPending}>
+                {updateMetricMutation.isPending ? "Saving..." : "Save Changes"}
+              </Button>
+            </div>
+          </div>
+        )}
+      </NativeOverlay>
     </>
   );
 }

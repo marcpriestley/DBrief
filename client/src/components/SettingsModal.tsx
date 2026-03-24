@@ -233,14 +233,19 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         } else {
           const detail = typeof result === "string" && result.startsWith("error:") ? result.slice(6) : "unknown error";
           const isPluginMissing = detail.toLowerCase().includes("not implemented") || detail.toLowerCase().includes("not available");
-          toast({
-            title: isPluginMissing ? "Notifications need a new build" : "Notification setup failed",
-            description: isPluginMissing
-              ? "On your Mac: pull latest code → npm install → npx cap sync ios → pod install → Archive in Xcode."
-              : `Error: ${detail}`,
-            variant: "destructive",
-          });
-          setNotificationsEnabled(false);
+          if (isPluginMissing) {
+            toast({
+              title: "Grant permission in iOS Settings",
+              description: "Go to iPhone Settings → DBrief → Notifications and turn them on.",
+            });
+          } else {
+            toast({
+              title: "Notification setup failed",
+              description: `Error: ${detail}`,
+              variant: "destructive",
+            });
+            setNotificationsEnabled(false);
+          }
         }
       } else if ('Notification' in window) {
         const permission = await Notification.requestPermission();
