@@ -119,7 +119,7 @@ function AppLayoutInner({ children }: AppLayoutProps) {
           backgroundSize: 'cover',
           backgroundPosition: 'center top',
           backgroundRepeat: 'no-repeat',
-          opacity: 0.20,
+          opacity: 0.15,
         }}
       />
       <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-xl border-b border-border/60" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
