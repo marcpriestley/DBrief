@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import OpenAI from "openai";
 import { db } from "./db";
-import { debriefs, debriefMessages, dailyScores, journalEntries, moodCheckins, dailyGoals, userMetrics, users, infiniteGoals, longTermGoals } from "@shared/schema";
+import { debriefs, debriefMessages, dailyScores, journalEntries, moodCheckins, dailyGoals, userMetrics, users, infiniteGoals, longTermGoals, goalTemplates } from "@shared/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { encrypt, decrypt } from "./encryption";
 
@@ -341,21 +341,111 @@ export function registerDebriefRoutes(app: Express): void {
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
 
+      const debriefTools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+        {
+          type: "function",
+          function: {
+            name: "add_daily_goal",
+            description: "Add a new recurring daily goal/habit for the user. Use when the user mentions wanting to build a habit, do something every day, or add a routine. Only call this if the user clearly wants this goal added.",
+            parameters: {
+              type: "object",
+              properties: {
+                title: { type: "string", description: "Short, actionable goal title (e.g. '10 min meditation', 'Cold shower', 'Read 20 pages')" },
+              },
+              required: ["title"],
+            },
+          },
+        },
+        {
+          type: "function",
+          function: {
+            name: "add_long_term_goal",
+            description: "Add a new long-term target for the user (max 3 total). Use when the user mentions a bigger objective or milestone they're working toward over weeks or months.",
+            parameters: {
+              type: "object",
+              properties: {
+                title: { type: "string", description: "Concise goal title" },
+                description: { type: "string", description: "Optional brief description" },
+              },
+              required: ["title"],
+            },
+          },
+        },
+      ];
+
       const stream = await openai.chat.completions.create({
         model: "gpt-4o",
         messages: chatMessages,
         stream: true,
-        max_tokens: 300,
+        max_tokens: 350,
+        tools: debriefTools,
+        tool_choice: "auto",
       });
 
       let fullResponse = "";
+      const toolCallAccumulator: Record<number, { id: string; name: string; arguments: string }> = {};
 
       for await (const chunk of stream) {
-        const text = chunk.choices[0]?.delta?.content || "";
-        if (text) {
-          fullResponse += text;
-          res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+        const delta = chunk.choices[0]?.delta;
+        if (delta?.content) {
+          fullResponse += delta.content;
+          res.write(`data: ${JSON.stringify({ content: delta.content })}\n\n`);
         }
+        if (delta?.tool_calls) {
+          for (const tc of delta.tool_calls) {
+            if (!toolCallAccumulator[tc.index]) {
+              toolCallAccumulator[tc.index] = { id: tc.id || "", name: tc.function?.name || "", arguments: "" };
+            }
+            if (tc.function?.name) toolCallAccumulator[tc.index].name = tc.function.name;
+            if (tc.function?.arguments) toolCallAccumulator[tc.index].arguments += tc.function.arguments;
+          }
+        }
+      }
+
+      // Execute any tool calls
+      const actions: Array<{ type: string; params: any; success: boolean; message: string }> = [];
+      for (const tc of Object.values(toolCallAccumulator)) {
+        try {
+          const params = JSON.parse(tc.arguments);
+          if (tc.name === "add_daily_goal") {
+            const existing = await db.select().from(goalTemplates)
+              .where(and(eq(goalTemplates.userId, userId), eq(goalTemplates.isActive, true)));
+            const alreadyExists = existing.some(g => g.title.toLowerCase() === params.title.toLowerCase());
+            if (!alreadyExists) {
+              await db.insert(goalTemplates).values({
+                userId,
+                title: params.title,
+                recurring: true,
+                isActive: true,
+                sortOrder: existing.length,
+              });
+              actions.push({ type: "add_daily_goal", params, success: true, message: `Added daily goal: ${params.title}` });
+            } else {
+              actions.push({ type: "add_daily_goal", params, success: false, message: `Goal already exists: ${params.title}` });
+            }
+          } else if (tc.name === "add_long_term_goal") {
+            const existing = await db.select().from(longTermGoals)
+              .where(and(eq(longTermGoals.userId, userId), eq(longTermGoals.isActive, true)));
+            if (existing.length >= 3) {
+              actions.push({ type: "add_long_term_goal", params, success: false, message: "Already at 3 long-term targets (maximum reached)" });
+            } else {
+              await db.insert(longTermGoals).values({
+                userId,
+                title: params.title,
+                description: params.description || null,
+                isActive: true,
+                sortOrder: existing.length,
+              });
+              actions.push({ type: "add_long_term_goal", params, success: true, message: `Added long-term target: ${params.title}` });
+            }
+          }
+        } catch (e) {
+          console.error("Tool call failed:", tc.name, e);
+        }
+      }
+
+      if (actions.length > 0) {
+        res.write(`data: ${JSON.stringify({ actions })}\n\n`);
       }
 
       await db.insert(debriefMessages).values({

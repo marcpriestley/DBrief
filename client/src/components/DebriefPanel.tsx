@@ -296,6 +296,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const [streamingContent, setStreamingContent] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [continuedPastCheckpoint, setContinuedPastCheckpoint] = useState(false);
+  const [actionNotifications, setActionNotifications] = useState<Array<{ type: string; message: string; success: boolean; id: number }>>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -431,6 +432,22 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
               if (data.content) {
                 accumulated += data.content;
                 setStreamingContent(accumulated);
+              }
+              if (data.actions) {
+                const newNotifications = data.actions.map((a: any, i: number) => ({
+                  id: Date.now() + i,
+                  type: a.type,
+                  message: a.message,
+                  success: a.success,
+                }));
+                setActionNotifications(prev => [...prev, ...newNotifications]);
+                if (data.actions.some((a: any) => a.type === "add_daily_goal" && a.success)) {
+                  queryClient.invalidateQueries({ queryKey: ["/api/goal-templates"] });
+                  queryClient.invalidateQueries({ queryKey: ["/api/daily-goals"] });
+                }
+                if (data.actions.some((a: any) => a.type === "add_long_term_goal" && a.success)) {
+                  queryClient.invalidateQueries({ queryKey: ["/api/long-term-goals"] });
+                }
               }
             } catch {}
           }
@@ -801,6 +818,28 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
               </div>
             </motion.div>
           )}
+
+          <AnimatePresence>
+            {actionNotifications.map((notif) => (
+              <motion.div
+                key={notif.id}
+                initial={{ opacity: 0, scale: 0.95, y: 6 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ duration: 0.2 }}
+                className="flex justify-start"
+              >
+                <div className={`flex items-center gap-2 rounded-2xl rounded-bl-md px-3.5 py-2 text-xs font-medium border ${
+                  notif.success
+                    ? "bg-primary/10 border-primary/20 text-primary"
+                    : "bg-muted border-border text-muted-foreground"
+                }`}>
+                  <span>{notif.success ? "✓" : "✗"}</span>
+                  <span>{notif.message}</span>
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
 
           <div ref={messagesEndRef} />
         </div>
