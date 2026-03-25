@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { haptic } from "@/lib/haptics";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { MessageCircle, Send, CheckCircle, Loader2, RotateCcw, Mic, MicOff, ArrowRight, Volume2, VolumeX } from "lucide-react";
+import { MessageCircle, Send, CheckCircle, Loader2, RotateCcw, Mic, MicOff, ArrowRight, Volume2, VolumeX, Square, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiRequest } from "@/lib/queryClient";
@@ -298,6 +298,9 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const [isStreaming, setIsStreaming] = useState(false);
   const [continuedPastCheckpoint, setContinuedPastCheckpoint] = useState(false);
   const [actionNotifications, setActionNotifications] = useState<Array<{ type: string; message: string; success: boolean; id: number }>>([]);
+  const [showAllMessages, setShowAllMessages] = useState(false);
+
+  const VISIBLE_MESSAGES = 6;
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -521,6 +524,10 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     }
   }, [voice.isListening, isStreaming]);
 
+  useEffect(() => {
+    setShowAllMessages(false);
+  }, [selectedDate]);
+
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   const isToday = selectedDate === todayStr;
@@ -593,6 +600,12 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
 
   // All debriefs complete — show full history + start new button
   if (!debrief && completedDebriefs.length > 0) {
+    const latestSession = completedDebriefs[completedDebriefs.length - 1];
+    const sessionText = latestSession?.messages
+      .filter(m => m.role === "assistant")
+      .map(m => m.content)
+      .join(" ");
+
     return (
       <Card className="border border-border/50 shadow-sm bg-card">
         <CardContent className="p-6">
@@ -601,7 +614,23 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
             <h3 className="text-lg font-semibold text-foreground">
               {completedDebriefs.length === 1 ? "Debrief Complete" : `${completedDebriefs.length} Sessions`}
             </h3>
-            <span className="text-xs text-muted-foreground ml-auto">{dateLabel}</span>
+            <div className="flex items-center gap-1 ml-auto">
+              {tts.isSupported && sessionText && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`h-7 w-7 ${tts.speaking ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
+                  onClick={() => tts.speaking ? tts.cancel() : tts.speak(sessionText)}
+                  title={tts.speaking ? "Stop" : "Listen to debrief"}
+                >
+                  {tts.speaking
+                    ? <Square className="h-3.5 w-3.5 fill-current" />
+                    : <Volume2 className="h-3.5 w-3.5" />
+                  }
+                </Button>
+              )}
+              <span className="text-xs text-muted-foreground">{dateLabel}</span>
+            </div>
           </div>
 
           <div className="space-y-5 max-h-[500px] overflow-y-auto">
@@ -748,8 +777,19 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
               Your session, your opening. What's on your mind?
             </p>
           )}
+
+          {!showAllMessages && debrief.messages.length > VISIBLE_MESSAGES && (
+            <button
+              onClick={() => setShowAllMessages(true)}
+              className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ChevronDown className="h-3.5 w-3.5" />
+              Show {debrief.messages.length - VISIBLE_MESSAGES} earlier messages
+            </button>
+          )}
+
           <AnimatePresence initial={false}>
-            {debrief.messages.map((msg) => (
+            {(showAllMessages ? debrief.messages : debrief.messages.slice(-VISIBLE_MESSAGES)).map((msg) => (
               <motion.div
                 key={msg.id}
                 initial={{ opacity: 0, y: 8 }}
