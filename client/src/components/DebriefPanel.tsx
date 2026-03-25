@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { haptic } from "@/lib/haptics";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { MessageCircle, Send, CheckCircle, Loader2, RotateCcw, Mic, MicOff, ArrowRight } from "lucide-react";
+import { MessageCircle, Send, CheckCircle, Loader2, RotateCcw, Mic, MicOff, ArrowRight, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiRequest } from "@/lib/queryClient";
@@ -291,6 +291,52 @@ function useInlineVoice() {
   return { isListening, interimText, isSupported, start, stop, micError, clearMicError };
 }
 
+const TTS_STORAGE_KEY = "dbrief_tts_enabled";
+
+function useTTS() {
+  const [enabled, setEnabled] = useState(() => {
+    try { return localStorage.getItem(TTS_STORAGE_KEY) !== "false"; } catch { return true; }
+  });
+  const [speaking, setSpeaking] = useState(false);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const isSupported = typeof window !== "undefined" && "speechSynthesis" in window;
+
+  const speak = useCallback((text: string) => {
+    if (!isSupported || !enabled) return;
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.rate = 0.95;
+    utter.pitch = 1.0;
+    utter.onstart = () => setSpeaking(true);
+    utter.onend = () => setSpeaking(false);
+    utter.onerror = () => setSpeaking(false);
+    utteranceRef.current = utter;
+    window.speechSynthesis.speak(utter);
+  }, [isSupported, enabled]);
+
+  const cancel = useCallback(() => {
+    if (!isSupported) return;
+    window.speechSynthesis.cancel();
+    setSpeaking(false);
+  }, [isSupported]);
+
+  const toggle = useCallback(() => {
+    setEnabled(prev => {
+      const next = !prev;
+      try { localStorage.setItem(TTS_STORAGE_KEY, String(next)); } catch {}
+      if (!next) {
+        window.speechSynthesis?.cancel();
+        setSpeaking(false);
+      }
+      return next;
+    });
+  }, []);
+
+  useEffect(() => () => { window.speechSynthesis?.cancel(); }, []);
+
+  return { enabled, speaking, isSupported, speak, cancel, toggle };
+}
+
 export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const [userInput, setUserInput] = useState("");
   const [streamingContent, setStreamingContent] = useState("");
@@ -304,6 +350,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const voice = useInlineVoice();
+  const tts = useTTS();
 
   const { data: allDebriefs = [], isLoading } = useQuery<Debrief[]>({
     queryKey: ["/api/debriefs", selectedDate],
@@ -382,6 +429,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     setStreamingContent("");
 
     if (voice.isListening) voice.stop();
+    tts.cancel();
 
     const optimisticMsg: DebriefMessage = {
       id: Date.now(),
@@ -455,6 +503,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
       }
 
       queryClient.invalidateQueries({ queryKey: ["/api/debriefs", selectedDate] });
+      if (accumulated) tts.speak(accumulated);
     } catch {
       toast({ title: "Error", description: "Failed to send message. Try again.", variant: "destructive" });
     } finally {
@@ -701,24 +750,41 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
               )}
             </div>
           </div>
-          {userMessageCount >= 1 && !showCheckpoint && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => completeDebriefMutation.mutate(debrief.id)}
-              disabled={completeDebriefMutation.isPending}
-              className="text-xs text-muted-foreground hover:text-foreground"
-            >
-              {completeDebriefMutation.isPending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <>
-                  <CheckCircle className="h-3.5 w-3.5 mr-1" />
-                  Finish
-                </>
-              )}
-            </Button>
-          )}
+          <div className="flex items-center gap-1">
+            {tts.isSupported && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => { haptic("select"); tts.toggle(); }}
+                className={`h-7 w-7 p-0 ${tts.enabled ? "text-primary" : "text-muted-foreground"}`}
+                title={tts.enabled ? "Voice readback on" : "Voice readback off"}
+              >
+                {tts.enabled ? (
+                  <Volume2 className={`h-3.5 w-3.5 ${tts.speaking ? "animate-pulse" : ""}`} />
+                ) : (
+                  <VolumeX className="h-3.5 w-3.5" />
+                )}
+              </Button>
+            )}
+            {userMessageCount >= 1 && !showCheckpoint && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => completeDebriefMutation.mutate(debrief.id)}
+                disabled={completeDebriefMutation.isPending}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                {completeDebriefMutation.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <>
+                    <CheckCircle className="h-3.5 w-3.5 mr-1" />
+                    Finish
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
         </div>
 
         <div ref={chatContainerRef} className="px-5 py-4 space-y-3 max-h-[350px] overflow-y-auto">

@@ -119,7 +119,7 @@ function buildUserProfileSummary(profile: Record<string, string> | null | undefi
     : "";
 }
 
-function buildSystemPrompt(context: Awaited<ReturnType<typeof gatherDayContext>>, date: string, userMessageCount: number, journalPreference: string = "evening", userProfile?: Record<string, string> | null) {
+function buildSystemPrompt(context: Awaited<ReturnType<typeof gatherDayContext>>, date: string, userMessageCount: number, journalPreference: string = "evening", userProfile?: Record<string, string> | null, displayName?: string | null) {
   const now = new Date();
   const currentHour = now.getHours();
 
@@ -161,8 +161,9 @@ ${context.isWeeklyAlignmentDay ? `TODAY IS THE WEEKLY ALIGNMENT CHECK. At some p
     : "";
 
   const profileSection = buildUserProfileSummary(userProfile);
+  const driverName = displayName ? ` The driver's name is ${displayName} — use their name naturally in conversation, not every message, but enough that it feels personal.` : "";
 
-  return `You are the user's performance engineer — like an F1 race engineer reviewing telemetry with their driver after a session. Your job is to help them extract maximum performance from their day. You're warm but direct, perceptive, and focused on what moves the needle. No therapy speak. No corporate platitudes. Just sharp, genuine analysis of how they're performing and where you can gain an edge.${profileSection}
+  return `You are the user's performance engineer — like an F1 race engineer reviewing telemetry with their driver after a session.${driverName} Your job is to help them extract maximum performance from their day. You're warm but direct, perceptive, and focused on what moves the needle. No therapy speak. No corporate platitudes. Just sharp, genuine analysis of how they're performing and where you can gain an edge.${profileSection}
 
 ROLE: Run a daily performance debrief. One focused question at a time. Listen to their response. Follow up on what matters before moving on. Everything connects back to helping them perform better.
 
@@ -270,7 +271,7 @@ export function registerDebriefRoutes(app: Express): void {
 
       const context = await gatherDayContext(userId, date);
       const [user] = await db.select().from(users).where(eq(users.id, userId));
-      const systemPrompt = buildSystemPrompt(context, date, 0, user?.journalPreference || "evening", user?.userProfile);
+      const systemPrompt = buildSystemPrompt(context, date, 0, user?.journalPreference || "evening", user?.userProfile, user?.displayName);
 
       const response = await openai.chat.completions.create({
         model: "gpt-4o",
@@ -324,7 +325,7 @@ export function registerDebriefRoutes(app: Express): void {
       const userMessageCount = allMessages.filter(m => m.role === "user").length;
       const context = await gatherDayContext(userId, debrief.date);
       const [user] = await db.select().from(users).where(eq(users.id, userId));
-      const systemPrompt = buildSystemPrompt(context, debrief.date, userMessageCount, user?.journalPreference || "evening", user?.userProfile);
+      const systemPrompt = buildSystemPrompt(context, debrief.date, userMessageCount, user?.journalPreference || "evening", user?.userProfile, user?.displayName);
 
       const chatMessages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
         { role: "system", content: systemPrompt },

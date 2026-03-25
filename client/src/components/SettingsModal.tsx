@@ -148,6 +148,7 @@ interface UserSettings {
   reminderTime: string;
   reminderTime2: string;
   timezone: string;
+  displayName: string;
 }
 
 export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
@@ -167,12 +168,14 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [reminderTime, setReminderTime] = useState("09:00");
   const [reminderTime2, setReminderTime2] = useState("21:00");
+  const [displayName, setDisplayName] = useState("");
 
   useEffect(() => {
     if (settings) {
       setNotificationsEnabled(settings.notificationsEnabled);
       setReminderTime(settings.reminderTime);
       setReminderTime2(settings.reminderTime2);
+      setDisplayName(settings.displayName ?? "");
     }
   }, [settings]);
 
@@ -212,7 +215,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
   const handleSave = () => {
     const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    updateSettingsMutation.mutate({ notificationsEnabled, reminderTime, reminderTime2, timezone: userTimezone });
+    updateSettingsMutation.mutate({ notificationsEnabled, reminderTime, reminderTime2, timezone: userTimezone, displayName });
   };
 
   const handleToggleNotifications = async (enabled: boolean) => {
@@ -333,6 +336,20 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           <div className="py-8 text-center text-xs text-muted-foreground">Loading...</div>
         ) : (
           <div className="space-y-5 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="displayName" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Driver Name</Label>
+              <Input
+                id="displayName"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="First name (used by your AI engineer)"
+                className="h-9"
+                maxLength={40}
+              />
+            </div>
+
+            <div className="border-t border-border/50" />
+
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <Label className="text-sm flex items-center gap-2">

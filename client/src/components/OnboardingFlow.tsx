@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import ProfileQuestions from "./ProfileQuestions";
 import { PROFILE_QUESTIONS } from "@/lib/profileData";
+import { Input } from "@/components/ui/input";
 import {
   Shield,
   BarChart3,
@@ -36,9 +37,10 @@ export default function OnboardingFlow({ username }: OnboardingFlowProps) {
   const [journalPreference, setJournalPreference] = useState<"morning" | "evening" | null>(null);
   const [goalPreference, setGoalPreference] = useState<"morning" | "evening">("morning");
   const [profileAnswers, setProfileAnswers] = useState<Record<string, string>>({});
+  const [displayName, setDisplayName] = useState("");
 
   const completeMutation = useMutation({
-    mutationFn: async (data: { journalPreference: string; goalPreference: string; userProfile: Record<string, string> }) => {
+    mutationFn: async (data: { journalPreference: string; goalPreference: string; userProfile: Record<string, string>; displayName?: string }) => {
       return apiRequest("POST", "/api/onboarding/complete", data);
     },
     onSuccess: () => {
@@ -60,6 +62,7 @@ export default function OnboardingFlow({ username }: OnboardingFlowProps) {
         journalPreference,
         goalPreference,
         userProfile: profileAnswers,
+        ...(displayName.trim() && { displayName: displayName.trim() }),
       });
     }
   };
@@ -96,22 +99,48 @@ export default function OnboardingFlow({ username }: OnboardingFlowProps) {
               </div>
 
               <div className="space-y-3">
-                <h1 className="text-2xl font-bold text-foreground">
-                  Welcome{firstName ? `, ${firstName}` : ""}
-                </h1>
+                <h1 className="text-2xl font-bold text-foreground">Welcome to DBrief</h1>
                 <p className="text-sm text-muted-foreground leading-relaxed max-w-xs mx-auto">
-                  DBrief is your personal performance engineer. Like an F1 team debriefs every
-                  session to find gains, you'll debrief your day to perform better tomorrow.
-                </p>
-                <p className="text-sm text-muted-foreground leading-relaxed max-w-xs mx-auto">
-                  Let's get you set up for your first session.
+                  Your personal performance engineer. Like an F1 team debriefs every session to
+                  find gains, you'll debrief your day to perform better tomorrow.
                 </p>
               </div>
 
-              <Button onClick={next} className="w-full max-w-xs h-11">
-                Let's go
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
+              <div className="space-y-2 max-w-xs mx-auto text-left">
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  What should we call you?
+                </label>
+                <Input
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  placeholder="First name"
+                  className="h-11 text-base"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && displayName.trim()) next();
+                  }}
+                  autoFocus
+                />
+                <p className="text-xs text-muted-foreground px-0.5">
+                  Your AI engineer will use this to personalise your sessions.
+                </p>
+              </div>
+
+              <div className="space-y-2 max-w-xs mx-auto">
+                <Button
+                  onClick={next}
+                  disabled={!displayName.trim()}
+                  className="w-full h-11"
+                >
+                  Let's go
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+                <button
+                  onClick={next}
+                  className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors underline-offset-2 hover:underline"
+                >
+                  Skip for now
+                </button>
+              </div>
             </motion.div>
           )}
 

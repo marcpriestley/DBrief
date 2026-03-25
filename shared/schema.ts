@@ -7,6 +7,7 @@ export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
+  displayName: text("display_name"),
   notificationsEnabled: boolean("notifications_enabled").default(true),
   reminderTime: text("reminder_time").default("09:00"),
   reminderTime2: text("reminder_time_2").default("21:00"),

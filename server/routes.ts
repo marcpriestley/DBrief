@@ -142,6 +142,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         id: user.id,
         username: user.username,
+        displayName: user.displayName ?? null,
         hasCompletedOnboarding: user.hasCompletedOnboarding ?? false,
         journalPreference: user.journalPreference ?? "evening",
       });
@@ -166,7 +167,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/onboarding/complete", async (req, res) => {
     try {
       const userId = getUserId(req);
-      const { journalPreference, goalPreference, userProfile } = req.body;
+      const { journalPreference, goalPreference, userProfile, displayName } = req.body;
       const pref = journalPreference === "morning" ? "morning" : "evening";
       const goalPref = goalPreference === "evening" ? "evening" : "morning";
       const updatedUser = await storage.updateUserSettings(userId, {
@@ -174,6 +175,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         journalPreference: pref,
         goalPreference: goalPref,
         ...(userProfile && { userProfile }),
+        ...(displayName && { displayName: displayName.trim() }),
       });
       if (!updatedUser) {
         return res.status(404).json({ message: "User not found" });
@@ -1057,6 +1059,7 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
         timezone: user.timezone,
         healthMetricsEnabled: user.healthMetricsEnabled ?? ["sleep", "readiness", "activity"],
         goalPreference: user.goalPreference || "morning",
+        displayName: user.displayName ?? "",
       });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch user settings" });
@@ -1066,7 +1069,7 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
   app.patch("/api/user/settings", async (req, res) => {
     try {
       const userId = getUserId(req);
-      const { notificationsEnabled, reminderTime, reminderTime2, timezone, healthMetricsEnabled, goalPreference } = req.body;
+      const { notificationsEnabled, reminderTime, reminderTime2, timezone, healthMetricsEnabled, goalPreference, displayName } = req.body;
 
       const updatedUser = await storage.updateUserSettings(userId, {
         ...(notificationsEnabled !== undefined && { notificationsEnabled }),
@@ -1075,6 +1078,7 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
         ...(timezone !== undefined && { timezone }),
         ...(healthMetricsEnabled !== undefined && { healthMetricsEnabled }),
         ...(goalPreference !== undefined && { goalPreference }),
+        ...(displayName !== undefined && { displayName: displayName.trim() || null }),
       });
 
       if (!updatedUser) {
