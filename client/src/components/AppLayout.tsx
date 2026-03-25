@@ -112,6 +112,16 @@ function AppLayoutInner({ children }: AppLayoutProps) {
 
   return (
     <div className="min-h-screen bg-background">
+      <div
+        className="fixed inset-0 z-0 pointer-events-none"
+        style={{
+          backgroundImage: 'url(/race-track-bg.png)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center top',
+          backgroundRepeat: 'no-repeat',
+          opacity: 0.045,
+        }}
+      />
       <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-xl border-b border-border/60" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
         <div className="max-w-2xl mx-auto px-4">
           <div className="flex justify-between items-center h-14">
