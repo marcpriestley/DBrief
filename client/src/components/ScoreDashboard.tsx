@@ -14,6 +14,14 @@ import MetricTrendChart from "./MetricTrendChart";
 function NativeOverlay({ open, onClose, title, description, children }: {
   open: boolean; onClose: () => void; title: string; description?: string; children: React.ReactNode;
 }) {
+  useEffect(() => {
+    if (open) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => { document.body.style.overflow = prev; };
+    }
+  }, [open]);
+
   return (
     <AnimatePresence>
       {open && (
@@ -21,14 +29,15 @@ function NativeOverlay({ open, onClose, title, description, children }: {
           <motion.div
             className="fixed inset-0 bg-black/50"
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            onPointerDown={onClose}
+            onClick={onClose}
           />
           <motion.div
             className="relative bg-background rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-md mx-0 sm:mx-4 z-10 p-5 max-h-[90vh] overflow-y-auto"
             initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 40 }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            onPointerDown={(e) => e.stopPropagation()}
           >
-            <button className="absolute top-3 right-3 text-muted-foreground hover:text-foreground p-1" onPointerDown={onClose}>
+            <button className="absolute top-3 right-3 text-muted-foreground hover:text-foreground p-1" onClick={onClose}>
               <X className="h-4 w-4" />
             </button>
             <div className="mb-4 pr-6">
@@ -508,7 +517,7 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
 
               <Button
                 className="w-full"
-                onPointerDown={handleSaveScore}
+                onClick={handleSaveScore}
                 disabled={updateScoreMutation.isPending}
                 size="sm"
               >

@@ -147,6 +147,14 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
     },
   });
 
+  useEffect(() => {
+    if (open) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => { document.body.style.overflow = prev; };
+    }
+  }, [open]);
+
   return (
     <AnimatePresence>
       {open && (
@@ -156,7 +164,7 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onPointerDown={onClose}
+            onClick={onClose}
           />
           <motion.div
             className="relative bg-background rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-xs mx-0 sm:mx-4 z-10 p-5"
@@ -164,10 +172,11 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 40 }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            onPointerDown={(e) => e.stopPropagation()}
           >
             <button
               className="absolute top-3 right-3 text-muted-foreground hover:text-foreground p-1"
-              onPointerDown={onClose}
+              onClick={onClose}
             >
               <X className="h-4 w-4" />
             </button>
@@ -216,7 +225,7 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
                   return (
                     <button
                       key={preset}
-                      onPointerDown={() => setMoodValue(preset)}
+                      onClick={() => setMoodValue(preset)}
                       className={`flex-1 py-2 rounded-lg border text-center transition-all ${
                         Math.abs(moodValue - preset) < 10
                           ? "border-primary bg-primary/5 shadow-sm"
@@ -231,7 +240,7 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
               </div>
 
               <Button
-                onPointerDown={() => saveMutation.mutate(moodValue)}
+                onClick={() => saveMutation.mutate(moodValue)}
                 disabled={saveMutation.isPending}
                 className="w-full h-9 text-sm"
               >
