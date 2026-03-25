@@ -1,15 +1,17 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Sparkles, X, Flame, Lock, RefreshCw, Loader2 } from "lucide-react";
+import { Sparkles, X, Flame, Lock, RefreshCw, Volume2, VolumeX, Square } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { AIInsight, Streak } from "@shared/schema";
+import { useTTS } from "@/hooks/useTTS";
 
 export default function AIInsights() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const tts = useTTS();
 
   const { data: insights = [] } = useQuery<AIInsight[]>({
     queryKey: ["/api/ai-insights"],
@@ -129,14 +131,37 @@ export default function AIInsights() {
             <Sparkles className="h-4 w-4 text-primary" />
             <h3 className="text-sm font-semibold text-foreground">AI Insights</h3>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-muted-foreground hover:text-foreground"
-            onClick={() => dismissInsightMutation.mutate(latestInsight.id)}
-          >
-            <X className="h-3.5 w-3.5" />
-          </Button>
+          <div className="flex items-center gap-0.5">
+            {tts.isSupported && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className={`h-7 w-7 ${tts.speaking ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
+                onClick={() => {
+                  if (tts.speaking) {
+                    tts.cancel();
+                  } else {
+                    tts.speak(latestInsight.insight);
+                  }
+                }}
+                title={tts.speaking ? "Stop" : "Read aloud"}
+              >
+                {tts.speaking ? (
+                  <Square className="h-3.5 w-3.5 fill-current" />
+                ) : (
+                  <Volume2 className="h-3.5 w-3.5" />
+                )}
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+              onClick={() => { tts.cancel(); dismissInsightMutation.mutate(latestInsight.id); }}
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
         <p className="text-sm text-foreground leading-relaxed mb-3">
           {latestInsight.insight}
@@ -149,7 +174,7 @@ export default function AIInsights() {
             variant="ghost"
             size="sm"
             className="text-xs text-muted-foreground hover:text-foreground ml-auto h-7"
-            onClick={() => generateInsightMutation.mutate()}
+            onClick={() => { tts.cancel(); generateInsightMutation.mutate(); }}
             disabled={generateInsightMutation.isPending}
           >
             <RefreshCw className="h-3 w-3 mr-1" />

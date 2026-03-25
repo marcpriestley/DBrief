@@ -832,26 +832,40 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
         if (g.completed) goalsByDate[g.date].completed++;
       });
 
+      // Convert YYYY-MM-DD dates to relative human-friendly labels
+      const relativeDate = (dateStr: string): string => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const target = new Date(dateStr + "T00:00:00");
+        const diffDays = Math.round((today.getTime() - target.getTime()) / (1000 * 60 * 60 * 24));
+        const weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+        if (diffDays === 0) return "today";
+        if (diffDays === 1) return "yesterday";
+        if (diffDays <= 6) return `last ${weekdays[target.getDay()]}`;
+        if (diffDays <= 13) return `${weekdays[target.getDay()]} last week`;
+        return `${weekdays[target.getDay()]} (${target.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })})`;
+      };
+
       const prompt = `You are an experienced performance analyst. Analyze the user's daily tracking data below. All scores are on a 0-100 scale.
 
 IMPORTANT: Only scores that were explicitly logged by the user are included below. A missing score for a date means the user did not log it that day — do NOT assume it was zero or poor performance. Only analyse dates and metrics that have actual data.
 
 JOURNAL ENTRIES (last 14 days):
-${recentEntries.length > 0 ? recentEntries.map(entry => `${entry.date}: ${entry.content}`).join('\n') : 'No journal entries yet.'}
+${recentEntries.length > 0 ? recentEntries.map(entry => `${relativeDate(entry.date)}: ${entry.content}`).join('\n') : 'No journal entries yet.'}
 
 DAILY SCORES BY DATE (0-100 scale, only days with logged data):
 ${Object.entries(scoresByDate).map(([date, s]) => 
-  `${date}: ${Object.entries(s).map(([name, val]) => `${name}=${val}`).join(', ')}`
+  `${relativeDate(date)}: ${Object.entries(s).map(([name, val]) => `${name}=${val}`).join(', ')}`
 ).join('\n') || 'No scores logged yet.'}
 
 MOOD CHECK-INS BY DATE (0-100 scale, daily averages):
 ${Object.entries(moodByDate).map(([date, vals]) => 
-  `${date}: avg=${Math.round(vals.reduce((a, b) => a + b, 0) / vals.length)} (${vals.length} check-ins)`
+  `${relativeDate(date)}: avg=${Math.round(vals.reduce((a, b) => a + b, 0) / vals.length)} (${vals.length} check-ins)`
 ).join('\n') || 'No mood check-ins yet.'}
 
 GOALS COMPLETION BY DATE:
 ${Object.entries(goalsByDate).map(([date, g]) => 
-  `${date}: ${g.completed}/${g.total} completed (${Math.round(g.completed / g.total * 100)}%)`
+  `${relativeDate(date)}: ${g.completed}/${g.total} completed (${Math.round(g.completed / g.total * 100)}%)`
 ).join('\n') || 'No goals data yet.'}
 
 STREAK: ${streak?.currentStreak || 0} days (longest: ${streak?.longestStreak || 0})
@@ -863,7 +877,9 @@ As a data analyst and wellbeing coach, provide ONE deep, actionable insight. Foc
 4. One specific, practical recommendation they can implement immediately
 5. Acknowledge their streak commitment warmly
 
-Keep the insight specific to THEIR data (reference actual numbers and dates when relevant). 2-4 sentences. Suggest 2-3 tags.
+IMPORTANT DATE LANGUAGE: When referencing when something happened, always use conversational relative references like "yesterday", "last Tuesday", "on Friday" — NEVER use numerical date formats like "2026-03-20" or "March 20". Write as if speaking to someone naturally.
+
+Keep the insight specific to THEIR data. 2-4 sentences. Suggest 2-3 tags.
 
 Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag3"] }`;
 
