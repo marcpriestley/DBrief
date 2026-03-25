@@ -54,6 +54,7 @@ function useInlineVoice() {
   const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const watchdogRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const nativeListenerRef = useRef<any>(null);
+  const micPermGrantedRef = useRef(false);
 
   const isNative = Capacitor.isNativePlatform();
   const isSupported =
@@ -218,11 +219,12 @@ function useInlineVoice() {
         return;
       }
 
-      // Request microphone permission — triggers iOS permission dialog in WKWebView
-      if (navigator.mediaDevices?.getUserMedia) {
+      // Request microphone permission — only needed once (subsequent calls can hang on iOS WKWebView)
+      if (!micPermGrantedRef.current && navigator.mediaDevices?.getUserMedia) {
         try {
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
           stream.getTracks().forEach((t) => t.stop());
+          micPermGrantedRef.current = true;
         } catch {
           setMicError("SETTINGS_NEEDED");
           return;
@@ -244,6 +246,9 @@ function useInlineVoice() {
   const stop = useCallback(async () => {
     setInterimText("");
     setIsListening(false);
+    shouldListenRef.current = false;
+    if (watchdogRef.current) { clearInterval(watchdogRef.current); watchdogRef.current = null; }
+    if (restartTimerRef.current) { clearTimeout(restartTimerRef.current); restartTimerRef.current = null; }
 
     if (isNative) {
       try {
@@ -254,15 +259,12 @@ function useInlineVoice() {
         nativeListenerRef.current.remove();
         nativeListenerRef.current = null;
       }
-      return;
     }
 
-    shouldListenRef.current = false;
-    if (watchdogRef.current) { clearInterval(watchdogRef.current); watchdogRef.current = null; }
-    if (restartTimerRef.current) { clearTimeout(restartTimerRef.current); restartTimerRef.current = null; }
+    // Always clean up Web Speech API (used as fallback on native too)
     const old = recognitionRef.current;
     recognitionRef.current = null;
-    try { old?.stop(); } catch {}
+    try { old?.abort(); } catch {}
   }, [isNative]);
 
   useEffect(() => {
