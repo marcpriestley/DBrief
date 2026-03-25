@@ -9,7 +9,7 @@ import MoodCheckinModal from "@/components/MoodCheckinModal";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { haptic } from "@/lib/haptics";
 import { DateProvider, useDateContext } from "@/contexts/DateContext";
-import logoSrc from "@assets/DBrief_Logo_1774422558112.jpg";
+import logoSrc from "@assets/DBrief_Logo_1774470968516.jpg";
 
 interface AppLayoutProps {
   children: React.ReactNode;

@@ -633,7 +633,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
             </div>
           </div>
 
-          <div className="space-y-5 max-h-[500px] overflow-y-auto">
+          <div className="space-y-4">
             {completedDebriefs.map((d, idx) => (
               <div key={d.id} className={completedDebriefs.length > 1 ? "pb-4 border-b border-border/50 last:border-0 last:pb-0" : ""}>
                 {completedDebriefs.length > 1 && (
@@ -642,28 +642,41 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                   </p>
                 )}
                 {d.summary && (
-                  <p className="text-sm text-muted-foreground mb-3 italic leading-relaxed">
+                  <p className="text-sm text-muted-foreground italic leading-relaxed">
                     {d.summary}
                   </p>
                 )}
-                <div className="space-y-2">
-                  {d.messages.map((msg) => (
-                    <div key={msg.id} className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
-                      <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
-                        msg.role === "user"
-                          ? "bg-primary text-primary-foreground rounded-br-md"
-                          : "bg-muted text-foreground rounded-bl-md"
-                      }`}>
-                        {msg.content}
+                {d.messages.length > 0 && (
+                  <>
+                    <button
+                      onClick={() => setShowAllMessages(v => !v)}
+                      className="flex items-center gap-1.5 mt-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showAllMessages ? "rotate-180" : ""}`} />
+                      {showAllMessages ? "Hide transcript" : `Show transcript (${d.messages.length} messages)`}
+                    </button>
+                    {showAllMessages && (
+                      <div className="space-y-2 mt-3 max-h-[400px] overflow-y-auto">
+                        {d.messages.map((msg) => (
+                          <div key={msg.id} className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
+                            <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+                              msg.role === "user"
+                                ? "bg-primary text-primary-foreground rounded-br-md"
+                                : "bg-muted text-foreground rounded-bl-md"
+                            }`}>
+                              {msg.content}
+                            </div>
+                            {msg.createdAt && (
+                              <span className="text-[10px] text-muted-foreground/60 mt-0.5 px-1">
+                                {formatMsgTime(msg.createdAt)}
+                              </span>
+                            )}
+                          </div>
+                        ))}
                       </div>
-                      {msg.createdAt && (
-                        <span className="text-[10px] text-muted-foreground/60 mt-0.5 px-1">
-                          {formatMsgTime(msg.createdAt)}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                    )}
+                  </>
+                )}
               </div>
             ))}
           </div>
