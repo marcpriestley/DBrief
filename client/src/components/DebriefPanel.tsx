@@ -485,8 +485,8 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   };
 
   useEffect(() => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
   }, [debrief?.messages, streamingContent, showCheckpoint]);
 
