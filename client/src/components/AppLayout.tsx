@@ -115,7 +115,7 @@ function AppLayoutInner({ children }: AppLayoutProps) {
       <div
         className="fixed inset-0 z-0 pointer-events-none"
         style={{
-          backgroundImage: 'url(/race-track-bg.png)',
+          backgroundImage: 'url(/spa-track-bg.jpg)',
           backgroundSize: 'cover',
           backgroundPosition: 'center top',
           backgroundRepeat: 'no-repeat',
