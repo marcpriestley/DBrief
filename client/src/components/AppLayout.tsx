@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import StreakDisplay from "@/components/StreakDisplay";
 import SettingsModal from "@/components/SettingsModal";
 import MoodCheckinModal from "@/components/MoodCheckinModal";
+import AppTour from "@/components/AppTour";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { haptic } from "@/lib/haptics";
 import { DateProvider, useDateContext } from "@/contexts/DateContext";
@@ -209,6 +210,7 @@ function AppLayoutInner({ children }: AppLayoutProps) {
 
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
       <MoodCheckinModal open={isMoodOpen} onClose={() => setIsMoodOpen(false)} />
+      <AppTour />
     </div>
   );
 }

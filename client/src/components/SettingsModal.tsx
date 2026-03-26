@@ -14,9 +14,10 @@ import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Bell, BellOff, AlertCircle, CheckCircle2, Heart, Plus, Check, Info, User } from "lucide-react";
+import { Bell, BellOff, AlertCircle, CheckCircle2, Heart, Plus, Check, Info, User, Map } from "lucide-react";
 import type { UserMetric } from "@shared/schema";
 import { ProfileQuestionsSettings } from "./ProfileQuestions";
+import { resetTour } from "@/lib/tour";
 
 const APPLE_HEALTH_METRICS: {
   name: string;
@@ -476,11 +477,22 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               <ProfileQuestionsSettings />
             </div>
 
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
-              <Button size="sm" onClick={handleSave} disabled={updateSettingsMutation.isPending}>
-                {updateSettingsMutation.isPending ? "Saving..." : "Save"}
+            <div className="flex items-center justify-between pt-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => { resetTour(); onClose(); }}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                <Map className="h-3.5 w-3.5 mr-1.5" />
+                Replay app tour
               </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+                <Button size="sm" onClick={handleSave} disabled={updateSettingsMutation.isPending}>
+                  {updateSettingsMutation.isPending ? "Saving..." : "Save"}
+                </Button>
+              </div>
             </div>
           </div>
         )}
