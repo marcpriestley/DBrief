@@ -51,6 +51,7 @@ function useInlineVoice() {
   const recognitionRef = useRef<any>(null);
   const accumulatedRef = useRef("");
   const shouldListenRef = useRef(false);
+  const isStoppingRef = useRef(false);
   const onFinalRef = useRef<((text: string) => void) | null>(null);
   const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const watchdogRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -176,12 +177,14 @@ function useInlineVoice() {
           }
 
           pluginWorked = true;
+          isStoppingRef.current = false;
           setIsListening(true);
           if (nativeListenerRef.current) {
             nativeListenerRef.current.remove();
             nativeListenerRef.current = null;
           }
           nativeListenerRef.current = await SpeechRecognition.addListener("partialResults", (data: { matches: string[] }) => {
+            if (isStoppingRef.current) return;
             const partial = data.matches?.[0] || "";
             setInterimText(partial);
             accumulatedRef.current = partial;
@@ -245,6 +248,8 @@ function useInlineVoice() {
   );
 
   const stop = useCallback(async () => {
+    // Set stopping flag FIRST to block any pending partialResults callbacks
+    isStoppingRef.current = true;
     setInterimText("");
     setIsListening(false);
     shouldListenRef.current = false;
@@ -252,14 +257,19 @@ function useInlineVoice() {
     if (restartTimerRef.current) { clearTimeout(restartTimerRef.current); restartTimerRef.current = null; }
 
     if (isNative) {
-      try {
-        const { SpeechRecognition } = await import("@capacitor-community/speech-recognition");
-        await SpeechRecognition.stop();
-      } catch {}
+      // Remove listener FIRST so no more partialResults fire during/after stop
       if (nativeListenerRef.current) {
-        nativeListenerRef.current.remove();
+        try { nativeListenerRef.current.remove(); } catch {}
         nativeListenerRef.current = null;
       }
+      // Then tell the plugin to stop (may take a moment on older iOS)
+      try {
+        const { SpeechRecognition } = await import("@capacitor-community/speech-recognition");
+        await Promise.race([
+          SpeechRecognition.stop(),
+          new Promise<void>(res => setTimeout(res, 500)), // 500ms timeout safety net
+        ]);
+      } catch {}
     }
 
     // Always clean up Web Speech API (used as fallback on native too)
@@ -471,10 +481,13 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   };
 
   const handleSend = () => {
-    if (!userInput.trim()) return;
+    const textToSend = userInput.trim();
+    if (!textToSend) return;
+    // Auto-stop mic before sending so the recording never blocks the next state
+    if (voice.isListening) voice.stop();
     haptic("medium");
     if (showCheckpoint) setContinuedPastCheckpoint(true);
-    sendMessage(userInput);
+    sendMessage(textToSend);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -484,7 +497,12 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     }
   };
 
+  const micLastToggleRef = useRef(0);
   const handleMicToggle = () => {
+    // Debounce: ignore taps within 400ms of last toggle to prevent double-tap races
+    const now = Date.now();
+    if (now - micLastToggleRef.current < 400) return;
+    micLastToggleRef.current = now;
     if (voice.isListening) {
       haptic("light");
       voice.stop();

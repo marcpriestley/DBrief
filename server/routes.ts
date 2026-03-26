@@ -789,6 +789,29 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
     }
   });
 
+  app.post("/api/tts", async (req, res) => {
+    try {
+      getUserId(req);
+      const { text, voice = "nova" } = req.body;
+      if (!text || typeof text !== "string") return res.status(400).json({ message: "text required" });
+      const truncated = text.slice(0, 4096);
+      const mp3 = await openai.audio.speech.create({
+        model: "tts-1",
+        voice: voice as any,
+        input: truncated,
+        response_format: "mp3",
+      });
+      const buffer = Buffer.from(await mp3.arrayBuffer());
+      res.set("Content-Type", "audio/mpeg");
+      res.set("Content-Length", String(buffer.length));
+      res.set("Cache-Control", "no-store");
+      res.send(buffer);
+    } catch (e: any) {
+      console.error("[TTS] Error:", e?.message);
+      res.status(500).json({ message: "TTS failed" });
+    }
+  });
+
   app.post("/api/ai-insights/generate", async (req, res) => {
     try {
       const userId = getUserId(req);
