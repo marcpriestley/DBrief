@@ -51,25 +51,49 @@ export function setHealthAuthState(v: boolean): void {
   localStorage.setItem(AUTH_KEY, v ? "true" : "false");
 }
 
-export async function checkHealthAvailable(): Promise<boolean> {
-  if (!isNativeIOS()) return false;
+export type HealthAvailability =
+  | "available"       // ready to use
+  | "not_installed"   // native plugin not compiled in (needs npx cap sync + rebuild)
+  | "not_ios"         // web browser
+  | "unavailable";    // HealthKit unavailable on this device
+
+export async function checkHealthAvailable(): Promise<HealthAvailability> {
+  if (!isNativeIOS()) return "not_ios";
   try {
     const { available } = await Health.isAvailable();
-    return available;
-  } catch {
-    return false;
+    return available ? "available" : "unavailable";
+  } catch (e: any) {
+    const msg = String(e?.message ?? e);
+    // Capacitor throws "not implemented" when the native plugin isn't registered
+    if (msg.toLowerCase().includes("not implemented") || msg.toLowerCase().includes("not available")) {
+      return "not_installed";
+    }
+    return "unavailable";
   }
 }
 
-export async function requestHealthPermissions(): Promise<boolean> {
-  if (!isNativeIOS()) return false;
+export type HealthAuthResult =
+  | "granted"         // permissions granted, sync was triggered
+  | "denied"          // user tapped deny in the iOS sheet
+  | "not_installed"   // native plugin missing — needs npx cap sync + rebuild
+  | "error";          // other unexpected error
+
+export async function requestHealthPermissions(): Promise<HealthAuthResult> {
+  if (!isNativeIOS()) return "not_installed";
   try {
     await Health.requestAuthorization({ read: ALL_HEALTH_TYPES, write: [] });
     setHealthAuthState(true);
-    return true;
-  } catch (e) {
-    console.error("[HealthKit] Authorization error:", e);
-    return false;
+    return "granted";
+  } catch (e: any) {
+    const msg = String(e?.message ?? e);
+    console.error("[HealthKit] Authorization error:", msg);
+    if (msg.toLowerCase().includes("not implemented") || msg.toLowerCase().includes("not available")) {
+      return "not_installed";
+    }
+    if (msg.toLowerCase().includes("denied") || msg.toLowerCase().includes("restricted")) {
+      return "denied";
+    }
+    return "error";
   }
 }
 

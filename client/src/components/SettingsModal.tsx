@@ -25,6 +25,7 @@ import {
   getHealthAuthState,
   setHealthAuthState,
   getHealthSyncableMetrics,
+  checkHealthAvailable,
 } from "@/lib/healthKit";
 
 const APPLE_HEALTH_METRICS: {
@@ -181,6 +182,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [healthAuthorized, setHealthAuthorized] = useState(getHealthAuthState);
   const [healthSyncing, setHealthSyncing] = useState(false);
   const [healthSyncResult, setHealthSyncResult] = useState<string | null>(null);
+  const [healthSetupNeeded, setHealthSetupNeeded] = useState(false);
 
   useEffect(() => {
     if (settings) {
@@ -321,21 +323,26 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const handleConnectHealth = async () => {
     setHealthSyncing(true);
     setHealthSyncResult(null);
+    setHealthSetupNeeded(false);
     try {
-      const granted = await requestHealthPermissions();
-      setHealthAuthorized(granted);
-      if (granted) {
+      const result = await requestHealthPermissions();
+      if (result === "granted") {
+        setHealthAuthorized(true);
         const today = new Date().toISOString().split("T")[0];
         const enabledNames = userMetrics.filter(m => m.isActive).map(m => m.name);
-        const result = await syncHealthData(today, enabledNames);
+        const syncResult = await syncHealthData(today, enabledNames);
         queryClient.invalidateQueries({ queryKey: ["/api/daily-scores"] });
         queryClient.invalidateQueries({ queryKey: ["/api/user-metrics"] });
-        setHealthSyncResult(`Synced ${result.synced} metric${result.synced !== 1 ? "s" : ""}`);
-        toast({ title: "Apple Health connected", description: `${result.synced} metric${result.synced !== 1 ? "s" : ""} synced for today.` });
+        setHealthSyncResult(`Synced ${syncResult.synced} metric${syncResult.synced !== 1 ? "s" : ""}`);
+        toast({ title: "Apple Health connected", description: `${syncResult.synced} metric${syncResult.synced !== 1 ? "s" : ""} synced for today.` });
+      } else if (result === "not_installed") {
+        setHealthSetupNeeded(true);
+      } else if (result === "denied") {
+        toast({ title: "Health access denied", description: "Open iOS Settings → Privacy & Security → Health → DBrief and enable all categories.", variant: "destructive" });
       } else {
-        toast({ title: "Permission denied", description: "Grant Health access in iOS Settings to use auto-sync.", variant: "destructive" });
+        toast({ title: "Could not connect", description: "An unexpected error occurred. Try reinstalling the app.", variant: "destructive" });
       }
-    } catch (e) {
+    } catch {
       toast({ title: "Error", description: "Could not connect to Apple Health.", variant: "destructive" });
     } finally {
       setHealthSyncing(false);
@@ -493,17 +500,38 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <Button
-                      className="w-full h-9 text-sm gap-2"
-                      onClick={handleConnectHealth}
-                      disabled={healthSyncing}
-                    >
-                      <Heart className="h-4 w-4" />
-                      {healthSyncing ? "Connecting…" : "Connect Apple Health"}
-                    </Button>
-                    <p className="text-[11px] text-muted-foreground leading-relaxed">
-                      Grant access so DBrief can read your health data and auto-fill your metrics. Select which metrics to sync below.
-                    </p>
+                    {healthSetupNeeded ? (
+                      <div className="rounded-md bg-amber-500/10 border border-amber-500/20 p-2.5 space-y-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <AlertCircle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                          <p className="text-[11px] font-semibold text-amber-700">Xcode setup required</p>
+                        </div>
+                        <p className="text-[11px] text-amber-700 leading-relaxed">
+                          The HealthKit plugin isn't compiled into this build yet. To fix it, do the following in Xcode then rebuild and install:
+                        </p>
+                        <ol className="text-[11px] text-amber-700 space-y-0.5 list-decimal ml-3">
+                          <li>In your project terminal: <span className="font-mono bg-amber-200/50 px-0.5 rounded">npx cap sync ios</span></li>
+                          <li>Xcode → Target → Signing &amp; Capabilities → Add <strong>HealthKit</strong></li>
+                          <li>Info.plist → add <strong>NSHealthShareUsageDescription</strong></li>
+                          <li>Info.plist → add <strong>NSHealthUpdateUsageDescription</strong></li>
+                          <li>Build and install via TestFlight</li>
+                        </ol>
+                      </div>
+                    ) : (
+                      <>
+                        <Button
+                          className="w-full h-9 text-sm gap-2"
+                          onClick={handleConnectHealth}
+                          disabled={healthSyncing}
+                        >
+                          <Heart className="h-4 w-4" />
+                          {healthSyncing ? "Connecting…" : "Connect Apple Health"}
+                        </Button>
+                        <p className="text-[11px] text-muted-foreground leading-relaxed">
+                          Grant access so DBrief can read your health data and auto-fill your metrics. Select which metrics to sync below.
+                        </p>
+                      </>
+                    )}
                   </div>
                 )
               ) : (
