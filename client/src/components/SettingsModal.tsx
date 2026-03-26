@@ -14,10 +14,18 @@ import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Bell, BellOff, AlertCircle, CheckCircle2, Heart, Plus, Check, Info, User, Map } from "lucide-react";
+import { Bell, BellOff, AlertCircle, CheckCircle2, Heart, Plus, Check, Info, User, Map, RefreshCw, Link } from "lucide-react";
 import type { UserMetric } from "@shared/schema";
 import { ProfileQuestionsSettings } from "./ProfileQuestions";
 import { resetTour } from "@/lib/tour";
+import {
+  isNativeIOS,
+  requestHealthPermissions,
+  syncHealthData,
+  getHealthAuthState,
+  setHealthAuthState,
+  getHealthSyncableMetrics,
+} from "@/lib/healthKit";
 
 const APPLE_HEALTH_METRICS: {
   name: string;
@@ -170,6 +178,9 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [reminderTime, setReminderTime] = useState("09:00");
   const [reminderTime2, setReminderTime2] = useState("21:00");
   const [displayName, setDisplayName] = useState("");
+  const [healthAuthorized, setHealthAuthorized] = useState(getHealthAuthState);
+  const [healthSyncing, setHealthSyncing] = useState(false);
+  const [healthSyncResult, setHealthSyncResult] = useState<string | null>(null);
 
   useEffect(() => {
     if (settings) {
@@ -307,6 +318,53 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     return outputArray;
   };
 
+  const handleConnectHealth = async () => {
+    setHealthSyncing(true);
+    setHealthSyncResult(null);
+    try {
+      const granted = await requestHealthPermissions();
+      setHealthAuthorized(granted);
+      if (granted) {
+        const today = new Date().toISOString().split("T")[0];
+        const enabledNames = userMetrics.filter(m => m.isActive).map(m => m.name);
+        const result = await syncHealthData(today, enabledNames);
+        queryClient.invalidateQueries({ queryKey: ["/api/daily-scores"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/user-metrics"] });
+        setHealthSyncResult(`Synced ${result.synced} metric${result.synced !== 1 ? "s" : ""}`);
+        toast({ title: "Apple Health connected", description: `${result.synced} metric${result.synced !== 1 ? "s" : ""} synced for today.` });
+      } else {
+        toast({ title: "Permission denied", description: "Grant Health access in iOS Settings to use auto-sync.", variant: "destructive" });
+      }
+    } catch (e) {
+      toast({ title: "Error", description: "Could not connect to Apple Health.", variant: "destructive" });
+    } finally {
+      setHealthSyncing(false);
+    }
+  };
+
+  const handleSyncNow = async () => {
+    setHealthSyncing(true);
+    setHealthSyncResult(null);
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+      const enabledNames = userMetrics.filter(m => m.isActive).map(m => m.name);
+      const [r1, r2] = await Promise.all([
+        syncHealthData(today, enabledNames),
+        syncHealthData(yesterday, enabledNames),
+      ]);
+      const total = r1.synced + r2.synced;
+      queryClient.invalidateQueries({ queryKey: ["/api/daily-scores"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user-metrics"] });
+      setHealthSyncResult(`Synced ${total} reading${total !== 1 ? "s" : ""}`);
+      toast({ title: "Sync complete", description: `Updated ${total} health reading${total !== 1 ? "s" : ""}.` });
+    } catch {
+      toast({ title: "Sync failed", description: "Could not read Apple Health data.", variant: "destructive" });
+    } finally {
+      setHealthSyncing(false);
+    }
+  };
+
   const existingMetricNames = new Set(
     userMetrics.filter(m => m.isActive !== false).map(m => m.name.toLowerCase())
   );
@@ -410,13 +468,44 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 <p className="text-xs font-medium text-foreground">Health Metrics</p>
               </div>
 
-              {isNativePlatform() ? (
-                <div className="rounded-md bg-muted/80 border border-border/50 p-2.5 flex gap-2">
-                  <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    Metrics are currently tracked manually. Apple Health auto-sync will be added in a future update — select any metrics below to add them to your dashboard now.
-                  </p>
-                </div>
+              {isNativeIOS() ? (
+                healthAuthorized ? (
+                  <div className="space-y-2">
+                    <div className="rounded-md bg-emerald-500/10 border border-emerald-500/20 p-2.5 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                        <p className="text-[11px] text-emerald-700 font-medium">Apple Health connected</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-2 text-[11px]"
+                        onClick={handleSyncNow}
+                        disabled={healthSyncing}
+                      >
+                        <RefreshCw className={`h-3 w-3 mr-1 ${healthSyncing ? "animate-spin" : ""}`} />
+                        {healthSyncing ? "Syncing…" : "Sync now"}
+                      </Button>
+                    </div>
+                    {healthSyncResult && (
+                      <p className="text-[10px] text-muted-foreground px-0.5">{healthSyncResult} · select metrics below to choose what syncs</p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Button
+                      className="w-full h-9 text-sm gap-2"
+                      onClick={handleConnectHealth}
+                      disabled={healthSyncing}
+                    >
+                      <Heart className="h-4 w-4" />
+                      {healthSyncing ? "Connecting…" : "Connect Apple Health"}
+                    </Button>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      Grant access so DBrief can read your health data and auto-fill your metrics. Select which metrics to sync below.
+                    </p>
+                  </div>
+                )
               ) : (
                 <div className="rounded-md bg-blue-500/10 border border-blue-500/20 p-2.5 flex gap-2">
                   <Info className="h-3.5 w-3.5 text-blue-600 shrink-0 mt-0.5" />

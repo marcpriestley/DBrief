@@ -917,45 +917,50 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
   app.post("/api/health/sync", async (req, res) => {
     try {
       const userId = getUserId(req);
-      const { date, sleepScore, readinessScore, activityScore } = req.body;
+      const { date, metrics } = req.body;
 
       if (!date) return res.status(400).json({ message: "Date is required" });
 
-      const healthData: HealthData = { sleepScore, readinessScore, activityScore };
+      // Metric color defaults for known health metrics
+      const METRIC_DEFAULTS: Record<string, { color: string; maxValue: number }> = {
+        "Steps":              { color: "#10B981", maxValue: 20000 },
+        "Active Energy":      { color: "#F59E0B", maxValue: 800 },
+        "Exercise Minutes":   { color: "#3B82F6", maxValue: 60 },
+        "Flights Climbed":    { color: "#84CC16", maxValue: 20 },
+        "Walking Distance":   { color: "#0EA5E9", maxValue: 10 },
+        "Sleep Duration":     { color: "#4F46E5", maxValue: 10 },
+        "Sleep Quality":      { color: "#7C3AED", maxValue: 100 },
+        "Heart Rate":         { color: "#EF4444", maxValue: 200 },
+        "Resting Heart Rate": { color: "#E11D48", maxValue: 100 },
+        "HRV":                { color: "#8B5CF6", maxValue: 120 },
+        "Blood Oxygen":       { color: "#38BDF8", maxValue: 100 },
+        "Body Weight":        { color: "#EC4899", maxValue: 200 },
+        "Body Fat %":         { color: "#F97316", maxValue: 50 },
+        "Mindful Minutes":    { color: "#14B8A6", maxValue: 60 },
+        "Respiratory Rate":   { color: "#64748B", maxValue: 30 },
+      };
+
+      const incomingMetrics: Array<{ name: string; value: number }> = metrics || [];
+
+      if (incomingMetrics.length === 0) {
+        return res.json({ success: true, updatedScores: [] });
+      }
 
       const existingMetrics = await storage.getUserMetrics(userId);
-      const metricNames = new Set(existingMetrics.filter(m => m.isActive).map(m => m.name));
-
-      const healthMetrics = [
-        { name: "Sleep Quality", color: "#8B5CF6", hasData: healthData.sleepScore !== undefined },
-        { name: "Readiness", color: "#EF4444", hasData: healthData.readinessScore !== undefined },
-        { name: "Activity", color: "#06B6D4", hasData: healthData.activityScore !== undefined },
-      ];
-
-      for (const m of healthMetrics) {
-        if (m.hasData && !metricNames.has(m.name)) {
-          await storage.createUserMetric({ userId, name: m.name, color: m.color, maxValue: 100, isDefault: false, isActive: true });
-        }
-      }
+      const existingByName = new Map(existingMetrics.filter(m => m.isActive).map(m => [m.name, m]));
 
       const updatedScores = [];
 
-      if (healthData.sleepScore !== undefined) {
-        const score = await storage.updateDailyScore(userId, date, "Sleep Quality", healthData.sleepScore, true);
+      for (const { name, value } of incomingMetrics) {
+        if (!existingByName.has(name)) {
+          const defaults = METRIC_DEFAULTS[name] ?? { color: "#6366F1", maxValue: 100 };
+          await storage.createUserMetric({ userId, name, color: defaults.color, maxValue: defaults.maxValue, isDefault: false, isActive: true });
+        }
+        const score = await storage.updateDailyScore(userId, date, name, value, true);
         updatedScores.push(score);
       }
 
-      if (healthData.readinessScore !== undefined) {
-        const score = await storage.updateDailyScore(userId, date, "Readiness", healthData.readinessScore, true);
-        updatedScores.push(score);
-      }
-
-      if (healthData.activityScore !== undefined) {
-        const score = await storage.updateDailyScore(userId, date, "Activity", healthData.activityScore, true);
-        updatedScores.push(score);
-      }
-
-      res.json({ success: true, data: healthData, updatedScores });
+      res.json({ success: true, updatedScores });
     } catch (error) {
       console.error("Health sync error:", error);
       res.status(500).json({ message: "Failed to sync health data", error: String(error) });

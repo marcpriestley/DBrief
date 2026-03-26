@@ -185,27 +185,6 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
     enabled: !!selectedMetric,
   });
 
-  const syncHealthMutation = useMutation({
-    mutationFn: async (data: { date: string; sleepScore?: number; readinessScore?: number; activityScore?: number }) => {
-      return apiRequest("POST", "/api/health/sync", data);
-    },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/daily-scores", variables.date] });
-      queryClient.invalidateQueries({ queryKey: ["/api/user-metrics"] });
-      toast({
-        title: "Health data synced",
-        description: "Your health data has been updated.",
-      });
-    },
-    onError: () => {
-      toast({
-        title: "Sync failed",
-        description: "Could not sync health data. Make sure the app has health permissions.",
-        variant: "destructive",
-      });
-    },
-  });
-
   const updateScoreMutation = useMutation({
     mutationFn: async (data: { date: string; metricName: string; value: number }) => {
       return apiRequest("POST", "/api/daily-scores", data);

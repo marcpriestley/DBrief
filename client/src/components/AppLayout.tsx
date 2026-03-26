@@ -11,6 +11,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { haptic } from "@/lib/haptics";
 import { DateProvider, useDateContext } from "@/contexts/DateContext";
 import logoSrc from "@assets/DBrief_Logo_1774470968516.jpg";
+import { isNativeIOS, getHealthAuthState, syncHealthData } from "@/lib/healthKit";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -107,6 +108,30 @@ function AppLayoutInner({ children }: AppLayoutProps) {
   const currentPeriod = getCurrentPeriod();
   const hasMoodForPeriod = todayMoods.some((m: any) => m.label === currentPeriod);
   const showMoodPulse = !hasMoodForPeriod;
+
+  // Auto-sync Apple Health on launch (native iOS, already authorized)
+  useEffect(() => {
+    if (!isNativeIOS() || !getHealthAuthState()) return;
+    const today = new Date().toISOString().split("T")[0];
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+    // Delay slightly so user metrics have time to load
+    const t = setTimeout(async () => {
+      try {
+        const metricsRes = await fetch("/api/user-metrics", { credentials: "include" });
+        const metrics: Array<{ name: string; isActive: boolean }> = await metricsRes.json();
+        const names = metrics.filter(m => m.isActive).map(m => m.name);
+        await Promise.all([
+          syncHealthData(today, names),
+          syncHealthData(yesterday, names),
+        ]);
+        queryClient.invalidateQueries({ queryKey: ["/api/daily-scores"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/user-metrics"] });
+      } catch (e) {
+        console.error("[HealthKit] Auto-sync error:", e);
+      }
+    }, 2500);
+    return () => clearTimeout(t);
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
