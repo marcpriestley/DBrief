@@ -4,11 +4,141 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { TrendingUp, Sparkles, Loader2 } from "lucide-react";
+import { TrendingUp, Sparkles, Loader2, Smile, Sun, Coffee, Moon } from "lucide-react";
 import AppLayout from "@/components/AppLayout";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { DailyScore, UserMetric, AIInsight, DailyGoal, MoodCheckin } from "@shared/schema";
+
+function getMoodColor(v: number) {
+  if (v >= 80) return "#EC4899";
+  if (v >= 60) return "#10B981";
+  if (v >= 40) return "#F59E0B";
+  if (v >= 20) return "#F97316";
+  return "#EF4444";
+}
+
+
+const PERIOD_META = {
+  morning:   { label: "Morning",   Icon: Coffee, time: "Before noon" },
+  afternoon: { label: "Afternoon", Icon: Sun,    time: "12–5 PM" },
+  evening:   { label: "Evening",   Icon: Moon,   time: "After 5 PM" },
+} as const;
+
+function MoodPatterns({ checkins }: { checkins: MoodCheckin[] }) {
+  if (checkins.length === 0) return null;
+
+  // Average per period
+  const periods = ["morning", "afternoon", "evening"] as const;
+  const periodAvgs = periods.map(p => {
+    const pts = checkins.filter(c => c.label === p);
+    const avg = pts.length > 0 ? Math.round(pts.reduce((s, c) => s + c.value, 0) / pts.length) : null;
+    return { period: p, avg, count: pts.length };
+  }).filter(p => p.avg !== null) as { period: typeof periods[number]; avg: number; count: number }[];
+
+  const best = periodAvgs.reduce((a, b) => (a.avg > b.avg ? a : b), periodAvgs[0]);
+
+  // Last 14 days grouped by date
+  const recent = checkins
+    .slice()
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-28);
+  const byDate: Record<string, number[]> = {};
+  recent.forEach(c => {
+    if (!byDate[c.date]) byDate[c.date] = [];
+    byDate[c.date].push(c.value);
+  });
+  const dailyPoints = Object.entries(byDate).map(([date, vals]) => ({
+    date,
+    avg: Math.round(vals.reduce((s, v) => s + v, 0) / vals.length),
+  })).slice(-14);
+
+  const overallAvg = Math.round(checkins.reduce((s, c) => s + c.value, 0) / checkins.length);
+
+  return (
+    <Card className="border-border/50 shadow-sm">
+      <CardContent className="p-4">
+        <div className="flex items-center gap-2 mb-4">
+          <Smile className="h-4 w-4 text-pink-500" />
+          <span className="text-sm font-semibold text-foreground">Mood Patterns</span>
+          <span className="text-xs text-muted-foreground ml-auto">Avg {overallAvg}/100</span>
+        </div>
+
+        {/* Time-of-day breakdown */}
+        <div className="space-y-2.5 mb-5">
+          {periods.map(p => {
+            const data = periodAvgs.find(x => x.period === p);
+            const meta = PERIOD_META[p];
+            const Icon = meta.Icon;
+            const isBest = best && best.period === p && periodAvgs.length > 1;
+            if (!data) return (
+              <div key={p} className="flex items-center gap-3 opacity-40">
+                <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <span className="text-xs text-muted-foreground w-20 shrink-0">{meta.label}</span>
+                <span className="text-xs text-muted-foreground">No data yet</span>
+              </div>
+            );
+            return (
+              <div key={p} className="flex items-center gap-3">
+                <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <span className="text-xs font-medium text-foreground w-20 shrink-0">{meta.label}</span>
+                <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-2 rounded-full transition-all duration-500"
+                    style={{ width: `${data.avg}%`, backgroundColor: getMoodColor(data.avg) }}
+                  />
+                </div>
+                <span className="text-xs font-bold tabular-nums w-8 text-right" style={{ color: getMoodColor(data.avg) }}>
+                  {data.avg}
+                </span>
+                {isBest && (
+                  <span className="text-[10px] font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded-full">Peak</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Best time insight */}
+        {best && periodAvgs.length > 1 && (
+          <div className="rounded-lg bg-pink-50 dark:bg-pink-950/20 border border-pink-200/50 dark:border-pink-800/30 px-3 py-2 mb-4">
+            <p className="text-xs text-pink-700 dark:text-pink-300 leading-relaxed">
+              <span className="font-semibold">{PERIOD_META[best.period].label}</span> is your best performing period — averaging <span className="font-semibold">{best.avg}/100</span>. {best.period === "morning" ? "Your mornings set the tone." : best.period === "afternoon" ? "You hit your stride mid-day." : "You finish sessions strong."} Explore why in your debrief.
+            </p>
+          </div>
+        )}
+
+        {/* Recent daily mood timeline */}
+        {dailyPoints.length > 1 && (
+          <>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Last {dailyPoints.length} days</p>
+            <div className="flex items-end gap-1 h-16">
+              {dailyPoints.map(({ date, avg }) => {
+                const heightPct = Math.max(10, avg);
+                const d = new Date(date + "T12:00:00");
+                const label = d.toLocaleDateString("en-US", { month: "numeric", day: "numeric" });
+                return (
+                  <div key={date} className="flex-1 flex flex-col items-center gap-0.5" title={`${label}: ${avg}`}>
+                    <div
+                      className="w-full rounded-t-sm transition-all duration-300"
+                      style={{ height: `${heightPct}%`, backgroundColor: getMoodColor(avg), opacity: 0.85 }}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex justify-between mt-1">
+              <span className="text-[10px] text-muted-foreground">
+                {new Date(dailyPoints[0].date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+              </span>
+              <span className="text-[10px] text-muted-foreground">Today</span>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 interface TrendData {
   date: string;
@@ -107,13 +237,6 @@ export default function TrendsEnhanced() {
         dayData["Goals"] = 0;
       }
 
-      const dayMoods = moodCheckins.filter(c => c.date === date);
-      if (dayMoods.length > 0) {
-        dayData["Mood Check-in"] = Math.round(dayMoods.reduce((sum, c) => sum + c.value, 0) / dayMoods.length);
-      } else {
-        dayData["Mood Check-in"] = 0;
-      }
-      
       return dayData;
     });
 
@@ -121,8 +244,7 @@ export default function TrendsEnhanced() {
   };
 
   const goalsVirtualMetric: UserMetric = { id: -1, userId: 0, name: "Goals", color: "#F97316", maxValue: 100, isDefault: false, isActive: true };
-  const moodVirtualMetric: UserMetric = { id: -2, userId: 0, name: "Mood Check-in", color: "#EC4899", maxValue: 100, isDefault: false, isActive: true };
-  const allMetricsWithGoals = [...metrics, goalsVirtualMetric, moodVirtualMetric];
+  const allMetricsWithGoals = [...metrics, goalsVirtualMetric];
 
   const chartData = processedData();
   const displayMetrics = selectedMetrics.length > 0 
@@ -399,6 +521,8 @@ export default function TrendsEnhanced() {
             )}
           </CardContent>
         </Card>
+
+        <MoodPatterns checkins={moodCheckins} />
 
         <Card className="border-border/50 shadow-sm">
           <CardContent className="p-4">

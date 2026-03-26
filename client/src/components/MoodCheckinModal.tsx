@@ -61,24 +61,30 @@ function MoodSlider({ value, onChange }: { value: number; onChange: (v: number) 
 
     const onTouchStart = (e: TouchEvent) => {
       e.preventDefault();
-      e.stopPropagation();
       isDragging.current = true;
       if (e.touches[0]) onChangeRef.current(getVal(e.touches[0].clientX));
+
+      const onTouchMove = (ev: TouchEvent) => {
+        ev.preventDefault();
+        if (ev.touches[0]) onChangeRef.current(getVal(ev.touches[0].clientX));
+      };
+      const onTouchEnd = () => {
+        isDragging.current = false;
+        document.removeEventListener("touchmove", onTouchMove);
+        document.removeEventListener("touchend", onTouchEnd);
+        document.removeEventListener("touchcancel", onTouchEnd);
+      };
+      document.addEventListener("touchmove", onTouchMove, { passive: false });
+      document.addEventListener("touchend", onTouchEnd);
+      document.addEventListener("touchcancel", onTouchEnd);
     };
-    const onTouchMove = (e: TouchEvent) => {
-      if (!isDragging.current) return;
-      e.preventDefault();
-      e.stopPropagation();
-      if (e.touches[0]) onChangeRef.current(getVal(e.touches[0].clientX));
-    };
-    const onTouchEnd = () => { isDragging.current = false; };
 
     const onMouseDown = (e: MouseEvent) => {
       e.preventDefault();
       isDragging.current = true;
       onChangeRef.current(getVal(e.clientX));
-      const onMouseMove = (e: MouseEvent) => {
-        if (isDragging.current) onChangeRef.current(getVal(e.clientX));
+      const onMouseMove = (ev: MouseEvent) => {
+        if (isDragging.current) onChangeRef.current(getVal(ev.clientX));
       };
       const onMouseUp = () => {
         isDragging.current = false;
@@ -89,17 +95,11 @@ function MoodSlider({ value, onChange }: { value: number; onChange: (v: number) 
       document.addEventListener("mouseup", onMouseUp);
     };
 
-    el.addEventListener("touchstart", onTouchStart, { passive: false, capture: true });
-    el.addEventListener("touchmove", onTouchMove, { passive: false, capture: true });
-    el.addEventListener("touchend", onTouchEnd, { capture: true });
-    el.addEventListener("touchcancel", onTouchEnd, { capture: true });
+    el.addEventListener("touchstart", onTouchStart, { passive: false });
     el.addEventListener("mousedown", onMouseDown);
 
     return () => {
-      el.removeEventListener("touchstart", onTouchStart, { capture: true });
-      el.removeEventListener("touchmove", onTouchMove, { capture: true });
-      el.removeEventListener("touchend", onTouchEnd, { capture: true });
-      el.removeEventListener("touchcancel", onTouchEnd, { capture: true });
+      el.removeEventListener("touchstart", onTouchStart);
       el.removeEventListener("mousedown", onMouseDown);
     };
   }, []);

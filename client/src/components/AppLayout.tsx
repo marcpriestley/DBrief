@@ -84,12 +84,29 @@ function DateSelector() {
   );
 }
 
+function getCurrentPeriod() {
+  const h = new Date().getHours();
+  if (h < 12) return "morning";
+  if (h < 17) return "afternoon";
+  return "evening";
+}
+
 function AppLayoutInner({ children }: AppLayoutProps) {
   const [location] = useLocation();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isMoodOpen, setIsMoodOpen] = useState(false);
 
   const { data: streak } = useQuery<any>({ queryKey: ["/api/streak"] });
+
+  const todayStr = new Date().toISOString().split("T")[0];
+  const { data: todayMoods = [] } = useQuery<any[]>({
+    queryKey: ["/api/mood-checkins", todayStr],
+    queryFn: () => fetch(`/api/mood-checkins/${todayStr}`, { credentials: "include" }).then(r => r.json()),
+    refetchInterval: 60000,
+  });
+  const currentPeriod = getCurrentPeriod();
+  const hasMoodForPeriod = todayMoods.some((m: any) => m.label === currentPeriod);
+  const showMoodPulse = !hasMoodForPeriod;
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -141,15 +158,20 @@ function AppLayoutInner({ children }: AppLayoutProps) {
             </Link>
             <div className="flex items-center gap-0.5">
               <StreakDisplay streak={streak} />
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                onClick={() => { haptic("light"); setIsMoodOpen(true); }}
-                title="Mood check-in"
-              >
-                <Smile className="h-4 w-4" />
-              </Button>
+              <div className="relative">
+                {showMoodPulse && (
+                  <span className="absolute inset-0 rounded-full animate-ping bg-primary/30 pointer-events-none" />
+                )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`h-8 w-8 transition-colors ${showMoodPulse ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
+                  onClick={() => { haptic("light"); setIsMoodOpen(true); }}
+                  title={`${currentPeriod.charAt(0).toUpperCase() + currentPeriod.slice(1)} mood check-in`}
+                >
+                  <Smile className={`h-4 w-4 ${showMoodPulse ? "scale-110" : ""} transition-transform`} />
+                </Button>
+              </div>
               <Button
                 variant="ghost"
                 size="icon"
