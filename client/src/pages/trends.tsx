@@ -146,7 +146,7 @@ interface TrendData {
 }
 
 export default function TrendsEnhanced() {
-  const [timeRange, setTimeRange] = useState<string>("30");
+  const [timeRange, setTimeRange] = useState<string>("7");
   const [selectedMetrics, setSelectedMetrics] = useState<string[]>([]);
   const [chartType, setChartType] = useState<string>("area");
   const { toast } = useToast();
