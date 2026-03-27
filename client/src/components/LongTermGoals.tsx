@@ -100,6 +100,8 @@ function CelebrationOverlay({ goal, onDismiss }: { goal: LongTermGoal; onDismiss
         <motion.button
           whileTap={{ scale: 0.95 }}
           onClick={onDismiss}
+          onMouseDown={(e) => e.preventDefault()}
+          tabIndex={-1}
           className="px-6 py-2.5 rounded-full bg-primary text-primary-foreground text-sm font-semibold"
         >
           Back to the pits
@@ -211,11 +213,22 @@ export default function LongTermGoals() {
   };
 
   const handleProgressCommit = useCallback((goal: LongTermGoal, value: number) => {
-    updateMutation.mutate({ id: goal.id, progress: value });
+    if (value === 100 && !goal.isCompleted) {
+      // Sliding to 100% counts as completing — trigger celebration
+      haptic("heavy");
+      // Blur any focused element so the keyboard doesn't open when the overlay mounts
+      (document.activeElement as HTMLElement | null)?.blur();
+      updateMutation.mutate({ id: goal.id, isCompleted: true, progress: 100 });
+      setCelebratingGoal({ ...goal, progress: 100 });
+    } else {
+      updateMutation.mutate({ id: goal.id, progress: value });
+    }
   }, [updateMutation]);
 
   const handleComplete = useCallback((goal: LongTermGoal) => {
     haptic("heavy");
+    // Blur any focused element so the keyboard doesn't open when the overlay mounts
+    (document.activeElement as HTMLElement | null)?.blur();
     // If already completed, un-complete it
     if (goal.isCompleted) {
       updateMutation.mutate({ id: goal.id, isCompleted: false, progress: goal.progress });

@@ -305,7 +305,11 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
         return res.status(400).json({ message: "Title is required" });
       }
       const existing = await db.select().from(longTermGoals)
-        .where(and(eq(longTermGoals.userId, userId), eq(longTermGoals.isActive, true)));
+        .where(and(
+          eq(longTermGoals.userId, userId),
+          eq(longTermGoals.isActive, true),
+          eq(longTermGoals.isCompleted, false),
+        ));
       if (existing.length >= 3) {
         return res.status(400).json({ message: "Maximum of 3 long-term goals allowed" });
       }
