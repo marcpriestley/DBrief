@@ -327,20 +327,33 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
     try {
       const userId = getUserId(req);
       const id = parseInt(req.params.id);
-      const { title, description } = req.body;
+      const { title, description, progress, isCompleted } = req.body;
       const [existing] = await db.select().from(longTermGoals)
         .where(and(eq(longTermGoals.id, id), eq(longTermGoals.userId, userId)));
       if (!existing) {
         return res.status(404).json({ message: "Goal not found" });
       }
+      const now = new Date();
+      const setFields: Record<string, any> = { updatedAt: now };
+      if (title) setFields.title = encrypt(title.trim());
+      if (description !== undefined) setFields.description = description ? encrypt(description.trim()) : null;
+      if (progress !== undefined) setFields.progress = Math.max(0, Math.min(100, Number(progress)));
+      if (isCompleted !== undefined) {
+        setFields.isCompleted = isCompleted;
+        if (isCompleted && !existing.isCompleted) setFields.completedAt = now;
+        if (!isCompleted) { setFields.completedAt = null; }
+      }
       const [updated] = await db.update(longTermGoals)
-        .set({
-          ...(title ? { title: encrypt(title.trim()) } : {}),
-          ...(description !== undefined ? { description: description ? encrypt(description.trim()) : null } : {}),
-        })
+        .set(setFields)
         .where(eq(longTermGoals.id, id))
         .returning();
-      res.json({ ...updated, title: title?.trim() || decrypt(existing.title), description: description?.trim() || (existing.description ? decrypt(existing.description) : null) });
+      res.json({
+        ...updated,
+        title: title?.trim() || decrypt(existing.title),
+        description: description !== undefined
+          ? (description?.trim() || null)
+          : (existing.description ? decrypt(existing.description) : null),
+      });
     } catch (error) {
       res.status(500).json({ message: "Failed to update goal" });
     }

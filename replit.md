@@ -5,7 +5,7 @@ DBrief is a personal performance engineering app built around the F1 debrief fra
 
 ## Core Concepts
 - **Infinite Goal**: An overarching aspirational target that can never be fully achieved but always drives forward (like an F1 team's pursuit of perfection). Displayed at the top of the dashboard. AI assists users in articulating it. Weekly alignment check during debriefs.
-- **Long-Term Targets**: Up to 3 bigger objectives the user is working toward. Sits between daily goals and the infinite goal.
+- **Long-Term Targets**: Up to 3 bigger objectives the user is working toward. Sits between daily goals and the infinite goal. Each has a progress slider (0–100%), a tick-to-complete button, completion celebration overlay, and a 7-day review nudge when stale.
 - **Daily Goals**: Recurring daily actions that compound over time.
 - **Performance Telemetry**: 0-100 metric scores tracked daily.
 - **Daily Debrief**: AI-guided conversational review of the day's "session" — framed as a post-race debrief.

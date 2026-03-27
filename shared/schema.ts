@@ -172,6 +172,10 @@ export const longTermGoals = pgTable("long_term_goals", {
   description: text("description"),
   sortOrder: integer("sort_order").default(0),
   isActive: boolean("is_active").default(true),
+  progress: integer("progress").default(0),
+  isCompleted: boolean("is_completed").default(false),
+  completedAt: timestamp("completed_at"),
+  updatedAt: timestamp("updated_at").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
