@@ -313,8 +313,11 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const VISIBLE_MESSAGES = 6;
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const debriefCardRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const hasMountedRef = useRef(false);
+  const focusMountedRef = useRef(false);
+  const prevMessageCountRef = useRef(0);
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const voice = useInlineVoice();
@@ -526,15 +529,37 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     }
   };
 
-  useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    }
-  }, [debrief?.messages, streamingContent, showCheckpoint]);
+  const currentMessageCount = debrief?.messages?.length ?? 0;
 
   useEffect(() => {
+    // Always scroll the chat container to its bottom internally
+    const container = chatContainerRef.current;
+    if (container) {
+      container.scrollTop = container.scrollHeight;
+    }
+
+    // On the very first data load don't scroll the page at all — the dashboard
+    // already starts at the top. Only scroll the page when a brand new message
+    // actually arrives after mount.
     if (!hasMountedRef.current) {
       hasMountedRef.current = true;
+      prevMessageCountRef.current = currentMessageCount;
+      return;
+    }
+
+    const isNewMessage = currentMessageCount > prevMessageCountRef.current;
+    prevMessageCountRef.current = currentMessageCount;
+
+    if (isNewMessage && debriefCardRef.current) {
+      // Bring the top of the debrief card to the top of the viewport so the
+      // AI response is immediately visible without the user having to scroll.
+      debriefCardRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [debrief?.messages, streamingContent, showCheckpoint, currentMessageCount]);
+
+  useEffect(() => {
+    if (!focusMountedRef.current) {
+      focusMountedRef.current = true;
       return;
     }
     if (!voice.isListening && !isStreaming) {
@@ -745,7 +770,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
         </Card>
       ))}
 
-    <Card className="border border-border/50 shadow-sm bg-card">
+    <Card ref={debriefCardRef} className="border border-border/50 shadow-sm bg-card">
       <CardContent className="p-0">
         <div className="px-5 py-3 border-b border-border/50 flex items-center justify-between">
           <div className="flex items-center gap-2">

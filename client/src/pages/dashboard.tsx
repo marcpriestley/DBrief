@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import AppLayout from "@/components/AppLayout";
 import ScoreDashboard from "@/components/ScoreDashboard";
@@ -10,6 +11,11 @@ import { useDateContext } from "@/contexts/DateContext";
 
 function DashboardContent() {
   const { selectedDate, dayView } = useDateContext();
+
+  // Always start at the top when the view loads or the date tab changes
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }, [selectedDate]);
 
   return (
     <div className="space-y-3 pt-1">
