@@ -13,28 +13,19 @@ export function useTTS() {
     try { return (localStorage.getItem(TTS_VOICE_KEY) as TTSVoice) || "nova"; } catch { return "nova"; }
   });
   const [speaking, setSpeaking] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const blobUrlRef = useRef<string | null>(null);
-
-  const revokeBlobUrl = useCallback(() => {
-    if (blobUrlRef.current) {
-      URL.revokeObjectURL(blobUrlRef.current);
-      blobUrlRef.current = null;
-    }
-  }, []);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const sourceRef = useRef<AudioBufferSourceNode | null>(null);
 
   const cancel = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.src = "";
-      audioRef.current = null;
-    }
-    revokeBlobUrl();
+    try { sourceRef.current?.stop(); } catch {}
+    sourceRef.current = null;
+    try { audioCtxRef.current?.close(); } catch {}
+    audioCtxRef.current = null;
     setSpeaking(false);
-  }, [revokeBlobUrl]);
+  }, []);
 
   const speak = useCallback(async (text: string) => {
     if (!enabled || !text.trim()) return;
@@ -53,36 +44,45 @@ export function useTTS() {
         signal: ac.signal,
       });
 
-      if (!res.ok) throw new Error("TTS request failed");
+      if (!res.ok) throw new Error(`TTS ${res.status}`);
 
-      const blob = await res.blob();
+      const arrayBuffer = await res.arrayBuffer();
       if (ac.signal.aborted) return;
 
-      const url = URL.createObjectURL(blob);
-      blobUrlRef.current = url;
+      // AudioContext works reliably in WKWebView (Capacitor iOS).
+      // HTMLAudioElement with blob URLs does NOT work in WKWebView.
+      const audioCtx = new AudioContext();
+      audioCtxRef.current = audioCtx;
 
-      const audio = new Audio(url);
-      audioRef.current = audio;
+      // On iOS the AudioContext may start suspended — resume it
+      if (audioCtx.state === "suspended") {
+        await audioCtx.resume();
+      }
+      if (ac.signal.aborted) { audioCtx.close(); return; }
 
-      audio.onended = () => {
+      const decoded = await audioCtx.decodeAudioData(arrayBuffer);
+      if (ac.signal.aborted) { audioCtx.close(); return; }
+
+      const source = audioCtx.createBufferSource();
+      source.buffer = decoded;
+      source.connect(audioCtx.destination);
+      sourceRef.current = source;
+
+      source.onended = () => {
         setSpeaking(false);
-        revokeBlobUrl();
-        audioRef.current = null;
-      };
-      audio.onerror = () => {
-        setSpeaking(false);
-        revokeBlobUrl();
-        audioRef.current = null;
+        try { audioCtx.close(); } catch {}
+        if (audioCtxRef.current === audioCtx) audioCtxRef.current = null;
+        if (sourceRef.current === source) sourceRef.current = null;
       };
 
-      await audio.play();
+      source.start(0);
     } catch (err: any) {
       if (err?.name !== "AbortError") {
         console.warn("[TTS] Error:", err?.message);
       }
       setSpeaking(false);
     }
-  }, [enabled, voice, cancel, revokeBlobUrl]);
+  }, [enabled, voice, cancel]);
 
   const toggle = useCallback(() => {
     setEnabled(prev => {

@@ -315,9 +315,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const debriefCardRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const hasMountedRef = useRef(false);
   const focusMountedRef = useRef(false);
-  const prevMessageCountRef = useRef(0);
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const voice = useInlineVoice();
@@ -475,6 +473,11 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
 
       queryClient.invalidateQueries({ queryKey: ["/api/debriefs", selectedDate] });
       if (accumulated) tts.speak(accumulated);
+      // Scroll to the top of the debrief card so the AI response is immediately visible.
+      // Use a short delay to let React flush the DOM update from the optimistic message.
+      setTimeout(() => {
+        debriefCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 80);
     } catch {
       toast({ title: "Error", description: "Failed to send message. Try again.", variant: "destructive" });
     } finally {
@@ -529,33 +532,14 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     }
   };
 
-  const currentMessageCount = debrief?.messages?.length ?? 0;
-
   useEffect(() => {
-    // Always scroll the chat container to its bottom internally
+    // Scroll the chat container to its bottom so the latest message is visible.
+    // This only moves the inner fixed-height div — it does NOT touch page scroll.
     const container = chatContainerRef.current;
     if (container) {
       container.scrollTop = container.scrollHeight;
     }
-
-    // On the very first data load don't scroll the page at all — the dashboard
-    // already starts at the top. Only scroll the page when a brand new message
-    // actually arrives after mount.
-    if (!hasMountedRef.current) {
-      hasMountedRef.current = true;
-      prevMessageCountRef.current = currentMessageCount;
-      return;
-    }
-
-    const isNewMessage = currentMessageCount > prevMessageCountRef.current;
-    prevMessageCountRef.current = currentMessageCount;
-
-    if (isNewMessage && debriefCardRef.current) {
-      // Bring the top of the debrief card to the top of the viewport so the
-      // AI response is immediately visible without the user having to scroll.
-      debriefCardRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }, [debrief?.messages, streamingContent, showCheckpoint, currentMessageCount]);
+  }, [debrief?.messages, streamingContent]);
 
   useEffect(() => {
     if (!focusMountedRef.current) {
