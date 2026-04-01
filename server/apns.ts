@@ -23,13 +23,17 @@ function getApnProvider(): apn.Provider | null {
   }
 
   try {
+    // TestFlight builds use the APNs SANDBOX endpoint.
+    // Set APNS_PRODUCTION=true in secrets only when you ship to the App Store.
+    const useProduction = process.env.APNS_PRODUCTION === 'true';
+    console.log(`[APNs] Initialising provider — environment: ${useProduction ? 'production' : 'sandbox'}`);
     const token: apn.ProviderOptions = {
       token: {
         key: Buffer.from(key.replace(/\\n/g, '\n'), 'utf8'),
         keyId,
         teamId,
       },
-      production: process.env.NODE_ENV === 'production',
+      production: useProduction,
     };
     apnProvider = new apn.Provider(token);
     console.log('[APNs] Provider initialised successfully');

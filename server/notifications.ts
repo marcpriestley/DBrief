@@ -3,16 +3,23 @@ import cron from 'node-cron';
 import { storage } from './storage';
 import { sendApnsNotification } from './apns';
 
+// Per-user, per-slot, per-date deduplication — prevents duplicate sends within
+// a single server process lifetime and across the 5-minute delivery window.
 const lastReminderSentDate = new Map<string, string>();
 const lastMoodReminderSent = new Map<string, boolean>();
 
 const MOOD_CHECKIN_TIMES = [
-  { hour: 8, minute: 0, label: "morning", title: "Good Morning!", body: "How are you feeling this morning? Take a moment to check in." },
-  { hour: 13, minute: 0, label: "afternoon", title: "Afternoon Check-in", body: "How's your afternoon going? Log your mood." },
-  { hour: 21, minute: 0, label: "evening", title: "Evening Reflection", body: "How was your day? Take a moment to reflect on your mood." },
+  { hour: 8,  minute: 0, label: "morning",   title: "Good Morning!",      body: "How are you feeling this morning? Take a moment to check in." },
+  { hour: 13, minute: 0, label: "afternoon",  title: "Afternoon Check-in", body: "How's your afternoon going? Log your mood." },
+  { hour: 21, minute: 0, label: "evening",    title: "Evening Reflection", body: "How was your day? Take a moment to reflect on your mood." },
 ];
 
-// Check if VAPID keys are configured and valid
+// Notifications window: fire if current time is within this many minutes AFTER
+// the scheduled time. Protects against server restarts near the reminder time.
+const DELIVERY_WINDOW_MINUTES = 5;
+
+// ─── VAPID / Web Push setup ────────────────────────────────────────────────
+
 let isNotificationsEnabled = !!(
   process.env.VAPID_EMAIL &&
   process.env.VAPID_PUBLIC_KEY &&
@@ -21,25 +28,21 @@ let isNotificationsEnabled = !!(
 
 let currentVapidPublicKey = '';
 
-// Configure web-push with VAPID keys if available
 if (isNotificationsEnabled) {
   try {
     const vapidEmail = process.env.VAPID_EMAIL!.startsWith('mailto:')
       ? process.env.VAPID_EMAIL!
       : `mailto:${process.env.VAPID_EMAIL}`;
-    const vapidPublicKey = process.env.VAPID_PUBLIC_KEY!.replace(/[^A-Za-z0-9_\-]/g, '');
+    const vapidPublicKey  = process.env.VAPID_PUBLIC_KEY!.replace(/[^A-Za-z0-9_\-]/g, '');
     const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY!.replace(/[^A-Za-z0-9_\-]/g, '');
     console.log(`[Notifications] VAPID public key length: ${vapidPublicKey.length}`);
 
     if (vapidPublicKey.length !== 87) {
-      console.log(`[Notifications] VAPID public key has invalid length (${vapidPublicKey.length}, expected 87). Generating fresh keys...`);
+      console.log(`[Notifications] VAPID key invalid length (${vapidPublicKey.length}), generating fresh keys...`);
       const freshKeys = webPush.generateVAPIDKeys();
-      console.log(`[Notifications] Generated fresh VAPID keys. Public key: ${freshKeys.publicKey.substring(0, 10)}...`);
-      console.log(`[Notifications] To persist, update VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY secrets with:`);
-      console.log(`[Notifications] PUBLIC: ${freshKeys.publicKey}`);
-      console.log(`[Notifications] PRIVATE: ${freshKeys.privateKey}`);
       webPush.setVapidDetails(vapidEmail, freshKeys.publicKey, freshKeys.privateKey);
       currentVapidPublicKey = freshKeys.publicKey;
+      console.log(`[Notifications] Fresh keys generated — update VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY secrets.`);
     } else {
       webPush.setVapidDetails(vapidEmail, vapidPublicKey, vapidPrivateKey);
       currentVapidPublicKey = vapidPublicKey;
@@ -47,17 +50,17 @@ if (isNotificationsEnabled) {
     console.log('[Notifications] VAPID keys configured successfully');
   } catch (error) {
     console.error('[Notifications] Failed to configure VAPID keys:', error);
-    console.log('[Notifications] Push notifications will be disabled');
-    isNotificationsEnabled = false; // Disable notifications if config fails
+    isNotificationsEnabled = false;
   }
 } else {
-  console.log('[Notifications] VAPID keys not configured - push notifications disabled');
-  console.log('[Notifications] Set VAPID_EMAIL, VAPID_PUBLIC_KEY, and VAPID_PRIVATE_KEY to enable');
+  console.log('[Notifications] VAPID keys not configured — web push disabled');
 }
 
 export function getVapidPublicKey(): string {
   return currentVapidPublicKey;
 }
+
+// ─── Types ─────────────────────────────────────────────────────────────────
 
 export interface PushNotificationPayload {
   title: string;
@@ -67,104 +70,114 @@ export interface PushNotificationPayload {
   tag?: string;
 }
 
+// ─── Send helpers ──────────────────────────────────────────────────────────
+
 export async function sendPushNotification(
   subscription: { endpoint: string; keys: { p256dh: string; auth: string } },
   payload: PushNotificationPayload
 ): Promise<boolean> {
-  if (!isNotificationsEnabled) {
-    console.log('[Notifications] Cannot send notification - VAPID keys not configured');
-    return false;
-  }
+  if (!isNotificationsEnabled) return false;
 
   try {
-    const pushSubscription = {
-      endpoint: subscription.endpoint,
-      keys: {
-        p256dh: subscription.keys.p256dh,
-        auth: subscription.keys.auth
-      }
-    };
-
     await webPush.sendNotification(
-      pushSubscription,
+      { endpoint: subscription.endpoint, keys: subscription.keys },
       JSON.stringify(payload)
     );
-
     return true;
   } catch (error: any) {
-    console.error('Push notification error:', error);
-    
-    // If subscription is expired (410 Gone), delete it
+    console.error('[Push] Send error:', error?.statusCode, error?.message);
     if (error.statusCode === 410) {
-      console.log('Subscription expired, deleting:', subscription.endpoint);
       await storage.deletePushSubscription(subscription.endpoint);
     }
-    
     return false;
   }
 }
 
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+/**
+ * Returns true if the scheduled reminder time falls within the delivery window
+ * ending at `now` (i.e., now is 0–DELIVERY_WINDOW_MINUTES minutes after the
+ * scheduled time). This lets the system catch up after brief server restarts.
+ */
+function isWithinDeliveryWindow(
+  scheduledHour: number,
+  scheduledMinute: number,
+  currentHour: number,
+  currentMinute: number
+): boolean {
+  const scheduledTotalMinutes = scheduledHour * 60 + scheduledMinute;
+  const currentTotalMinutes   = currentHour   * 60 + currentMinute;
+  const diff = currentTotalMinutes - scheduledTotalMinutes;
+  return diff >= 0 && diff < DELIVERY_WINDOW_MINUTES;
+}
+
+async function dispatchToSubscriptions(
+  subscriptions: Array<{ apnsToken?: string | null; endpoint: string; p256dh: string; auth: string }>,
+  payload: PushNotificationPayload
+) {
+  for (const sub of subscriptions) {
+    if (sub.apnsToken) {
+      await sendApnsNotification(sub.apnsToken, payload);
+    } else {
+      await sendPushNotification(
+        { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+        payload
+      );
+    }
+  }
+}
+
+// ─── Daily reminders ────────────────────────────────────────────────────────
+
 export async function sendDailyReminders() {
   const now = new Date();
-  
   const allUsers = await storage.getAllUsersForReminder("");
-  
+
   for (const user of allUsers) {
-    if (!user.timezone) continue;
-    
+    if (!user.timezone || !user.notificationsEnabled) continue;
+
     try {
       const userDateStr = now.toLocaleDateString('en-CA', { timeZone: user.timezone });
       const userTimeStr = now.toLocaleString('en-US', {
         timeZone: user.timezone,
         hour: '2-digit',
         minute: '2-digit',
-        hour12: false
+        hour12: false,
       });
-      
+
       const [currentHourStr, currentMinuteStr] = userTimeStr.split(':');
-      const currentHour = parseInt(currentHourStr, 10);
+      const currentHour   = parseInt(currentHourStr, 10);
       const currentMinute = parseInt(currentMinuteStr, 10);
-      
+
       const reminderTimes = [
-        { time: user.reminderTime || "09:00", slot: "1" },
+        { time: user.reminderTime  || "09:00", slot: "1" },
         { time: user.reminderTime2 || "21:00", slot: "2" },
       ];
 
       for (const reminder of reminderTimes) {
+        // Skip if already sent today for this slot
         const key = `${user.id}-${reminder.slot}`;
-        const lastSent = lastReminderSentDate.get(key);
-        if (lastSent === userDateStr) continue;
+        if (lastReminderSentDate.get(key) === userDateStr) continue;
 
         const [reminderHour, reminderMinute] = reminder.time.split(':').map(Number);
-        
-        if (reminderHour === currentHour && reminderMinute === currentMinute) {
-          const isMorning = reminderHour < 14;
-          const payload: PushNotificationPayload = {
-            title: isMorning ? '☀️ Morning Check-in' : '🔥 Evening Reminder',
-            body: isMorning
-              ? 'Start your day right — set your goals and log how you feel.'
-              : 'Time to log your scores and continue your streak!',
-            icon: '/icon-192.png',
-            url: '/',
-            tag: `daily-reminder-${user.id}-${reminder.slot}`
-          };
 
-          for (const subscription of user.subscriptions) {
-            if (subscription.apnsToken) {
-              await sendApnsNotification(subscription.apnsToken, payload);
-            } else {
-              await sendPushNotification(
-                {
-                  endpoint: subscription.endpoint,
-                  keys: { p256dh: subscription.p256dh, auth: subscription.auth }
-                },
-                payload
-              );
-            }
-          }
-          
-          lastReminderSentDate.set(key, userDateStr);
-        }
+        if (!isWithinDeliveryWindow(reminderHour, reminderMinute, currentHour, currentMinute)) continue;
+
+        const isMorning = reminderHour < 14;
+        const payload: PushNotificationPayload = {
+          title: isMorning ? '☀️ Morning Check-in' : '🔥 Evening Reminder',
+          body:  isMorning
+            ? 'Start your day right — set your goals and log how you feel.'
+            : 'Time to log your scores and continue your streak!',
+          icon: '/icon-192.png',
+          url:  '/',
+          tag:  `daily-reminder-${user.id}-${reminder.slot}`,
+        };
+
+        console.log(`[Daily Reminders] Sending slot ${reminder.slot} to user ${user.id} (${user.timezone}, ${reminder.time})`);
+        await dispatchToSubscriptions(user.subscriptions, payload);
+        lastReminderSentDate.set(key, userDateStr);
       }
     } catch (error) {
       console.error(`[Daily Reminders] Error processing user ${user.id}:`, error);
@@ -172,51 +185,45 @@ export async function sendDailyReminders() {
   }
 }
 
+// ─── Mood check-in reminders ────────────────────────────────────────────────
+
 export async function sendMoodCheckinReminders() {
   const now = new Date();
   const allUsers = await storage.getAllUsersForReminder("");
 
   for (const user of allUsers) {
-    if (!user.timezone || user.notificationsEnabled === false) continue;
+    if (!user.timezone || !user.notificationsEnabled) continue;
 
     try {
+      const userDateStr = now.toLocaleDateString('en-CA', { timeZone: user.timezone });
       const userTimeStr = now.toLocaleString('en-US', {
         timeZone: user.timezone,
         hour: '2-digit',
         minute: '2-digit',
-        hour12: false
+        hour12: false,
       });
-      const userDateStr = now.toLocaleDateString('en-CA', { timeZone: user.timezone });
+
       const [currentHourStr, currentMinuteStr] = userTimeStr.split(':');
-      const currentHour = parseInt(currentHourStr, 10);
+      const currentHour   = parseInt(currentHourStr, 10);
       const currentMinute = parseInt(currentMinuteStr, 10);
 
       for (const checkinTime of MOOD_CHECKIN_TIMES) {
-        if (checkinTime.hour === currentHour && checkinTime.minute === currentMinute) {
-          const key = `${user.id}-${userDateStr}-${checkinTime.label}`;
-          if (lastMoodReminderSent.get(key)) continue;
+        if (!isWithinDeliveryWindow(checkinTime.hour, checkinTime.minute, currentHour, currentMinute)) continue;
 
-          const payload: PushNotificationPayload = {
-            title: checkinTime.title,
-            body: checkinTime.body,
-            icon: '/icon-192.png',
-            url: '/dashboard?mood=checkin',
-            tag: `mood-${checkinTime.label}-${user.id}`
-          };
+        const key = `${user.id}-${userDateStr}-${checkinTime.label}`;
+        if (lastMoodReminderSent.get(key)) continue;
 
-          for (const subscription of user.subscriptions) {
-            if (subscription.apnsToken) {
-              await sendApnsNotification(subscription.apnsToken, payload);
-            } else {
-              await sendPushNotification(
-                { endpoint: subscription.endpoint, keys: { p256dh: subscription.p256dh, auth: subscription.auth } },
-                payload
-              );
-            }
-          }
+        const payload: PushNotificationPayload = {
+          title: checkinTime.title,
+          body:  checkinTime.body,
+          icon:  '/icon-192.png',
+          url:   '/dashboard?mood=checkin',
+          tag:   `mood-${checkinTime.label}-${user.id}`,
+        };
 
-          lastMoodReminderSent.set(key, true);
-        }
+        console.log(`[Mood Reminders] Sending ${checkinTime.label} check-in to user ${user.id}`);
+        await dispatchToSubscriptions(user.subscriptions, payload);
+        lastMoodReminderSent.set(key, true);
       }
     } catch (error) {
       console.error(`[Mood Reminders] Error processing user ${user.id}:`, error);
@@ -224,9 +231,11 @@ export async function sendMoodCheckinReminders() {
   }
 }
 
+// ─── Scheduler ──────────────────────────────────────────────────────────────
+
 export function startNotificationScheduler() {
   if (!isNotificationsEnabled) {
-    console.log('[Notification Scheduler] Disabled - VAPID keys not configured');
+    console.log('[Notification Scheduler] Disabled — VAPID keys not configured');
     return;
   }
 
@@ -235,9 +244,9 @@ export function startNotificationScheduler() {
       await sendDailyReminders();
       await sendMoodCheckinReminders();
     } catch (error) {
-      console.error('Error sending reminders:', error);
+      console.error('[Scheduler] Error:', error);
     }
   });
 
-  console.log('[Notification Scheduler] Started - checking every minute for due reminders');
+  console.log('[Notification Scheduler] Started — checking every minute for due reminders');
 }
