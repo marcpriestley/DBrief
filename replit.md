@@ -9,6 +9,7 @@ DBrief is a personal performance engineering app built around the F1 debrief fra
 - **Daily Goals**: Recurring daily actions that compound over time.
 - **Performance Telemetry**: 0-100 metric scores tracked daily.
 - **Daily Debrief**: AI-guided conversational review of the day's "session" — framed as a post-race debrief.
+- **AI Insights Access**: Two-phase gate. Phase 1 (initial unlock): requires a 7-day consecutive streak — stored permanently in `longestStreak`. Phase 2 (ongoing access): requires ≥5 of the last 7 days with data (`recentActiveDays`), allowing 1 missed day without losing access. Missing 3+ days pauses insights; logging any day restores them automatically without needing to rebuild the 7-day streak. Three UI states: Locked / Standby (amber) / Active.
 
 ## User Preferences
 - Infinite goal banner always at the very top of the dashboard

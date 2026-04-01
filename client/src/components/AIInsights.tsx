@@ -1,12 +1,23 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Sparkles, X, Flame, Lock, RefreshCw, Volume2, VolumeX, Square } from "lucide-react";
+import { Sparkles, X, Flame, Lock, RefreshCw, Volume2, Square, PauseCircle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import type { AIInsight, Streak } from "@shared/schema";
+import type { AIInsight } from "@shared/schema";
 import { useTTS } from "@/hooks/useTTS";
+
+type StreakResponse = {
+  currentStreak: number;
+  longestStreak: number;
+  lastEntryDate: string | null;
+  recentActiveDays: number;
+  insightsUnlocked: boolean;
+};
+
+const UNLOCK_THRESHOLD = 7;   // consecutive days for initial unlock
+const MAINTAIN_THRESHOLD = 5; // of last 7 days to keep access
 
 export default function AIInsights() {
   const { toast } = useToast();
@@ -17,12 +28,9 @@ export default function AIInsights() {
     queryKey: ["/api/ai-insights"],
   });
 
-  const { data: streak, isLoading: streakLoading } = useQuery<Streak>({
+  const { data: streak, isLoading: streakLoading } = useQuery<StreakResponse>({
     queryKey: ["/api/streak"],
   });
-
-  const currentStreak = streak?.currentStreak || 0;
-  const streakUnlocked = currentStreak >= 7;
 
   const generateInsightMutation = useMutation({
     mutationFn: async () => {
@@ -32,8 +40,13 @@ export default function AIInsights() {
     onSuccess: (data) => {
       if (data.needsStreak) {
         toast({
-          title: "Keep going!",
-          description: `You need a 7-day streak to unlock AI Insights. You're at ${data.currentStreak} days.`,
+          title: "Keep building",
+          description: `Log 7 consecutive days to unlock AI Insights. You're at ${data.currentStreak} days.`,
+        });
+      } else if (data.needsDataRichness) {
+        toast({
+          title: "Insufficient data",
+          description: `Log today's telemetry to restore insights. You have ${data.recentActiveDays}/7 recent days.`,
         });
       } else {
         queryClient.invalidateQueries({ queryKey: ["/api/ai-insights"] });
@@ -52,8 +65,15 @@ export default function AIInsights() {
   const latestInsight = insights[0];
   if (streakLoading) return null;
 
-  if (!streakUnlocked) {
-    const progress = Math.min(100, Math.round((currentStreak / 7) * 100));
+  const currentStreak   = streak?.currentStreak   ?? 0;
+  const longestStreak   = streak?.longestStreak   ?? 0;
+  const recentActiveDays = streak?.recentActiveDays ?? 0;
+  const insightsUnlocked = streak?.insightsUnlocked ?? false;
+  const everUnlocked     = longestStreak >= UNLOCK_THRESHOLD;
+
+  // ── State 1: Never unlocked — needs first 7-day streak ───────────────────
+  if (!everUnlocked) {
+    const progress = Math.min(100, Math.round((currentStreak / UNLOCK_THRESHOLD) * 100));
     return (
       <Card className="border-0 shadow-sm bg-card">
         <CardContent className="p-5">
@@ -63,7 +83,7 @@ export default function AIInsights() {
             <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full ml-1">Locked</span>
           </div>
           <p className="text-sm text-muted-foreground mb-3">
-            Build a 7-day streak to unlock personalized insights.
+            Log 7 consecutive days to unlock personalized insights. Once unlocked, one missed day won't cost you access.
           </p>
           <div className="flex items-center gap-3">
             <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
@@ -74,13 +94,52 @@ export default function AIInsights() {
             </div>
             <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
               <Flame className="h-3.5 w-3.5 text-orange-400" />
-              {currentStreak}/7
+              {currentStreak}/{UNLOCK_THRESHOLD}
             </span>
           </div>
         </CardContent>
       </Card>
     );
   }
+
+  // ── State 2: Unlocked before, but data window is thin — insights paused ──
+  if (!insightsUnlocked) {
+    const daysNeeded = MAINTAIN_THRESHOLD - recentActiveDays;
+    const progress = Math.min(100, Math.round((recentActiveDays / MAINTAIN_THRESHOLD) * 100));
+    return (
+      <Card className="border-0 shadow-sm bg-card">
+        <CardContent className="p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <PauseCircle className="h-4 w-4 text-amber-500" />
+            <h3 className="text-sm font-semibold text-foreground">AI Insights</h3>
+            <span className="text-xs bg-amber-500/15 text-amber-600 px-2 py-0.5 rounded-full ml-1 font-medium">Standby</span>
+          </div>
+          <p className="text-sm text-muted-foreground mb-3">
+            {daysNeeded === 1
+              ? "Log today's telemetry to bring insights back online."
+              : `Log data on ${daysNeeded} more day${daysNeeded !== 1 ? "s" : ""} this week to restore real-time analysis.`
+            }
+          </p>
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-amber-400 to-amber-500 rounded-full transition-all duration-500"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <span className="text-xs font-medium text-muted-foreground">
+              {recentActiveDays}/{MAINTAIN_THRESHOLD} days
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground mt-2 opacity-70">
+            No need to rebuild your streak — just log today.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // ── State 3: Fully active ─────────────────────────────────────────────────
 
   if (generateInsightMutation.isPending) {
     return (
@@ -112,10 +171,7 @@ export default function AIInsights() {
           <p className="text-sm text-muted-foreground mb-3">
             Get personalized insights from your scores, mood, and debriefs.
           </p>
-          <Button
-            size="sm"
-            onClick={() => generateInsightMutation.mutate()}
-          >
+          <Button size="sm" onClick={() => generateInsightMutation.mutate()}>
             Generate Insight
           </Button>
         </CardContent>

@@ -788,8 +788,17 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
   app.get("/api/streak", async (req, res) => {
     try {
       const userId = getUserId(req);
-      const streak = await storage.getUserStreak(userId);
-      res.json(streak || { currentStreak: 0, longestStreak: 0 });
+      const [streak, recentActiveDays] = await Promise.all([
+        storage.getUserStreak(userId),
+        storage.getRecentActiveDays(userId),
+      ]);
+      const base = streak || { currentStreak: 0, longestStreak: 0, lastEntryDate: null };
+      // Insights unlock rules:
+      //   Phase 1 — initial unlock: longestStreak must reach 7 (one-time gate)
+      //   Phase 2 — ongoing access: recentActiveDays >= 5 (allows 1 missed day)
+      const everUnlocked = (base.longestStreak ?? 0) >= 7;
+      const insightsUnlocked = everUnlocked && recentActiveDays >= 5;
+      res.json({ ...base, recentActiveDays, insightsUnlocked });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch streak" });
     }
@@ -833,10 +842,17 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
     try {
       const userId = getUserId(req);
       
-      const streak = await storage.getUserStreak(userId);
-      
-      if ((streak?.currentStreak || 0) < 7) {
+      const [streak, recentActiveDays] = await Promise.all([
+        storage.getUserStreak(userId),
+        storage.getRecentActiveDays(userId),
+      ]);
+
+      const everUnlocked = (streak?.longestStreak ?? 0) >= 7;
+      if (!everUnlocked) {
         return res.json({ insight: null, needsStreak: true, currentStreak: streak?.currentStreak || 0 });
+      }
+      if (recentActiveDays < 5) {
+        return res.json({ insight: null, needsDataRichness: true, recentActiveDays });
       }
       
       const entries = await storage.getJournalEntriesByUser(userId);

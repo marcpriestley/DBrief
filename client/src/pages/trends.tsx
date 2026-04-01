@@ -191,8 +191,13 @@ export default function TrendsEnhanced() {
     onSuccess: (data) => {
       if (data?.needsStreak) {
         toast({
-          title: "Keep going!",
-          description: `Build a 7-day streak to unlock AI Insights. You're at ${data.currentStreak || 0} days.`,
+          title: "Keep building",
+          description: `Log 7 consecutive days to unlock AI Insights. You're at ${data.currentStreak || 0} days.`,
+        });
+      } else if (data?.needsDataRichness) {
+        toast({
+          title: "Insufficient data",
+          description: `Log today's telemetry to restore insights. You have ${data.recentActiveDays}/7 recent days.`,
         });
       } else {
         queryClient.invalidateQueries({ queryKey: ["/api/ai-insights"] });

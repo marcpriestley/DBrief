@@ -9,7 +9,7 @@ import {
   type JournalAttachment, type InsertJournalAttachment, type MoodCheckin, type InsertMoodCheckin
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, gte, gt } from "drizzle-orm";
 import { encrypt, decrypt } from "./encryption";
 
 export interface IStorage {
@@ -43,6 +43,7 @@ export interface IStorage {
   getUserStreak(userId: number): Promise<Streak | undefined>;
   createStreak(streak: InsertStreak): Promise<Streak>;
   updateStreak(userId: number, streak: Partial<InsertStreak>): Promise<Streak | undefined>;
+  getRecentActiveDays(userId: number): Promise<number>;
 
   // AI insights methods
   getActiveAIInsights(userId: number): Promise<AIInsight[]>;
@@ -335,6 +336,16 @@ export class MemStorage implements IStorage {
     return streak;
   }
 
+  async getRecentActiveDays(userId: number): Promise<number> {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+    const sevenDaysAgoStr = sevenDaysAgo.toISOString().split('T')[0];
+    const scores = Array.from(this.dailyScores.values()).filter(
+      s => s.userId === userId && s.date >= sevenDaysAgoStr && (s.value ?? 0) > 0
+    );
+    return new Set(scores.map(s => s.date)).size;
+  }
+
   async updateStreak(userId: number, updates: Partial<InsertStreak>): Promise<Streak | undefined> {
     const streak = Array.from(this.streaks.values()).find(s => s.userId === userId);
     if (streak) {
@@ -622,6 +633,21 @@ export class DatabaseStorage implements IStorage {
       .where(eq(streaks.userId, userId))
       .returning();
     return updated || undefined;
+  }
+
+  async getRecentActiveDays(userId: number): Promise<number> {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+    const sevenDaysAgoStr = sevenDaysAgo.toISOString().split('T')[0];
+    const rows = await db
+      .selectDistinct({ date: dailyScores.date })
+      .from(dailyScores)
+      .where(and(
+        eq(dailyScores.userId, userId),
+        gte(dailyScores.date, sevenDaysAgoStr),
+        gt(dailyScores.value, 0),
+      ));
+    return rows.length;
   }
 
   async getActiveAIInsights(userId: number): Promise<AIInsight[]> {
