@@ -44,6 +44,11 @@ function formatMsgTime(isoStr: string) {
   }
 }
 
+// How long of unbroken silence (no new speech) before the mic auto-stops
+const AUTO_STOP_SILENCE_MS = 30_000;
+// How often to poll on native to detect iOS stopped recognition due to short pause
+const NATIVE_RESTART_POLL_MS = 2_000;
+
 function useInlineVoice() {
   const [isListening, setIsListening] = useState(false);
   const [interimText, setInterimText] = useState("");
@@ -57,6 +62,12 @@ function useInlineVoice() {
   const watchdogRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const nativeListenerRef = useRef<any>(null);
   const micPermGrantedRef = useRef(false);
+  // Silence tracking — auto-stop only after this many ms with no speech
+  const lastSpeechTimeRef = useRef<number>(0);
+  const silenceAutoStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const nativeSilenceCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // stopRef lets timers call stop() without a forward-reference problem
+  const stopRef = useRef<() => Promise<void>>(async () => {});
 
   const isNative = Capacitor.isNativePlatform();
   const isSupported =
@@ -101,6 +112,12 @@ function useInlineVoice() {
         onFinalRef.current?.(accumulatedRef.current);
       }
       setInterimText(interim);
+      // Any speech resets the 30-second silence auto-stop timer
+      lastSpeechTimeRef.current = Date.now();
+      if (silenceAutoStopRef.current) clearTimeout(silenceAutoStopRef.current);
+      silenceAutoStopRef.current = setTimeout(() => {
+        if (shouldListenRef.current) stopRef.current();
+      }, AUTO_STOP_SILENCE_MS);
     };
 
     recognition.onerror = (e: any) => {
@@ -189,7 +206,41 @@ function useInlineVoice() {
             setInterimText(partial);
             accumulatedRef.current = partial;
             onFinalRef.current?.(partial);
+            // Track last speech so the silence-check loop can restart iOS recognition
+            if (partial) {
+              lastSpeechTimeRef.current = Date.now();
+              if (silenceAutoStopRef.current) clearTimeout(silenceAutoStopRef.current);
+              silenceAutoStopRef.current = setTimeout(() => {
+                if (shouldListenRef.current) stopRef.current();
+              }, AUTO_STOP_SILENCE_MS);
+            }
           });
+
+          lastSpeechTimeRef.current = Date.now();
+
+          // iOS kills speech recognition after a short pause (~1–2 s of silence).
+          // This loop silently restarts it so the mic stays hot until the user taps stop
+          // or 30 seconds of unbroken silence triggers the auto-stop timer above.
+          if (nativeSilenceCheckRef.current) clearInterval(nativeSilenceCheckRef.current);
+          nativeSilenceCheckRef.current = setInterval(async () => {
+            if (!shouldListenRef.current || isStoppingRef.current) return;
+            const silenceDuration = Date.now() - lastSpeechTimeRef.current;
+            // If iOS has been quiet for >2 s but we haven't hit the 30 s auto-stop,
+            // restart recognition so the next utterance is captured.
+            if (silenceDuration > NATIVE_RESTART_POLL_MS && silenceDuration < AUTO_STOP_SILENCE_MS) {
+              try {
+                await SpeechRecognition.stop().catch(() => {});
+                if (!shouldListenRef.current || isStoppingRef.current) return;
+                await SpeechRecognition.start({
+                  language: "en-US",
+                  maxResults: 1,
+                  partialResults: true,
+                  popup: false,
+                });
+              } catch {}
+            }
+          }, NATIVE_RESTART_POLL_MS);
+
           await SpeechRecognition.start({
             language: "en-US",
             maxResults: 1,
@@ -255,6 +306,8 @@ function useInlineVoice() {
     shouldListenRef.current = false;
     if (watchdogRef.current) { clearInterval(watchdogRef.current); watchdogRef.current = null; }
     if (restartTimerRef.current) { clearTimeout(restartTimerRef.current); restartTimerRef.current = null; }
+    if (nativeSilenceCheckRef.current) { clearInterval(nativeSilenceCheckRef.current); nativeSilenceCheckRef.current = null; }
+    if (silenceAutoStopRef.current) { clearTimeout(silenceAutoStopRef.current); silenceAutoStopRef.current = null; }
 
     if (isNative) {
       // Remove listener FIRST so no more partialResults fire during/after stop
@@ -278,11 +331,16 @@ function useInlineVoice() {
     try { old?.abort(); } catch {}
   }, [isNative]);
 
+  // Keep stopRef in sync so timers can call stop() without a forward-reference issue
+  stopRef.current = stop;
+
   useEffect(() => {
     return () => {
       shouldListenRef.current = false;
       if (watchdogRef.current) clearInterval(watchdogRef.current);
       if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
+      if (nativeSilenceCheckRef.current) clearInterval(nativeSilenceCheckRef.current);
+      if (silenceAutoStopRef.current) clearTimeout(silenceAutoStopRef.current);
       const old = recognitionRef.current;
       recognitionRef.current = null;
       try { old?.abort(); } catch {}
@@ -954,7 +1012,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                 <span className="w-1 h-2.5 bg-red-500 rounded-full animate-pulse" style={{ animationDelay: "300ms" }} />
                 <span className="w-1 h-3.5 bg-red-500 rounded-full animate-pulse" style={{ animationDelay: "100ms" }} />
               </div>
-              <span className="text-xs text-red-500 font-medium">Listening...</span>
+              <span className="text-xs text-red-500 font-medium">Recording — tap mic to stop</span>
             </div>
           )}
           {voice.micError && (
@@ -998,7 +1056,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
               value={displayInput}
               onChange={(e) => setUserInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={voice.isListening ? "Listening — speak freely..." : "Type or tap the mic to talk..."}
+              placeholder={voice.isListening ? "Speak freely — pausing is fine, mic stays on..." : "Type or tap the mic to talk..."}
               className="flex-1 min-w-0 bg-transparent border-0 outline-none text-sm placeholder:text-muted-foreground/60 text-foreground p-1"
               disabled={isStreaming}
             />
