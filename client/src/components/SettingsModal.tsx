@@ -564,6 +564,11 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               )}
 
               <p className="text-[11px] text-muted-foreground font-medium">Tap to add metrics to your dashboard:</p>
+              {isNativeIOS() && (
+                <p className="text-[10px] text-muted-foreground leading-relaxed">
+                  ⚡ = auto-syncs from Apple Health · others are entered manually
+                </p>
+              )}
 
               <div className="space-y-3">
                 {groupedMetrics.map(({ category, metrics }) => (
@@ -573,6 +578,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       {metrics.map((metric) => {
                         const isAdded = existingMetricNames.has(metric.name.toLowerCase());
                         const isPending = addMetricMutation.isPending || deleteMetricMutation.isPending;
+                        const canAutoSync = getHealthSyncableMetrics().includes(metric.name);
                         return (
                           <button
                             key={metric.name}
@@ -588,6 +594,9 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                               <span className="text-xs text-foreground">{metric.name}</span>
                               {metric.unit && (
                                 <span className="text-[10px] text-muted-foreground">({metric.unit})</span>
+                              )}
+                              {isNativeIOS() && canAutoSync && (
+                                <span className="text-[9px] text-primary font-semibold">⚡</span>
                               )}
                             </div>
                             {isAdded ? (
