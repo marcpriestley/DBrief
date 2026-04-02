@@ -735,9 +735,23 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getGoalTemplates(userId: number): Promise<GoalTemplate[]> {
-    return await db.select().from(goalTemplates)
+    const all = await db.select().from(goalTemplates)
       .where(and(eq(goalTemplates.userId, userId), eq(goalTemplates.isActive, true)))
       .orderBy(goalTemplates.sortOrder);
+
+    // One-time migration: remove "Make my bed" goal template for users who now have Habit Lab
+    const makeMyBedTemplate = all.find(t => t.title.toLowerCase() === "make my bed");
+    if (makeMyBedTemplate) {
+      const userHabits = await db.select({ id: habits.id }).from(habits).where(eq(habits.userId, userId));
+      if (userHabits.length > 0) {
+        await db.update(goalTemplates)
+          .set({ isActive: false })
+          .where(eq(goalTemplates.id, makeMyBedTemplate.id));
+        return all.filter(t => t.id !== makeMyBedTemplate.id);
+      }
+    }
+
+    return all;
   }
 
   async createGoalTemplate(template: InsertGoalTemplate): Promise<GoalTemplate> {
