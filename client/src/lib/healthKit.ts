@@ -43,6 +43,10 @@ const ALL_HEALTH_TYPES: HealthDataType[] = [
 // localStorage key to persist authorization state
 const AUTH_KEY = "dbrief_health_authorized";
 
+// Last raw error from the native plugin — exposed for diagnostic display
+let _lastHealthError: string | null = null;
+export function getLastHealthError(): string | null { return _lastHealthError; }
+
 export function getHealthAuthState(): boolean {
   return localStorage.getItem(AUTH_KEY) === "true";
 }
@@ -64,8 +68,10 @@ export async function checkHealthAvailable(): Promise<HealthAvailability> {
     return available ? "available" : "unavailable";
   } catch (e: any) {
     const msg = String(e?.message ?? e);
+    _lastHealthError = msg;
     // Capacitor throws "not implemented" when the native plugin isn't registered
-    if (msg.toLowerCase().includes("not implemented") || msg.toLowerCase().includes("not available")) {
+    if (msg.toLowerCase().includes("not implemented") || msg.toLowerCase().includes("not available") ||
+        msg.toLowerCase().includes("unimplemented") || msg.toLowerCase().includes("no implementation")) {
       return "not_installed";
     }
     return "unavailable";
@@ -83,11 +89,15 @@ export async function requestHealthPermissions(): Promise<HealthAuthResult> {
   try {
     await Health.requestAuthorization({ read: ALL_HEALTH_TYPES, write: [] });
     setHealthAuthState(true);
+    _lastHealthError = null;
     return "granted";
   } catch (e: any) {
     const msg = String(e?.message ?? e);
+    _lastHealthError = msg;
     console.error("[HealthKit] Authorization error:", msg);
-    if (msg.toLowerCase().includes("not implemented") || msg.toLowerCase().includes("not available")) {
+    if (msg.toLowerCase().includes("not implemented") || msg.toLowerCase().includes("not available") ||
+        msg.toLowerCase().includes("unimplemented") || msg.toLowerCase().includes("no implementation") ||
+        msg.toLowerCase().includes("plugin") || msg.toLowerCase().includes("not found")) {
       return "not_installed";
     }
     if (msg.toLowerCase().includes("denied") || msg.toLowerCase().includes("restricted")) {

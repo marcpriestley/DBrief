@@ -26,6 +26,7 @@ import {
   setHealthAuthState,
   getHealthSyncableMetrics,
   checkHealthAvailable,
+  getLastHealthError,
 } from "@/lib/healthKit";
 
 const APPLE_HEALTH_METRICS: {
@@ -183,6 +184,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [healthSyncing, setHealthSyncing] = useState(false);
   const [healthSyncResult, setHealthSyncResult] = useState<string | null>(null);
   const [healthSetupNeeded, setHealthSetupNeeded] = useState(false);
+  const [healthRawError, setHealthRawError] = useState<string | null>(null);
 
   useEffect(() => {
     if (settings) {
@@ -192,6 +194,17 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       setDisplayName(settings.displayName ?? "");
     }
   }, [settings]);
+
+  // Proactively check if the HealthKit plugin is available when Settings opens on iOS
+  useEffect(() => {
+    if (!isNativeIOS() || healthAuthorized) return;
+    checkHealthAvailable().then(availability => {
+      if (availability === "not_installed" || availability === "unavailable") {
+        setHealthSetupNeeded(true);
+        setHealthRawError(getLastHealthError());
+      }
+    });
+  }, []);
 
   const updateSettingsMutation = useMutation({
     mutationFn: async (data: Partial<UserSettings>) => {
@@ -337,6 +350,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         toast({ title: "Apple Health connected", description: `${syncResult.synced} metric${syncResult.synced !== 1 ? "s" : ""} synced for today.` });
       } else if (result === "not_installed") {
         setHealthSetupNeeded(true);
+        setHealthRawError(getLastHealthError());
       } else if (result === "denied") {
         toast({ title: "Health access denied", description: "Open iOS Settings → Privacy & Security → Health → DBrief and enable all categories.", variant: "destructive" });
       } else {
@@ -504,18 +518,24 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       <div className="rounded-md bg-amber-500/10 border border-amber-500/20 p-2.5 space-y-1.5">
                         <div className="flex items-center gap-1.5">
                           <AlertCircle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
-                          <p className="text-[11px] font-semibold text-amber-700">Xcode setup required</p>
+                          <p className="text-[11px] font-semibold text-amber-700">HealthKit plugin not active</p>
                         </div>
                         <p className="text-[11px] text-amber-700 leading-relaxed">
-                          The HealthKit plugin isn't compiled into this build yet. To fix it, do the following in Xcode then rebuild and install:
+                          The native HealthKit plugin isn't registered in this build. Run these steps in order, then rebuild:
                         </p>
                         <ol className="text-[11px] text-amber-700 space-y-0.5 list-decimal ml-3">
-                          <li>In your project terminal: <span className="font-mono bg-amber-200/50 px-0.5 rounded">npx cap sync ios</span></li>
-                          <li>Xcode → Target → Signing &amp; Capabilities → Add <strong>HealthKit</strong></li>
-                          <li>Info.plist → add <strong>NSHealthShareUsageDescription</strong></li>
-                          <li>Info.plist → add <strong>NSHealthUpdateUsageDescription</strong></li>
-                          <li>Build and install via TestFlight</li>
+                          <li>Terminal (project root): <span className="font-mono bg-amber-200/50 px-0.5 rounded">npx cap sync ios</span></li>
+                          <li>Terminal (ios/ folder): <span className="font-mono bg-amber-200/50 px-0.5 rounded">pod install</span></li>
+                          <li>Open <strong>App.xcworkspace</strong> (not App.xcodeproj)</li>
+                          <li>Target → Signing &amp; Capabilities → confirm <strong>HealthKit</strong> is added</li>
+                          <li>Info.plist → confirm both <strong>NSHealthShareUsageDescription</strong> and <strong>NSHealthUpdateUsageDescription</strong> exist</li>
+                          <li>Product → Archive → Distribute via TestFlight</li>
                         </ol>
+                        {healthRawError && (
+                          <div className="mt-1 bg-amber-200/30 rounded px-2 py-1">
+                            <p className="text-[10px] text-amber-800 font-mono break-all">Error: {healthRawError}</p>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <>
