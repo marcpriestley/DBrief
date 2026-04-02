@@ -6,7 +6,8 @@ DBrief is a personal performance engineering app built around the F1 debrief fra
 ## Core Concepts
 - **Infinite Goal**: An overarching aspirational target that can never be fully achieved but always drives forward (like an F1 team's pursuit of perfection). Displayed at the top of the dashboard. AI assists users in articulating it. Weekly alignment check during debriefs.
 - **Long-Term Targets**: Up to 3 bigger objectives the user is working toward. Sits between daily goals and the infinite goal. Each has a progress slider (0–100%), a tick-to-complete button, completion celebration overlay, and a 7-day review nudge when stale.
-- **Daily Goals**: Recurring daily actions that compound over time.
+- **Daily Goals**: Task list of recurring daily actions to complete — differentiated from habits.
+- **Habit Lab**: Separate habit formation feature. Users build new behavioral routines (distinct from daily task goals). Supports per-habit streaks, 66-day milestone progress, habit stacking (anchor to existing routine via implementation intentions: "After I X, I will Y"), AI-guided 4-step setup (name/emoji/category → motivation → habit stack → reminder time), per-habit customizable push notification reminders. AI debrief is aware of active habits and their completion status for motivational nudges.
 - **Performance Telemetry**: 0-100 metric scores tracked daily.
 - **Daily Debrief**: AI-guided conversational review of the day's "session" — framed as a post-race debrief.
 - **AI Insights Access**: Two-phase gate. Phase 1 (initial unlock): requires a 7-day consecutive streak — stored permanently in `longestStreak`. Phase 2 (ongoing access): requires ≥5 of the last 7 days with data (`recentActiveDays`), allowing 1 missed day without losing access. Missing 3+ days pauses insights; logging any day restores them automatically without needing to rebuild the 7-day streak. Three UI states: Locked / Standby (amber) / Active.
@@ -75,6 +76,8 @@ DBrief is a personal performance engineering app built around the F1 debrief fra
 - `infinite_goals` - User's infinite goal (encrypted, one per user)
 - `long_term_goals` - Up to 3 long-term targets per user (encrypted)
 - `debriefs` / `debrief_messages` - AI debrief conversations (encrypted)
+- `habits` - User habit definitions (name, emoji, category, motivation, anchorHabit, reminderTime, streak stats)
+- `habit_logs` - Daily completion records per habit (date + habitId)
 - `mood_checkins` - Mood check-in data
 - `push_subscriptions` - Web push notification subscriptions + APNs device tokens (`apns_token` column)
 - `journal_attachments` - File attachments for journal entries

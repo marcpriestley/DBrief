@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import OpenAI from "openai";
 import { db } from "./db";
-import { debriefs, debriefMessages, dailyScores, journalEntries, moodCheckins, dailyGoals, userMetrics, users, infiniteGoals, longTermGoals, goalTemplates } from "@shared/schema";
+import { debriefs, debriefMessages, dailyScores, journalEntries, moodCheckins, dailyGoals, userMetrics, users, infiniteGoals, longTermGoals, goalTemplates, habits, habitLogs } from "@shared/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { encrypt, decrypt } from "./encryption";
 
@@ -24,7 +24,7 @@ function requireAuth(req: Request, res: Response): number | null {
 }
 
 async function gatherDayContext(userId: number, date: string) {
-  const [scores, metrics, goals, moods, entries, infiniteGoalRows, ltGoals] = await Promise.all([
+  const [scores, metrics, goals, moods, entries, infiniteGoalRows, ltGoals, userHabits, todayHabitLogs] = await Promise.all([
     db.select().from(dailyScores).where(and(eq(dailyScores.userId, userId), eq(dailyScores.date, date))),
     db.select().from(userMetrics).where(and(eq(userMetrics.userId, userId), eq(userMetrics.isActive, true))),
     db.select().from(dailyGoals).where(and(eq(dailyGoals.userId, userId), eq(dailyGoals.date, date))),
@@ -32,6 +32,8 @@ async function gatherDayContext(userId: number, date: string) {
     db.select().from(journalEntries).where(and(eq(journalEntries.userId, userId), eq(journalEntries.date, date))),
     db.select().from(infiniteGoals).where(eq(infiniteGoals.userId, userId)).limit(1),
     db.select().from(longTermGoals).where(and(eq(longTermGoals.userId, userId), eq(longTermGoals.isActive, true))),
+    db.select().from(habits).where(and(eq(habits.userId, userId), eq(habits.isArchived, false))),
+    db.select().from(habitLogs).where(and(eq(habitLogs.userId, userId), eq(habitLogs.date, date))),
   ]);
 
   // Exclude zero scores — a value of 0 almost always means the user didn't log that
@@ -54,10 +56,21 @@ async function gatherDayContext(userId: number, date: string) {
   const dayOfWeek = debriefDate.getDay();
   const isWeeklyAlignmentDay = dayOfWeek === 0;
 
+  // Habit context
+  const completedHabitIds = new Set(todayHabitLogs.map(l => l.habitId));
+  const habitSummaryParts = userHabits.map(h => {
+    const done = completedHabitIds.has(h.id);
+    const streak = h.currentStreak || 0;
+    return `${h.emoji} ${h.name} (${done ? "done today" : "not yet today"}, ${streak}-day streak)`;
+  });
+  const habitSummary = habitSummaryParts.length > 0
+    ? `Habits in progress: ${habitSummaryParts.join("; ")}`
+    : "";
+
   return {
     scoreMap, goalSummary, moodAvg, journalContent,
     hasScores: loggedScores.length > 0, hasGoals: goals.length > 0, hasMoods: moods.length > 0,
-    infiniteGoalContent, longTermGoalsList, isWeeklyAlignmentDay,
+    infiniteGoalContent, longTermGoalsList, isWeeklyAlignmentDay, habitSummary,
   };
 }
 
@@ -160,6 +173,10 @@ ${context.isWeeklyAlignmentDay ? `TODAY IS THE WEEKLY ALIGNMENT CHECK. At some p
     ? `\nLong-term targets: ${context.longTermGoalsList.join(", ")}`
     : "";
 
+  const habitsSection = context.habitSummary
+    ? `\nHABIT LAB — habits the driver is actively building:\n${context.habitSummary}\nIf relevant in the conversation, acknowledge habit completion as a win or gently nudge them on incomplete habits — but only if it flows naturally, never force it.`
+    : "";
+
   const profileSection = buildUserProfileSummary(userProfile);
   const driverName = displayName ? ` The driver's name is ${displayName} — use their name naturally in conversation, not every message, but enough that it feels personal.` : "";
 
@@ -174,7 +191,7 @@ TELEMETRY (scores are only shown if the user explicitly logged them — a missin
 ${context.hasScores ? `Performance scores: ${context.scoreMap}` : "No scores logged yet — don't reference scores."}
 ${context.goalSummary}
 ${context.moodAvg}
-${context.journalContent ? `Session notes: "${context.journalContent}"` : ""}${infiniteGoalSection}${ltGoalsSection}
+${context.journalContent ? `Session notes: "${context.journalContent}"` : ""}${infiniteGoalSection}${ltGoalsSection}${habitsSection}
 
 CONVERSATION STRUCTURE:
 This is exchange ${userMessageCount + 1}. The user has replied ${userMessageCount} time(s) so far.

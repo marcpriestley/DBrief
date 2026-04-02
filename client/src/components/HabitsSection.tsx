@@ -1,0 +1,822 @@
+import { useState, useCallback } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useDateContext } from "@/contexts/DateContext";
+import { motion, AnimatePresence } from "framer-motion";
+import { Plus, Flame, X, ChevronRight, ChevronLeft, Check, Settings2, Trash2, Bell, BellOff } from "lucide-react";
+import type { Habit } from "@shared/schema";
+import { haptic } from "@/lib/haptics";
+
+// ─── Types ──────────────────────────────────────────────────────────────────
+
+type HabitWithStatus = Habit & { todayCompleted: boolean };
+
+// ─── Emoji + category options ────────────────────────────────────────────────
+
+const EMOJIS = ["⭐", "🏃", "💧", "📚", "🧘", "💪", "🥗", "😴", "✍️", "🎯", "🧠", "🎵", "🚴", "🌅", "💊", "🫁", "❤️", "🌿"];
+
+const CATEGORIES = [
+  { value: "health", label: "Health" },
+  { value: "fitness", label: "Fitness" },
+  { value: "mindfulness", label: "Mindfulness" },
+  { value: "learning", label: "Learning" },
+  { value: "productivity", label: "Productivity" },
+  { value: "nutrition", label: "Nutrition" },
+  { value: "sleep", label: "Sleep" },
+  { value: "social", label: "Social" },
+  { value: "creativity", label: "Creativity" },
+  { value: "general", label: "Other" },
+];
+
+const MOTIVATION_OPTIONS = [
+  "Better performance",
+  "More energy",
+  "Reduce stress",
+  "Build discipline",
+  "Improve health",
+  "Feel in control",
+  "Personal growth",
+];
+
+// ─── Milestone thresholds ────────────────────────────────────────────────────
+
+function getMilestone(total: number): { next: number; label: string } {
+  const milestones = [7, 21, 66, 100, 365];
+  for (const m of milestones) {
+    if (total < m) return { next: m, label: m === 66 ? "habit formed!" : `${m} days` };
+  }
+  return { next: 365, label: "365 days" };
+}
+
+// ─── Setup modal state ───────────────────────────────────────────────────────
+
+type SetupState = {
+  name: string;
+  emoji: string;
+  category: string;
+  motivation: string;
+  anchorHabit: string;
+  reminderTime: string;
+  reminderEnabled: boolean;
+};
+
+const DEFAULT_SETUP: SetupState = {
+  name: "",
+  emoji: "⭐",
+  category: "general",
+  motivation: "",
+  anchorHabit: "",
+  reminderTime: "08:00",
+  reminderEnabled: false,
+};
+
+// ─── Main component ──────────────────────────────────────────────────────────
+
+export default function HabitsSection() {
+  const { selectedDate } = useDateContext();
+  const [showSetup, setShowSetup] = useState(false);
+  const [setupStep, setSetupStep] = useState(0);
+  const [setup, setSetup] = useState<SetupState>(DEFAULT_SETUP);
+  const [editingHabit, setEditingHabit] = useState<HabitWithStatus | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+
+  const { data: habits = [], isLoading } = useQuery<HabitWithStatus[]>({
+    queryKey: ["/api/habits", selectedDate],
+    queryFn: () => fetch(`/api/habits?date=${selectedDate}`, { credentials: "include" }).then(r => r.json()),
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: ({ id, date }: { id: number; date: string }) =>
+      apiRequest("POST", `/api/habits/${id}/toggle`, { date }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/habits"] });
+      haptic("success");
+    },
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (data: SetupState) => apiRequest("POST", "/api/habits", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/habits"] });
+      setShowSetup(false);
+      setSetupStep(0);
+      setSetup(DEFAULT_SETUP);
+      haptic("success");
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<SetupState> }) =>
+      apiRequest("PATCH", `/api/habits/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/habits"] });
+      setEditingHabit(null);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/habits/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/habits"] });
+      setConfirmDeleteId(null);
+    },
+  });
+
+  const handleToggle = useCallback((habit: HabitWithStatus) => {
+    toggleMutation.mutate({ id: habit.id, date: selectedDate });
+  }, [toggleMutation, selectedDate]);
+
+  const handleCreate = useCallback(() => {
+    if (!setup.name.trim()) return;
+    createMutation.mutate(setup);
+  }, [createMutation, setup]);
+
+  const openSetup = () => {
+    setSetup(DEFAULT_SETUP);
+    setSetupStep(0);
+    setShowSetup(true);
+  };
+
+  const openEdit = (habit: HabitWithStatus) => {
+    setEditingHabit(habit);
+  };
+
+  const STEPS = [
+    { title: "Name your habit", subtitle: "What are you building?" },
+    { title: "Your why", subtitle: "What's the payoff?" },
+    { title: "Stack it", subtitle: "Attach it to an existing routine" },
+    { title: "Remind me", subtitle: "Set a daily prompt (optional)" },
+  ];
+
+  return (
+    <div className="bg-card rounded-xl border border-border/50 shadow-sm p-4">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">Habit Lab</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">Build routines that stick</p>
+        </div>
+        <button
+          onClick={openSetup}
+          className="flex items-center gap-1.5 text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 rounded-lg px-2.5 py-1.5 transition-colors"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          New habit
+        </button>
+      </div>
+
+      {/* Habit list */}
+      {isLoading ? (
+        <div className="space-y-2">
+          {[1, 2].map(i => (
+            <div key={i} className="h-16 bg-muted/40 rounded-lg animate-pulse" />
+          ))}
+        </div>
+      ) : habits.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground">
+          <div className="text-3xl mb-2">🏁</div>
+          <p className="text-sm font-medium">No habits yet</p>
+          <p className="text-xs mt-1 text-muted-foreground/70">Start building your first routine — takes 66 days to cement one for life.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <AnimatePresence>
+            {habits.map(habit => (
+              <HabitCard
+                key={habit.id}
+                habit={habit}
+                onToggle={handleToggle}
+                onEdit={openEdit}
+                onDelete={(id) => setConfirmDeleteId(id)}
+              />
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
+
+      {/* Setup modal */}
+      <AnimatePresence>
+        {showSetup && (
+          <SetupModal
+            step={setupStep}
+            steps={STEPS}
+            setup={setup}
+            setSetup={setSetup}
+            onNext={() => setSetupStep(s => s + 1)}
+            onBack={() => setSetupStep(s => s - 1)}
+            onClose={() => { setShowSetup(false); setSetupStep(0); }}
+            onSubmit={handleCreate}
+            isSubmitting={createMutation.isPending}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Edit modal */}
+      <AnimatePresence>
+        {editingHabit && (
+          <EditModal
+            habit={editingHabit}
+            onSave={(updates) => updateMutation.mutate({ id: editingHabit.id, data: updates })}
+            onClose={() => setEditingHabit(null)}
+            isSaving={updateMutation.isPending}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Delete confirm */}
+      <AnimatePresence>
+        {confirmDeleteId !== null && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm p-4"
+            onClick={() => setConfirmDeleteId(null)}
+          >
+            <motion.div
+              initial={{ y: 40, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 40, opacity: 0 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-card rounded-2xl border border-border/50 p-5 w-full max-w-sm"
+            >
+              <p className="text-sm font-semibold text-foreground mb-1">Remove this habit?</p>
+              <p className="text-xs text-muted-foreground mb-4">Your history will be preserved — you can always restart.</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setConfirmDeleteId(null)}
+                  className="flex-1 text-sm text-muted-foreground bg-muted/50 rounded-lg py-2.5"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => deleteMutation.mutate(confirmDeleteId!)}
+                  className="flex-1 text-sm font-medium text-red-500 bg-red-500/10 rounded-lg py-2.5"
+                >
+                  Remove
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ─── Habit card ──────────────────────────────────────────────────────────────
+
+function HabitCard({
+  habit,
+  onToggle,
+  onEdit,
+  onDelete,
+}: {
+  habit: HabitWithStatus;
+  onToggle: (h: HabitWithStatus) => void;
+  onEdit: (h: HabitWithStatus) => void;
+  onDelete: (id: number) => void;
+}) {
+  const [showMenu, setShowMenu] = useState(false);
+  const total = habit.totalCompletions || 0;
+  const { next: milestone, label: milestoneLabel } = getMilestone(total);
+  const progress = Math.min(100, (total / milestone) * 100);
+  const streak = habit.currentStreak || 0;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -8 }}
+      className={`relative rounded-xl border transition-all ${
+        habit.todayCompleted
+          ? "border-primary/30 bg-primary/5"
+          : "border-border/50 bg-muted/20"
+      }`}
+    >
+      <div className="flex items-center gap-3 p-3">
+        {/* Completion toggle */}
+        <button
+          onClick={() => onToggle(habit)}
+          className={`shrink-0 w-9 h-9 rounded-full border-2 flex items-center justify-center transition-all text-lg ${
+            habit.todayCompleted
+              ? "border-primary bg-primary text-white"
+              : "border-border/60 bg-transparent text-muted-foreground/30 hover:border-primary/50"
+          }`}
+        >
+          {habit.todayCompleted ? (
+            <Check className="h-4 w-4 text-white" />
+          ) : (
+            <span className="text-base leading-none">{habit.emoji}</span>
+          )}
+        </button>
+
+        {/* Info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            {!habit.todayCompleted && <span className="text-sm" aria-hidden>{habit.emoji}</span>}
+            <span className={`text-sm font-medium truncate ${habit.todayCompleted ? "text-primary line-through opacity-60" : "text-foreground"}`}>
+              {habit.name}
+            </span>
+          </div>
+          {habit.anchorHabit && (
+            <p className="text-xs text-muted-foreground truncate mt-0.5">After {habit.anchorHabit}</p>
+          )}
+          {/* Progress bar to next milestone */}
+          <div className="flex items-center gap-2 mt-1.5">
+            <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
+              <motion.div
+                className="h-full bg-primary/60 rounded-full"
+                initial={{ width: 0 }}
+                animate={{ width: `${progress}%` }}
+                transition={{ duration: 0.5, ease: "easeOut" }}
+              />
+            </div>
+            <span className="text-[10px] text-muted-foreground shrink-0">{total}/{milestone}</span>
+          </div>
+        </div>
+
+        {/* Streak */}
+        <div className="flex flex-col items-center shrink-0 min-w-[40px]">
+          {streak > 0 ? (
+            <>
+              <div className="flex items-center gap-0.5">
+                <Flame className="h-3.5 w-3.5 text-orange-400" />
+                <span className="text-sm font-bold text-foreground">{streak}</span>
+              </div>
+              <span className="text-[10px] text-muted-foreground">day{streak !== 1 ? "s" : ""}</span>
+            </>
+          ) : (
+            <>
+              <span className="text-base">🌱</span>
+              <span className="text-[10px] text-muted-foreground">start</span>
+            </>
+          )}
+        </div>
+
+        {/* Menu */}
+        <button
+          onClick={() => setShowMenu(v => !v)}
+          className="shrink-0 p-1.5 text-muted-foreground/50 hover:text-muted-foreground rounded-md"
+        >
+          <Settings2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      {/* Inline menu */}
+      <AnimatePresence>
+        {showMenu && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden border-t border-border/30"
+          >
+            <div className="flex px-3 py-2 gap-2">
+              <button
+                onClick={() => { onEdit(habit); setShowMenu(false); }}
+                className="flex-1 flex items-center justify-center gap-1.5 text-xs text-muted-foreground bg-muted/50 rounded-lg py-2"
+              >
+                <Settings2 className="h-3.5 w-3.5" /> Edit
+              </button>
+              <button
+                onClick={() => { onDelete(habit.id); setShowMenu(false); }}
+                className="flex-1 flex items-center justify-center gap-1.5 text-xs text-red-500 bg-red-500/10 rounded-lg py-2"
+              >
+                <Trash2 className="h-3.5 w-3.5" /> Remove
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+// ─── Setup modal ─────────────────────────────────────────────────────────────
+
+function SetupModal({
+  step,
+  steps,
+  setup,
+  setSetup,
+  onNext,
+  onBack,
+  onClose,
+  onSubmit,
+  isSubmitting,
+}: {
+  step: number;
+  steps: { title: string; subtitle: string }[];
+  setup: SetupState;
+  setSetup: (s: SetupState) => void;
+  onNext: () => void;
+  onBack: () => void;
+  onClose: () => void;
+  onSubmit: () => void;
+  isSubmitting: boolean;
+}) {
+  const isLast = step === steps.length - 1;
+  const canNext = step === 0 ? setup.name.trim().length > 0 : true;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ y: 60, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: 60, opacity: 0 }}
+        transition={{ type: "spring", damping: 28, stiffness: 300 }}
+        onClick={e => e.stopPropagation()}
+        className="bg-card rounded-2xl border border-border/50 w-full max-w-md overflow-hidden"
+      >
+        {/* Progress bar */}
+        <div className="h-1 bg-muted">
+          <motion.div
+            className="h-full bg-primary rounded-full"
+            animate={{ width: `${((step + 1) / steps.length) * 100}%` }}
+            transition={{ duration: 0.3 }}
+          />
+        </div>
+
+        <div className="p-5">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-xs text-muted-foreground">Step {step + 1} of {steps.length}</p>
+              <h3 className="text-base font-semibold text-foreground mt-0.5">{steps[step].title}</h3>
+              <p className="text-xs text-muted-foreground">{steps[step].subtitle}</p>
+            </div>
+            <button onClick={onClose} className="text-muted-foreground/60 hover:text-muted-foreground p-1">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Step content */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={step}
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.18 }}
+            >
+              {step === 0 && <Step1 setup={setup} setSetup={setSetup} />}
+              {step === 1 && <Step2 setup={setup} setSetup={setSetup} />}
+              {step === 2 && <Step3 setup={setup} setSetup={setSetup} />}
+              {step === 3 && <Step4 setup={setup} setSetup={setSetup} />}
+            </motion.div>
+          </AnimatePresence>
+
+          {/* Preview of implementation intention (if anchor set, show it) */}
+          {step >= 2 && setup.anchorHabit && (
+            <div className="mt-3 bg-primary/10 rounded-xl px-3 py-2.5 border border-primary/20">
+              <p className="text-xs text-muted-foreground mb-0.5">Your implementation intention:</p>
+              <p className="text-xs font-medium text-foreground">
+                "After I <span className="text-primary">{setup.anchorHabit}</span>, I will <span className="text-primary">{setup.name || "…"}</span>"
+              </p>
+            </div>
+          )}
+
+          {/* Navigation */}
+          <div className="flex gap-2 mt-4">
+            {step > 0 && (
+              <button
+                onClick={onBack}
+                className="flex items-center gap-1.5 text-sm text-muted-foreground bg-muted/50 rounded-xl px-4 py-2.5"
+              >
+                <ChevronLeft className="h-4 w-4" /> Back
+              </button>
+            )}
+            <button
+              onClick={isLast ? onSubmit : onNext}
+              disabled={!canNext || isSubmitting}
+              className="flex-1 flex items-center justify-center gap-1.5 text-sm font-semibold text-black bg-primary rounded-xl py-2.5 disabled:opacity-40"
+            >
+              {isLast ? (
+                isSubmitting ? "Adding…" : "Add to Habit Lab"
+              ) : (
+                <>Next <ChevronRight className="h-4 w-4" /></>
+              )}
+            </button>
+          </div>
+
+          {/* Skip on optional steps */}
+          {(step === 2 || step === 3) && (
+            <button
+              onClick={isLast ? onSubmit : onNext}
+              className="w-full text-center text-xs text-muted-foreground/60 mt-2 py-1"
+            >
+              Skip this step
+            </button>
+          )}
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+// ─── Step components ─────────────────────────────────────────────────────────
+
+function Step1({ setup, setSetup }: { setup: SetupState; setSetup: (s: SetupState) => void }) {
+  return (
+    <div className="space-y-4">
+      {/* Emoji picker */}
+      <div>
+        <label className="text-xs text-muted-foreground block mb-2">Choose an icon</label>
+        <div className="grid grid-cols-9 gap-1">
+          {EMOJIS.map(e => (
+            <button
+              key={e}
+              onClick={() => setSetup({ ...setup, emoji: e })}
+              className={`text-xl p-1.5 rounded-lg transition-all ${setup.emoji === e ? "bg-primary/20 scale-110" : "hover:bg-muted/50"}`}
+            >
+              {e}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Name input */}
+      <div>
+        <label className="text-xs text-muted-foreground block mb-1.5">Habit name</label>
+        <input
+          type="text"
+          value={setup.name}
+          onChange={e => setSetup({ ...setup, name: e.target.value })}
+          placeholder="e.g. Meditate, Cold shower, Read 20 pages…"
+          className="w-full bg-muted/50 border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-primary/50"
+          autoFocus
+        />
+      </div>
+
+      {/* Category */}
+      <div>
+        <label className="text-xs text-muted-foreground block mb-2">Category</label>
+        <div className="flex flex-wrap gap-1.5">
+          {CATEGORIES.map(c => (
+            <button
+              key={c.value}
+              onClick={() => setSetup({ ...setup, category: c.value })}
+              className={`text-xs px-2.5 py-1 rounded-lg border transition-all ${
+                setup.category === c.value
+                  ? "border-primary/50 bg-primary/10 text-primary"
+                  : "border-border/50 bg-muted/30 text-muted-foreground"
+              }`}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Step2({ setup, setSetup }: { setup: SetupState; setSetup: (s: SetupState) => void }) {
+  return (
+    <div className="space-y-4">
+      <div>
+        <label className="text-xs text-muted-foreground block mb-2">What's driving this?</label>
+        <div className="grid grid-cols-2 gap-2">
+          {MOTIVATION_OPTIONS.map(m => (
+            <button
+              key={m}
+              onClick={() => setSetup({ ...setup, motivation: m })}
+              className={`text-xs text-left px-3 py-2 rounded-xl border transition-all ${
+                setup.motivation === m
+                  ? "border-primary/50 bg-primary/10 text-primary font-medium"
+                  : "border-border/50 bg-muted/30 text-muted-foreground"
+              }`}
+            >
+              {m}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <label className="text-xs text-muted-foreground block mb-1.5">Or describe it in your own words</label>
+        <textarea
+          value={MOTIVATION_OPTIONS.includes(setup.motivation) ? "" : setup.motivation}
+          onChange={e => setSetup({ ...setup, motivation: e.target.value })}
+          placeholder="e.g. I want to feel less reactive under pressure…"
+          rows={3}
+          className="w-full bg-muted/50 border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-primary/50 resize-none"
+        />
+      </div>
+    </div>
+  );
+}
+
+function Step3({ setup, setSetup }: { setup: SetupState; setSetup: (s: SetupState) => void }) {
+  const ANCHORS = [
+    "wake up",
+    "make coffee",
+    "brush my teeth",
+    "shower",
+    "finish work",
+    "eat dinner",
+    "get into bed",
+  ];
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-muted-foreground">
+        Habits stick when you <span className="font-medium text-foreground">attach them to something you already do</span>. Pick a daily anchor to chain your new habit to.
+      </p>
+      <div>
+        <label className="text-xs text-muted-foreground block mb-2">After I…</label>
+        <div className="grid grid-cols-2 gap-2">
+          {ANCHORS.map(a => (
+            <button
+              key={a}
+              onClick={() => setSetup({ ...setup, anchorHabit: setup.anchorHabit === a ? "" : a })}
+              className={`text-xs text-left px-3 py-2 rounded-xl border transition-all ${
+                setup.anchorHabit === a
+                  ? "border-primary/50 bg-primary/10 text-primary font-medium"
+                  : "border-border/50 bg-muted/30 text-muted-foreground"
+              }`}
+            >
+              {a}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <label className="text-xs text-muted-foreground block mb-1.5">Or write your own anchor</label>
+        <input
+          type="text"
+          value={ANCHORS.includes(setup.anchorHabit) ? "" : setup.anchorHabit}
+          onChange={e => setSetup({ ...setup, anchorHabit: e.target.value })}
+          placeholder="e.g. finish my morning run"
+          className="w-full bg-muted/50 border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-primary/50"
+        />
+      </div>
+    </div>
+  );
+}
+
+function Step4({ setup, setSetup }: { setup: SetupState; setSetup: (s: SetupState) => void }) {
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-muted-foreground">
+        A daily push notification keeps the habit front of mind. We'll send it at your chosen time every day.
+      </p>
+
+      <div className="flex items-center justify-between bg-muted/40 rounded-xl px-4 py-3 border border-border/50">
+        <div className="flex items-center gap-2.5">
+          {setup.reminderEnabled ? (
+            <Bell className="h-4 w-4 text-primary" />
+          ) : (
+            <BellOff className="h-4 w-4 text-muted-foreground" />
+          )}
+          <span className="text-sm font-medium text-foreground">Daily reminder</span>
+        </div>
+        <button
+          onClick={() => setSetup({ ...setup, reminderEnabled: !setup.reminderEnabled })}
+          className={`relative w-11 h-6 rounded-full transition-colors ${setup.reminderEnabled ? "bg-primary" : "bg-muted"}`}
+        >
+          <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${setup.reminderEnabled ? "translate-x-5" : "translate-x-0"}`} />
+        </button>
+      </div>
+
+      {setup.reminderEnabled && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-2"
+        >
+          <label className="text-xs text-muted-foreground block">Reminder time</label>
+          <input
+            type="time"
+            value={setup.reminderTime}
+            onChange={e => setSetup({ ...setup, reminderTime: e.target.value })}
+            className="w-full bg-muted/50 border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50"
+          />
+          {setup.anchorHabit && (
+            <p className="text-xs text-muted-foreground">
+              We'll remind you: "After {setup.anchorHabit}, it's time to {setup.name || "…"}"
+            </p>
+          )}
+        </motion.div>
+      )}
+    </div>
+  );
+}
+
+// ─── Edit modal ───────────────────────────────────────────────────────────────
+
+function EditModal({
+  habit,
+  onSave,
+  onClose,
+  isSaving,
+}: {
+  habit: HabitWithStatus;
+  onSave: (updates: Partial<SetupState>) => void;
+  onClose: () => void;
+  isSaving: boolean;
+}) {
+  const [name, setName] = useState(habit.name);
+  const [emoji, setEmoji] = useState(habit.emoji || "⭐");
+  const [anchorHabit, setAnchorHabit] = useState(habit.anchorHabit || "");
+  const [reminderTime, setReminderTime] = useState(habit.reminderTime || "08:00");
+  const [reminderEnabled, setReminderEnabled] = useState(habit.reminderEnabled ?? false);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ y: 40, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: 40, opacity: 0 }}
+        onClick={e => e.stopPropagation()}
+        className="bg-card rounded-2xl border border-border/50 w-full max-w-md p-5 space-y-4"
+      >
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-semibold text-foreground">Edit habit</h3>
+          <button onClick={onClose} className="text-muted-foreground/60 hover:text-muted-foreground p-1">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Emoji */}
+        <div className="grid grid-cols-9 gap-1">
+          {EMOJIS.map(e => (
+            <button
+              key={e}
+              onClick={() => setEmoji(e)}
+              className={`text-xl p-1.5 rounded-lg transition-all ${emoji === e ? "bg-primary/20 scale-110" : "hover:bg-muted/50"}`}
+            >
+              {e}
+            </button>
+          ))}
+        </div>
+
+        <div>
+          <label className="text-xs text-muted-foreground block mb-1.5">Name</label>
+          <input
+            type="text"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            className="w-full bg-muted/50 border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50"
+          />
+        </div>
+
+        <div>
+          <label className="text-xs text-muted-foreground block mb-1.5">Anchor routine (After I…)</label>
+          <input
+            type="text"
+            value={anchorHabit}
+            onChange={e => setAnchorHabit(e.target.value)}
+            placeholder="e.g. wake up, brush my teeth"
+            className="w-full bg-muted/50 border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-primary/50"
+          />
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            {reminderEnabled ? (
+              <Bell className="h-4 w-4 text-primary" />
+            ) : (
+              <BellOff className="h-4 w-4 text-muted-foreground" />
+            )}
+            <span className="text-sm font-medium text-foreground">Daily reminder</span>
+          </div>
+          <button
+            onClick={() => setReminderEnabled(v => !v)}
+            className={`relative w-11 h-6 rounded-full transition-colors ${reminderEnabled ? "bg-primary" : "bg-muted"}`}
+          >
+            <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${reminderEnabled ? "translate-x-5" : "translate-x-0"}`} />
+          </button>
+        </div>
+
+        {reminderEnabled && (
+          <input
+            type="time"
+            value={reminderTime}
+            onChange={e => setReminderTime(e.target.value)}
+            className="w-full bg-muted/50 border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50"
+          />
+        )}
+
+        <button
+          onClick={() => onSave({ name, emoji, anchorHabit, reminderTime, reminderEnabled })}
+          disabled={!name.trim() || isSaving}
+          className="w-full py-3 bg-primary text-black text-sm font-semibold rounded-xl disabled:opacity-40"
+        >
+          {isSaving ? "Saving…" : "Save changes"}
+        </button>
+      </motion.div>
+    </motion.div>
+  );
+}

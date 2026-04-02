@@ -1,12 +1,13 @@
 import { 
   users, journalEntries, dailyScores, userMetrics, streaks, aiInsights, pushSubscriptions,
-  goalTemplates, dailyGoals, journalAttachments, moodCheckins, debriefs,
+  goalTemplates, dailyGoals, journalAttachments, moodCheckins, debriefs, habits, habitLogs,
   type User, type InsertUser, type JournalEntry, type InsertJournalEntry,
   type DailyScore, type InsertDailyScore, type UserMetric, type InsertUserMetric,
   type Streak, type InsertStreak, type AIInsight, type InsertAIInsight,
   type PushSubscription, type InsertPushSubscription,
   type GoalTemplate, type InsertGoalTemplate, type DailyGoal, type InsertDailyGoal,
-  type JournalAttachment, type InsertJournalAttachment, type MoodCheckin, type InsertMoodCheckin
+  type JournalAttachment, type InsertJournalAttachment, type MoodCheckin, type InsertMoodCheckin,
+  type Habit, type InsertHabit, type HabitLog
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, gte, gt } from "drizzle-orm";
@@ -83,6 +84,16 @@ export interface IStorage {
   deletePushSubscription(endpoint: string): Promise<void>;
   deleteApnsToken(apnsToken: string): Promise<void>;
   getAllUsersForReminder(time: string): Promise<Array<User & { subscriptions: PushSubscription[] }>>;
+
+  // Habit methods
+  getHabits(userId: number): Promise<Habit[]>;
+  createHabit(habit: InsertHabit): Promise<Habit>;
+  updateHabit(id: number, userId: number, updates: Partial<InsertHabit>): Promise<Habit | undefined>;
+  archiveHabit(id: number, userId: number): Promise<void>;
+  getHabitWithTodayStatus(userId: number, date: string): Promise<Array<Habit & { todayCompleted: boolean }>>;
+  toggleHabitCompletion(habitId: number, userId: number, date: string): Promise<{ habit: Habit; completed: boolean }>;
+  getHabitLogsForRange(habitId: number, userId: number, startDate: string, endDate: string): Promise<HabitLog[]>;
+  getAllHabitsForReminder(): Promise<Array<Habit & { user: User; subscriptions: PushSubscription[] }>>;
 }
 
 export class MemStorage implements IStorage {
@@ -484,6 +495,16 @@ export class MemStorage implements IStorage {
   async getMoodCheckinsByDate(_userId: number, _date: string): Promise<MoodCheckin[]> { return []; }
   async getMoodCheckinsForDateRange(_userId: number, _startDate: string, _endDate: string): Promise<MoodCheckin[]> { return []; }
   async getDatesWithData(_userId: number): Promise<string[]> { return []; }
+
+  // Habit stubs (MemStorage is not used in production — DatabaseStorage is)
+  async getHabits(_userId: number): Promise<Habit[]> { return []; }
+  async createHabit(h: InsertHabit): Promise<Habit> { return { ...h, id: 0, currentStreak: 0, longestStreak: 0, totalCompletions: 0, lastCompletedDate: null, isArchived: false, createdAt: new Date(), emoji: h.emoji ?? "⭐", category: h.category ?? "general", motivation: h.motivation ?? null, anchorHabit: h.anchorHabit ?? null, reminderTime: h.reminderTime ?? null, reminderEnabled: h.reminderEnabled ?? true } as Habit; }
+  async updateHabit(_id: number, _userId: number, _updates: Partial<InsertHabit>): Promise<Habit | undefined> { return undefined; }
+  async archiveHabit(_id: number, _userId: number): Promise<void> {}
+  async getHabitWithTodayStatus(_userId: number, _date: string): Promise<Array<Habit & { todayCompleted: boolean }>> { return []; }
+  async toggleHabitCompletion(_habitId: number, _userId: number, _date: string): Promise<{ habit: Habit; completed: boolean }> { throw new Error("Not implemented in MemStorage"); }
+  async getHabitLogsForRange(_habitId: number, _userId: number, _startDate: string, _endDate: string): Promise<HabitLog[]> { return []; }
+  async getAllHabitsForReminder(): Promise<Array<Habit & { user: User; subscriptions: PushSubscription[] }>> { return []; }
 }
 
 // Database implementation
@@ -905,6 +926,165 @@ export class DatabaseStorage implements IStorage {
     
     return usersWithSubscriptions;
   }
+
+  // ─── Habit methods ─────────────────────────────────────────────────────────
+
+  async getHabits(userId: number): Promise<Habit[]> {
+    return await db.select().from(habits)
+      .where(and(eq(habits.userId, userId), eq(habits.isArchived, false)))
+      .orderBy(habits.createdAt);
+  }
+
+  async createHabit(habit: InsertHabit): Promise<Habit> {
+    const [created] = await db.insert(habits).values(habit).returning();
+    return created;
+  }
+
+  async updateHabit(id: number, userId: number, updates: Partial<InsertHabit>): Promise<Habit | undefined> {
+    const [updated] = await db.update(habits)
+      .set(updates)
+      .where(and(eq(habits.id, id), eq(habits.userId, userId)))
+      .returning();
+    return updated || undefined;
+  }
+
+  async archiveHabit(id: number, userId: number): Promise<void> {
+    await db.update(habits)
+      .set({ isArchived: true })
+      .where(and(eq(habits.id, id), eq(habits.userId, userId)));
+  }
+
+  async getHabitWithTodayStatus(userId: number, date: string): Promise<Array<Habit & { todayCompleted: boolean }>> {
+    const userHabits = await this.getHabits(userId);
+    const todayLogs = await db.select().from(habitLogs)
+      .where(and(eq(habitLogs.userId, userId), eq(habitLogs.date, date)));
+    const completedSet = new Set(todayLogs.map(l => l.habitId));
+    return userHabits.map(h => ({ ...h, todayCompleted: completedSet.has(h.id) }));
+  }
+
+  async toggleHabitCompletion(habitId: number, userId: number, date: string): Promise<{ habit: Habit; completed: boolean }> {
+    const [existingLog] = await db.select().from(habitLogs)
+      .where(and(eq(habitLogs.habitId, habitId), eq(habitLogs.userId, userId), eq(habitLogs.date, date)));
+
+    if (existingLog) {
+      // Un-complete: remove log and recalculate streak
+      await db.delete(habitLogs)
+        .where(and(eq(habitLogs.habitId, habitId), eq(habitLogs.userId, userId), eq(habitLogs.date, date)));
+      
+      // Recalculate streak from all remaining logs
+      const allLogs = await db.select().from(habitLogs)
+        .where(and(eq(habitLogs.habitId, habitId), eq(habitLogs.userId, userId)))
+        .orderBy(desc(habitLogs.date));
+      
+      const { currentStreak, longestStreak, lastDate } = computeHabitStreak(allLogs.map(l => l.date));
+      const [updated] = await db.update(habits)
+        .set({ 
+          currentStreak, 
+          longestStreak: Math.max(longestStreak, 0), 
+          totalCompletions: Math.max(0, (await db.select().from(habitLogs).where(and(eq(habitLogs.habitId, habitId), eq(habitLogs.userId, userId)))).length),
+          lastCompletedDate: lastDate || null,
+        })
+        .where(and(eq(habits.id, habitId), eq(habits.userId, userId)))
+        .returning();
+      return { habit: updated, completed: false };
+    } else {
+      // Complete: add log and update streak
+      await db.insert(habitLogs).values({ habitId, userId, date });
+      
+      const allLogs = await db.select().from(habitLogs)
+        .where(and(eq(habitLogs.habitId, habitId), eq(habitLogs.userId, userId)))
+        .orderBy(desc(habitLogs.date));
+      
+      const { currentStreak, longestStreak, lastDate } = computeHabitStreak(allLogs.map(l => l.date));
+      const [habit] = await db.select().from(habits).where(eq(habits.id, habitId));
+      const newLongest = Math.max(habit?.longestStreak || 0, longestStreak);
+      
+      const [updated] = await db.update(habits)
+        .set({ 
+          currentStreak, 
+          longestStreak: newLongest, 
+          totalCompletions: allLogs.length,
+          lastCompletedDate: lastDate || date,
+        })
+        .where(and(eq(habits.id, habitId), eq(habits.userId, userId)))
+        .returning();
+      return { habit: updated, completed: true };
+    }
+  }
+
+  async getHabitLogsForRange(habitId: number, userId: number, startDate: string, endDate: string): Promise<HabitLog[]> {
+    const { gte: gteOp, lte } = await import("drizzle-orm");
+    return await db.select().from(habitLogs)
+      .where(and(
+        eq(habitLogs.habitId, habitId),
+        eq(habitLogs.userId, userId),
+        gteOp(habitLogs.date, startDate),
+        lte(habitLogs.date, endDate),
+      ))
+      .orderBy(habitLogs.date);
+  }
+
+  async getAllHabitsForReminder(): Promise<Array<Habit & { user: User; subscriptions: PushSubscription[] }>> {
+    const activeHabits = await db.select().from(habits)
+      .where(and(eq(habits.isArchived, false), eq(habits.reminderEnabled, true)));
+    
+    const result: Array<Habit & { user: User; subscriptions: PushSubscription[] }> = [];
+    for (const habit of activeHabits) {
+      if (!habit.reminderTime) continue;
+      const [user] = await db.select().from(users).where(eq(users.id, habit.userId));
+      if (!user || !user.notificationsEnabled) continue;
+      const subs = await this.getPushSubscriptions(habit.userId);
+      if (subs.length > 0) {
+        result.push({ ...habit, user, subscriptions: subs });
+      }
+    }
+    return result;
+  }
+}
+
+// ─── Streak computation helper ──────────────────────────────────────────────
+function computeHabitStreak(sortedDatesDesc: string[]): { currentStreak: number; longestStreak: number; lastDate: string | null } {
+  if (sortedDatesDesc.length === 0) return { currentStreak: 0, longestStreak: 0, lastDate: null };
+  
+  const sorted = [...sortedDatesDesc].sort((a, b) => b.localeCompare(a));
+  const today = new Date().toISOString().split('T')[0];
+  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+  
+  let currentStreak = 0;
+  let longestStreak = 0;
+  let tempStreak = 1;
+  let checkingCurrent = true;
+  
+  // Current streak: must include today or yesterday
+  if (sorted[0] === today || sorted[0] === yesterday) {
+    currentStreak = 1;
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = new Date(sorted[i - 1]);
+      const curr = new Date(sorted[i]);
+      const diffDays = Math.round((prev.getTime() - curr.getTime()) / 86400000);
+      if (diffDays === 1) {
+        currentStreak++;
+      } else {
+        break;
+      }
+    }
+  }
+  
+  // Longest streak: scan all
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = new Date(sorted[i - 1]);
+    const curr = new Date(sorted[i]);
+    const diffDays = Math.round((prev.getTime() - curr.getTime()) / 86400000);
+    if (diffDays === 1) {
+      tempStreak++;
+    } else {
+      longestStreak = Math.max(longestStreak, tempStreak);
+      tempStreak = 1;
+    }
+  }
+  longestStreak = Math.max(longestStreak, tempStreak, currentStreak);
+  
+  return { currentStreak, longestStreak, lastDate: sorted[0] || null };
 }
 
 export const storage = new DatabaseStorage();

@@ -7,6 +7,7 @@ import AIInsights from "@/components/AIInsights";
 import GoalsSection from "@/components/GoalsSection";
 import InfiniteGoalBanner from "@/components/InfiniteGoalBanner";
 import LongTermGoals from "@/components/LongTermGoals";
+import HabitsSection from "@/components/HabitsSection";
 import { useDateContext } from "@/contexts/DateContext";
 
 function DashboardContent() {
@@ -49,6 +50,8 @@ function DashboardContent() {
               </div>
 
               <LongTermGoals />
+
+              <HabitsSection />
 
               <DebriefPanel selectedDate={selectedDate} />
 

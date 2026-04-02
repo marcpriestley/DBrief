@@ -179,6 +179,47 @@ export const longTermGoals = pgTable("long_term_goals", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const habits = pgTable("habits", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  name: text("name").notNull(),
+  emoji: text("emoji").default("⭐"),
+  category: text("category").default("general"),
+  motivation: text("motivation"),
+  anchorHabit: text("anchor_habit"),
+  reminderTime: text("reminder_time"),
+  reminderEnabled: boolean("reminder_enabled").default(true),
+  currentStreak: integer("current_streak").default(0),
+  longestStreak: integer("longest_streak").default(0),
+  totalCompletions: integer("total_completions").default(0),
+  lastCompletedDate: text("last_completed_date"),
+  isArchived: boolean("is_archived").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const habitLogs = pgTable("habit_logs", {
+  id: serial("id").primaryKey(),
+  habitId: integer("habit_id").notNull(),
+  userId: integer("user_id").notNull(),
+  date: text("date").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertHabitSchema = createInsertSchema(habits).omit({
+  id: true,
+  currentStreak: true,
+  longestStreak: true,
+  totalCompletions: true,
+  lastCompletedDate: true,
+  isArchived: true,
+  createdAt: true,
+});
+
+export const insertHabitLogSchema = createInsertSchema(habitLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertInfiniteGoalSchema = createInsertSchema(infiniteGoals).omit({
   id: true,
   createdAt: true,
@@ -207,6 +248,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   dailyGoals: many(dailyGoals),
   infiniteGoals: many(infiniteGoals),
   longTermGoals: many(longTermGoals),
+  habits: many(habits),
 }));
 
 export const infiniteGoalsRelations = relations(infiniteGoals, ({ one }) => ({
@@ -327,5 +369,19 @@ export type InfiniteGoal = typeof infiniteGoals.$inferSelect;
 export type InsertInfiniteGoal = z.infer<typeof insertInfiniteGoalSchema>;
 export type LongTermGoal = typeof longTermGoals.$inferSelect;
 export type InsertLongTermGoal = z.infer<typeof insertLongTermGoalSchema>;
+export type Habit = typeof habits.$inferSelect;
+export type InsertHabit = z.infer<typeof insertHabitSchema>;
+export type HabitLog = typeof habitLogs.$inferSelect;
+export type InsertHabitLog = z.infer<typeof insertHabitLogSchema>;
+
+export const habitsRelations = relations(habits, ({ one, many }) => ({
+  user: one(users, { fields: [habits.userId], references: [users.id] }),
+  logs: many(habitLogs),
+}));
+
+export const habitLogsRelations = relations(habitLogs, ({ one }) => ({
+  habit: one(habits, { fields: [habitLogs.habitId], references: [habits.id] }),
+  user: one(users, { fields: [habitLogs.userId], references: [users.id] }),
+}));
 
 export * from "./models/chat";

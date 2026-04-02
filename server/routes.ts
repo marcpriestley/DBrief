@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { 
   insertJournalEntrySchema, insertDailyScoreSchema, 
   insertUserMetricSchema, insertAIInsightSchema,
-  insertPushSubscriptionSchema,
+  insertPushSubscriptionSchema, insertHabitSchema,
   infiniteGoals, longTermGoals,
 } from "@shared/schema";
 import OpenAI from "openai";
@@ -1254,6 +1254,93 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
       console.error("Failed to update streak:", error);
     }
   }
+
+  // ─── Habit routes ─────────────────────────────────────────────────────────
+
+  app.get("/api/habits", async (req, res) => {
+    const userId = (req.session as any)?.userId;
+    if (!userId) return res.status(401).json({ message: "Not authenticated" });
+    const date = (req.query.date as string) || new Date().toISOString().split('T')[0];
+    try {
+      const habitsWithStatus = await storage.getHabitWithTodayStatus(userId, date);
+      res.json(habitsWithStatus);
+    } catch (error) {
+      console.error("Get habits error:", error);
+      res.status(500).json({ message: "Failed to get habits" });
+    }
+  });
+
+  app.post("/api/habits", async (req, res) => {
+    const userId = (req.session as any)?.userId;
+    if (!userId) return res.status(401).json({ message: "Not authenticated" });
+    const parsed = insertHabitSchema.safeParse({ ...req.body, userId });
+    if (!parsed.success) return res.status(400).json({ message: "Invalid data", errors: parsed.error.errors });
+    try {
+      const habit = await storage.createHabit(parsed.data);
+      res.json(habit);
+    } catch (error) {
+      console.error("Create habit error:", error);
+      res.status(500).json({ message: "Failed to create habit" });
+    }
+  });
+
+  app.patch("/api/habits/:id", async (req, res) => {
+    const userId = (req.session as any)?.userId;
+    if (!userId) return res.status(401).json({ message: "Not authenticated" });
+    const id = parseInt(req.params.id);
+    try {
+      const updated = await storage.updateHabit(id, userId, req.body);
+      if (!updated) return res.status(404).json({ message: "Habit not found" });
+      res.json(updated);
+    } catch (error) {
+      console.error("Update habit error:", error);
+      res.status(500).json({ message: "Failed to update habit" });
+    }
+  });
+
+  app.delete("/api/habits/:id", async (req, res) => {
+    const userId = (req.session as any)?.userId;
+    if (!userId) return res.status(401).json({ message: "Not authenticated" });
+    const id = parseInt(req.params.id);
+    try {
+      await storage.archiveHabit(id, userId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Archive habit error:", error);
+      res.status(500).json({ message: "Failed to delete habit" });
+    }
+  });
+
+  app.post("/api/habits/:id/toggle", async (req, res) => {
+    const userId = (req.session as any)?.userId;
+    if (!userId) return res.status(401).json({ message: "Not authenticated" });
+    const habitId = parseInt(req.params.id);
+    const date = req.body.date || new Date().toISOString().split('T')[0];
+    try {
+      const result = await storage.toggleHabitCompletion(habitId, userId, date);
+      res.json(result);
+    } catch (error) {
+      console.error("Toggle habit error:", error);
+      res.status(500).json({ message: "Failed to toggle habit" });
+    }
+  });
+
+  app.get("/api/habits/:id/logs", async (req, res) => {
+    const userId = (req.session as any)?.userId;
+    if (!userId) return res.status(401).json({ message: "Not authenticated" });
+    const habitId = parseInt(req.params.id);
+    const endDate = (req.query.end as string) || new Date().toISOString().split('T')[0];
+    const startDate = req.query.start as string || (() => {
+      const d = new Date(); d.setDate(d.getDate() - 90); return d.toISOString().split('T')[0];
+    })();
+    try {
+      const logs = await storage.getHabitLogsForRange(habitId, userId, startDate, endDate);
+      res.json(logs);
+    } catch (error) {
+      console.error("Get habit logs error:", error);
+      res.status(500).json({ message: "Failed to get habit logs" });
+    }
+  });
 
   registerChatRoutes(app);
   registerDebriefRoutes(app);

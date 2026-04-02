@@ -231,6 +231,54 @@ export async function sendMoodCheckinReminders() {
   }
 }
 
+// ─── Habit reminders ────────────────────────────────────────────────────────
+
+const lastHabitReminderSent = new Map<string, string>();
+
+export async function sendHabitReminders() {
+  const now = new Date();
+  const habitsForReminder = await storage.getAllHabitsForReminder();
+
+  for (const habit of habitsForReminder) {
+    if (!habit.reminderTime || !habit.user.timezone) continue;
+
+    try {
+      const userDateStr = now.toLocaleDateString('en-CA', { timeZone: habit.user.timezone });
+      const userTimeStr = now.toLocaleString('en-US', {
+        timeZone: habit.user.timezone,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      });
+
+      const [currentHourStr, currentMinuteStr] = userTimeStr.split(':');
+      const currentHour   = parseInt(currentHourStr, 10);
+      const currentMinute = parseInt(currentMinuteStr, 10);
+      const [reminderHour, reminderMinute] = habit.reminderTime.split(':').map(Number);
+
+      if (!isWithinDeliveryWindow(reminderHour, reminderMinute, currentHour, currentMinute)) continue;
+
+      const key = `habit-${habit.id}-${userDateStr}`;
+      if (lastHabitReminderSent.get(key)) continue;
+
+      const anchor = habit.anchorHabit ? ` After ${habit.anchorHabit}, it's time to` : " Time to";
+      const payload: PushNotificationPayload = {
+        title: `${habit.emoji} Habit Check-in`,
+        body: `${anchor} ${habit.name.toLowerCase()}.${habit.currentStreak && habit.currentStreak > 0 ? ` Keep your ${habit.currentStreak}-day streak alive!` : ""}`,
+        icon: '/icon-192.png',
+        url: '/',
+        tag: `habit-${habit.id}`,
+      };
+
+      console.log(`[Habit Reminders] Sending reminder for "${habit.name}" to user ${habit.userId}`);
+      await dispatchToSubscriptions(habit.subscriptions, payload);
+      lastHabitReminderSent.set(key, userDateStr);
+    } catch (error) {
+      console.error(`[Habit Reminders] Error for habit ${habit.id}:`, error);
+    }
+  }
+}
+
 // ─── Scheduler ──────────────────────────────────────────────────────────────
 
 export function startNotificationScheduler() {
@@ -243,6 +291,7 @@ export function startNotificationScheduler() {
     try {
       await sendDailyReminders();
       await sendMoodCheckinReminders();
+      await sendHabitReminders();
     } catch (error) {
       console.error('[Scheduler] Error:', error);
     }
