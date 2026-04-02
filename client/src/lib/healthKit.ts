@@ -1,36 +1,118 @@
 import { Capacitor } from "@capacitor/core";
 import { Health } from "capacitor-health";
-import type { HealthPermission } from "capacitor-health";
 
 export function isNativeIOS(): boolean {
   return Capacitor.isNativePlatform() && Capacitor.getPlatform() === "ios";
 }
 
-// Metrics this plugin can actually aggregate on iOS
-// capacitor-health only supports: 'steps' | 'active-calories' | 'mindfulness'
-type SupportedDataType = "steps" | "active-calories" | "mindfulness";
+// Extended data type strings (matching the enhanced Swift plugin)
+type DataType =
+  | "steps"
+  | "active-calories"
+  | "flights-climbed"
+  | "walking-distance"
+  | "exercise-minutes"
+  | "heart-rate"
+  | "resting-heart-rate"
+  | "hrv"
+  | "oxygen-saturation"
+  | "body-mass"
+  | "body-fat"
+  | "respiratory-rate"
+  | "sleep"
+  | "mindfulness";
 
-const METRIC_MAP: Record<string, SupportedDataType> = {
-  "Steps":          "steps",
-  "Active Energy":  "active-calories",
-  "Mindful Minutes": "mindfulness",
+interface MetricDef {
+  dataType: DataType;
+  /** Convert the raw HealthKit value to a 0–100 score */
+  normalize: (raw: number) => number;
+  permission: string;
+}
+
+// Map from display name → HealthKit config
+const METRIC_MAP: Record<string, MetricDef> = {
+  "Steps": {
+    dataType: "steps",
+    normalize: (v) => Math.min(100, Math.round(v / 10000 * 100)),
+    permission: "READ_STEPS",
+  },
+  "Active Energy": {
+    dataType: "active-calories",
+    normalize: (v) => Math.min(100, Math.round(v / 600 * 100)),
+    permission: "READ_ACTIVE_CALORIES",
+  },
+  "Flights Climbed": {
+    dataType: "flights-climbed",
+    normalize: (v) => Math.min(100, Math.round(v / 20 * 100)),
+    permission: "READ_FLIGHTS_CLIMBED",
+  },
+  "Walking Distance": {
+    dataType: "walking-distance",
+    normalize: (v) => Math.min(100, Math.round(v / 8 * 100)), // km
+    permission: "READ_WALKING_DISTANCE",
+  },
+  "Exercise Minutes": {
+    dataType: "exercise-minutes",
+    normalize: (v) => Math.min(100, Math.round(v / 60 * 100)),
+    permission: "READ_EXERCISE_MINUTES",
+  },
+  "Sleep Duration": {
+    dataType: "sleep",
+    normalize: (v) => Math.min(100, Math.round(v / 480 * 100)), // minutes → 8h = 100
+    permission: "READ_SLEEP",
+  },
+  "Heart Rate": {
+    dataType: "heart-rate",
+    normalize: (v) => Math.round(v), // bpm stored directly (50–120 range meaningful)
+    permission: "READ_HEART_RATE",
+  },
+  "Resting Heart Rate": {
+    dataType: "resting-heart-rate",
+    normalize: (v) => Math.round(v), // bpm stored directly
+    permission: "READ_RESTING_HEART_RATE",
+  },
+  "HRV": {
+    dataType: "hrv",
+    normalize: (v) => Math.min(100, Math.round(v)), // ms, 0–100 range natural
+    permission: "READ_HRV",
+  },
+  "Blood Oxygen": {
+    dataType: "oxygen-saturation",
+    normalize: (v) => Math.round(v), // % already 0–100
+    permission: "READ_OXYGEN_SATURATION",
+  },
+  "Body Weight": {
+    dataType: "body-mass",
+    normalize: (v) => Math.round(v * 10) / 10, // kg stored directly
+    permission: "READ_BODY_MASS",
+  },
+  "Body Fat %": {
+    dataType: "body-fat",
+    normalize: (v) => Math.round(v), // % already 0–100
+    permission: "READ_BODY_FAT",
+  },
+  "Mindful Minutes": {
+    dataType: "mindfulness",
+    normalize: (v) => Math.min(100, Math.round(v / 30 * 100)), // mins → 30m = 100
+    permission: "READ_MINDFULNESS",
+  },
+  "Respiratory Rate": {
+    dataType: "respiratory-rate",
+    normalize: (v) => Math.round(v), // breaths/min stored directly
+    permission: "READ_RESPIRATORY_RATE",
+  },
 };
 
-// Permissions to request
-const ALL_PERMISSIONS: HealthPermission[] = [
-  "READ_STEPS",
-  "READ_ACTIVE_CALORIES",
-  "READ_TOTAL_CALORIES",
-  "READ_DISTANCE",
-  "READ_HEART_RATE",
-  "READ_MINDFULNESS",
+// Build permissions list from metric map
+const ALL_PERMISSIONS = [
+  ...new Set(Object.values(METRIC_MAP).map(m => m.permission)),
   "READ_WORKOUTS",
+  "READ_DISTANCE",
 ];
 
 // localStorage key
 const AUTH_KEY = "dbrief_health_authorized";
 
-// Last raw error — for diagnostic display
 let _lastHealthError: string | null = null;
 export function getLastHealthError(): string | null { return _lastHealthError; }
 
@@ -42,16 +124,12 @@ export function setHealthAuthState(v: boolean): void {
   localStorage.setItem(AUTH_KEY, v ? "true" : "false");
 }
 
-// Returns which metric names can be auto-synced by this plugin
+/** Returns metric display names that can be auto-synced */
 export function getHealthSyncableMetrics(): string[] {
   return Object.keys(METRIC_MAP);
 }
 
-export type HealthAvailability =
-  | "available"
-  | "not_installed"
-  | "not_ios"
-  | "unavailable";
+export type HealthAvailability = "available" | "not_installed" | "not_ios" | "unavailable";
 
 export async function checkHealthAvailable(): Promise<HealthAvailability> {
   if (!isNativeIOS()) return "not_ios";
@@ -75,7 +153,7 @@ export type HealthAuthResult = "granted" | "denied" | "not_installed" | "error";
 export async function requestHealthPermissions(): Promise<HealthAuthResult> {
   if (!isNativeIOS()) return "not_installed";
   try {
-    await Health.requestHealthPermissions({ permissions: ALL_PERMISSIONS });
+    await (Health as any).requestHealthPermissions({ permissions: ALL_PERMISSIONS });
     setHealthAuthState(true);
     _lastHealthError = null;
     return "granted";
@@ -96,20 +174,21 @@ export async function requestHealthPermissions(): Promise<HealthAuthResult> {
   }
 }
 
-// Query a single aggregated metric for a date (full day, 1-hour bucket)
-async function queryMetric(dataType: SupportedDataType, dateStr: string): Promise<number | null> {
+/** Query one metric for a date; returns the raw HealthKit value (pre-normalization) */
+async function queryRawMetric(dataType: DataType, dateStr: string): Promise<number | null> {
   try {
     const startDate = `${dateStr}T00:00:00.000Z`;
     const endDate   = `${dateStr}T23:59:59.999Z`;
-    const { aggregatedData } = await Health.queryAggregated({
+    const { aggregatedData } = await (Health as any).queryAggregated({
       dataType,
       startDate,
       endDate,
       bucket: "day",
     });
     if (!aggregatedData || aggregatedData.length === 0) return null;
-    const total = aggregatedData.reduce((s, d) => s + d.value, 0);
-    return Math.round(total * 10) / 10;
+    // For cumulative types, sum; for discrete/sleep, take the last (or only) value
+    const total = aggregatedData.reduce((s: number, d: any) => s + d.value, 0);
+    return total;
   } catch (e) {
     console.error(`[HealthKit] Error reading ${dataType}:`, e);
     return null;
@@ -127,8 +206,12 @@ export async function syncHealthData(dateStr: string, enabledMetricNames: string
   const syncable = enabledMetricNames.filter(n => METRIC_MAP[n]);
   await Promise.all(
     syncable.map(async (name) => {
-      const value = await queryMetric(METRIC_MAP[name], dateStr);
-      if (value !== null) results.push({ name, value });
+      const def = METRIC_MAP[name];
+      const raw = await queryRawMetric(def.dataType, dateStr);
+      if (raw !== null && raw > 0) {
+        const score = def.normalize(raw);
+        results.push({ name, value: score });
+      }
     })
   );
 
