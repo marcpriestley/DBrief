@@ -50,7 +50,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Initialize streak
       await storage.createStreak({ userId: user.id, currentStreak: 0, longestStreak: 0, lastEntryDate: null });
       
-      await storage.createGoalTemplate({ userId: user.id, title: "Make my bed", sortOrder: 0, isActive: true, recurring: true });
+      await storage.createHabit({ userId: user.id, name: "Make my bed", emoji: "🛏️", category: "morning", anchorHabit: "I wake up", reminderEnabled: false });
       
       (req.session as any).userId = user.id;
       res.json({
@@ -113,7 +113,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const randomPw = await bcrypt.hash(Math.random().toString(36), 10);
         user = await storage.createUser({ username: email, password: randomPw });
         await storage.createStreak({ userId: user.id, currentStreak: 0, longestStreak: 0, lastEntryDate: null });
-        await storage.createGoalTemplate({ userId: user.id, title: "Make my bed", sortOrder: 0, isActive: true, recurring: true });
+        await storage.createHabit({ userId: user.id, name: "Make my bed", emoji: "🛏️", category: "morning", anchorHabit: "I wake up", reminderEnabled: false });
       }
 
       (req.session as any).userId = user.id;

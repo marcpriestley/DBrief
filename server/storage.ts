@@ -799,28 +799,7 @@ export class DatabaseStorage implements IStorage {
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     if (date < todayStr) return existing;
 
-    let templates = await this.getGoalTemplates(userId);
-
-    // Seed "Make my bed" as the default recurring goal if user has no templates at all
-    if (templates.length === 0) {
-      await db.insert(goalTemplates).values({
-        userId,
-        title: "Make my bed",
-        sortOrder: 0,
-        isActive: true,
-        recurring: true,
-      });
-      templates = await this.getGoalTemplates(userId);
-    } else {
-      // If "Make my bed" exists but is not recurring, fix it
-      const makeMyBed = templates.find(t => t.title.toLowerCase() === "make my bed" && !t.recurring);
-      if (makeMyBed) {
-        await db.update(goalTemplates)
-          .set({ recurring: true })
-          .where(eq(goalTemplates.id, makeMyBed.id));
-        templates = await this.getGoalTemplates(userId);
-      }
-    }
+    const templates = await this.getGoalTemplates(userId);
 
     const recurringTemplates = templates.filter(t => t.recurring);
     if (recurringTemplates.length === 0) return existing;
@@ -930,6 +909,18 @@ export class DatabaseStorage implements IStorage {
   // ─── Habit methods ─────────────────────────────────────────────────────────
 
   async getHabits(userId: number): Promise<Habit[]> {
+    // Seed "Make my bed" for users who have never had any habit (existing accounts pre-Habit Lab)
+    const allEver = await db.select({ id: habits.id }).from(habits).where(eq(habits.userId, userId));
+    if (allEver.length === 0) {
+      await db.insert(habits).values({
+        userId,
+        name: "Make my bed",
+        emoji: "🛏️",
+        category: "morning",
+        anchorHabit: "I wake up",
+        reminderEnabled: false,
+      });
+    }
     return await db.select().from(habits)
       .where(and(eq(habits.userId, userId), eq(habits.isArchived, false)))
       .orderBy(habits.createdAt);
