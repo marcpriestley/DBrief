@@ -53,7 +53,7 @@ function getMilestone(total: number): { next: number; label: string } {
 type SetupState = {
   name: string;
   emoji: string;
-  category: string;
+  categories: string[];   // multi-select, stored as comma-separated in category field
   motivation: string;
   anchorHabit: string;
   reminderTime: string;
@@ -63,7 +63,7 @@ type SetupState = {
 const DEFAULT_SETUP: SetupState = {
   name: "",
   emoji: "⭐",
-  category: "general",
+  categories: [],
   motivation: "",
   anchorHabit: "",
   reminderTime: "08:00",
@@ -128,7 +128,8 @@ export default function HabitsSection() {
 
   const handleCreate = useCallback(() => {
     if (!setup.name.trim()) return;
-    createMutation.mutate(setup);
+    const { categories, ...rest } = setup;
+    createMutation.mutate({ ...rest, category: categories.length > 0 ? categories.join(",") : "general" } as any);
   }, [createMutation, setup]);
 
   const openSetup = () => {
@@ -176,7 +177,7 @@ export default function HabitsSection() {
         <div className="text-center py-8 text-muted-foreground">
           <div className="text-3xl mb-2">🏁</div>
           <p className="text-sm font-medium">No habits yet</p>
-          <p className="text-xs mt-1 text-muted-foreground/70">Start building your first routine — takes 66 days to cement one for life.</p>
+          <p className="text-xs mt-1 text-muted-foreground/70">Habits form when consistency is combined with time.</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -336,8 +337,11 @@ function HabitCard({
           </div>
         </div>
 
-        {/* Streak */}
-        <div className="flex flex-col items-center shrink-0 min-w-[40px]">
+        {/* Streak — tap 🌱 to log today's completion */}
+        <button
+          onClick={() => onToggle(habit)}
+          className="flex flex-col items-center shrink-0 min-w-[40px] active:scale-95 transition-transform"
+        >
           {streak > 0 ? (
             <>
               <div className="flex items-center gap-0.5">
@@ -348,11 +352,11 @@ function HabitCard({
             </>
           ) : (
             <>
-              <span className="text-base">🌱</span>
-              <span className="text-[10px] text-muted-foreground">start</span>
+              <span className="text-lg leading-none">🌱</span>
+              <span className="text-[10px] text-primary font-medium">tap</span>
             </>
           )}
-        </div>
+        </button>
 
         {/* Menu */}
         <button
@@ -433,10 +437,11 @@ function SetupModal({
         exit={{ y: 60, opacity: 0 }}
         transition={{ type: "spring", damping: 28, stiffness: 300 }}
         onClick={e => e.stopPropagation()}
-        className="bg-card rounded-2xl border border-border/50 w-full max-w-md overflow-hidden"
+        className="bg-card rounded-2xl border border-border/50 w-full max-w-md flex flex-col"
+        style={{ maxHeight: "82dvh" }}
       >
         {/* Progress bar */}
-        <div className="h-1 bg-muted">
+        <div className="h-1 bg-muted shrink-0">
           <motion.div
             className="h-full bg-primary rounded-full"
             animate={{ width: `${((step + 1) / steps.length) * 100}%` }}
@@ -444,7 +449,7 @@ function SetupModal({
           />
         </div>
 
-        <div className="p-5">
+        <div className="p-5 overflow-y-auto">
           {/* Header */}
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -534,7 +539,7 @@ function Step1({ setup, setSetup }: { setup: SetupState; setSetup: (s: SetupStat
             <button
               key={e}
               onClick={() => setSetup({ ...setup, emoji: e })}
-              className={`text-xl p-1.5 rounded-lg transition-all ${setup.emoji === e ? "bg-primary/20 scale-110" : "hover:bg-muted/50"}`}
+              className={`text-xl p-1.5 rounded-lg transition-all ${setup.emoji === e ? "bg-primary/30 scale-125 ring-2 ring-primary shadow-sm" : "hover:bg-muted/50"}`}
             >
               {e}
             </button>
@@ -551,27 +556,34 @@ function Step1({ setup, setSetup }: { setup: SetupState; setSetup: (s: SetupStat
           onChange={e => setSetup({ ...setup, name: e.target.value })}
           placeholder="e.g. Meditate, Cold shower, Read 20 pages…"
           className="w-full bg-muted/50 border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-primary/50"
-          autoFocus
         />
       </div>
 
-      {/* Category */}
+      {/* Category — multi-select */}
       <div>
-        <label className="text-xs text-muted-foreground block mb-2">Category</label>
+        <label className="text-xs text-muted-foreground block mb-2">Category <span className="opacity-50">(pick any)</span></label>
         <div className="flex flex-wrap gap-1.5">
-          {CATEGORIES.map(c => (
-            <button
-              key={c.value}
-              onClick={() => setSetup({ ...setup, category: c.value })}
-              className={`text-xs px-2.5 py-1 rounded-lg border transition-all ${
-                setup.category === c.value
-                  ? "border-primary/50 bg-primary/10 text-primary"
-                  : "border-border/50 bg-muted/30 text-muted-foreground"
-              }`}
-            >
-              {c.label}
-            </button>
-          ))}
+          {CATEGORIES.map(c => {
+            const selected = setup.categories.includes(c.value);
+            return (
+              <button
+                key={c.value}
+                onClick={() => {
+                  const next = selected
+                    ? setup.categories.filter(v => v !== c.value)
+                    : [...setup.categories, c.value];
+                  setSetup({ ...setup, categories: next });
+                }}
+                className={`text-xs px-2.5 py-1 rounded-lg border transition-all ${
+                  selected
+                    ? "border-primary/60 bg-primary/15 text-primary font-medium"
+                    : "border-border/50 bg-muted/30 text-muted-foreground"
+                }`}
+              >
+                {c.label}
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -740,8 +752,10 @@ function EditModal({
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 40, opacity: 0 }}
         onClick={e => e.stopPropagation()}
-        className="bg-card rounded-2xl border border-border/50 w-full max-w-md p-5 space-y-4"
+        className="bg-card rounded-2xl border border-border/50 w-full max-w-md overflow-y-auto space-y-4"
+        style={{ maxHeight: "82dvh" }}
       >
+        <div className="p-5 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-base font-semibold text-foreground">Edit habit</h3>
           <button onClick={onClose} className="text-muted-foreground/60 hover:text-muted-foreground p-1">
@@ -755,7 +769,7 @@ function EditModal({
             <button
               key={e}
               onClick={() => setEmoji(e)}
-              className={`text-xl p-1.5 rounded-lg transition-all ${emoji === e ? "bg-primary/20 scale-110" : "hover:bg-muted/50"}`}
+              className={`text-xl p-1.5 rounded-lg transition-all ${emoji === e ? "bg-primary/30 scale-125 ring-2 ring-primary shadow-sm" : "hover:bg-muted/50"}`}
             >
               {e}
             </button>
@@ -816,6 +830,7 @@ function EditModal({
         >
           {isSaving ? "Saving…" : "Save changes"}
         </button>
+        </div>
       </motion.div>
     </motion.div>
   );
