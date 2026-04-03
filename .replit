@@ -46,3 +46,4 @@ integrations = ["javascript_object_storage:2.0.0", "javascript_openai_ai_integra
 
 [userenv.shared]
 ENCRYPTION_KEY = "8f0e0f658bcfce71709d91af0603a01354f3c70136cec12e7117d6b202702f8e"
+APNS_PRODUCTION = "true"
