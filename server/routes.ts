@@ -1131,6 +1131,7 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
 
       res.json({
         notificationsEnabled: user.notificationsEnabled,
+        moodRemindersEnabled: user.moodRemindersEnabled ?? true,
         reminderTime: user.reminderTime,
         reminderTime2: user.reminderTime2,
         timezone: user.timezone,
@@ -1146,10 +1147,11 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
   app.patch("/api/user/settings", async (req, res) => {
     try {
       const userId = getUserId(req);
-      const { notificationsEnabled, reminderTime, reminderTime2, timezone, healthMetricsEnabled, goalPreference, displayName } = req.body;
+      const { notificationsEnabled, moodRemindersEnabled, reminderTime, reminderTime2, timezone, healthMetricsEnabled, goalPreference, displayName } = req.body;
 
       const updatedUser = await storage.updateUserSettings(userId, {
         ...(notificationsEnabled !== undefined && { notificationsEnabled }),
+        ...(moodRemindersEnabled !== undefined && { moodRemindersEnabled }),
         ...(reminderTime !== undefined && { reminderTime }),
         ...(reminderTime2 !== undefined && { reminderTime2 }),
         ...(timezone !== undefined && { timezone }),
@@ -1164,6 +1166,7 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
 
       res.json({
         notificationsEnabled: updatedUser.notificationsEnabled,
+        moodRemindersEnabled: updatedUser.moodRemindersEnabled ?? true,
         reminderTime: updatedUser.reminderTime,
         reminderTime2: updatedUser.reminderTime2,
         timezone: updatedUser.timezone,

@@ -192,7 +192,7 @@ export async function sendMoodCheckinReminders() {
   const allUsers = await storage.getAllUsersForReminder("");
 
   for (const user of allUsers) {
-    if (!user.timezone || !user.notificationsEnabled) continue;
+    if (!user.timezone || !user.notificationsEnabled || user.moodRemindersEnabled === false) continue;
 
     try {
       const userDateStr = now.toLocaleDateString('en-CA', { timeZone: user.timezone });

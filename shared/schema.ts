@@ -9,6 +9,7 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
   displayName: text("display_name"),
   notificationsEnabled: boolean("notifications_enabled").default(true),
+  moodRemindersEnabled: boolean("mood_reminders_enabled").default(true),
   reminderTime: text("reminder_time").default("09:00"),
   reminderTime2: text("reminder_time_2").default("21:00"),
   timezone: text("timezone").default("UTC"),

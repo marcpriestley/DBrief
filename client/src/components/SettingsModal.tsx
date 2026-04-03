@@ -156,6 +156,7 @@ interface SettingsModalProps {
 
 interface UserSettings {
   notificationsEnabled: boolean;
+  moodRemindersEnabled: boolean;
   reminderTime: string;
   reminderTime2: string;
   timezone: string;
@@ -177,6 +178,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   });
 
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [moodRemindersEnabled, setMoodRemindersEnabled] = useState(true);
   const [reminderTime, setReminderTime] = useState("09:00");
   const [reminderTime2, setReminderTime2] = useState("21:00");
   const [displayName, setDisplayName] = useState("");
@@ -189,6 +191,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   useEffect(() => {
     if (settings) {
       setNotificationsEnabled(settings.notificationsEnabled);
+      setMoodRemindersEnabled(settings.moodRemindersEnabled ?? true);
       setReminderTime(settings.reminderTime);
       setReminderTime2(settings.reminderTime2);
       setDisplayName(settings.displayName ?? "");
@@ -242,7 +245,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
   const handleSave = () => {
     const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    updateSettingsMutation.mutate({ notificationsEnabled, reminderTime, reminderTime2, timezone: userTimezone, displayName });
+    updateSettingsMutation.mutate({ notificationsEnabled, moodRemindersEnabled, reminderTime, reminderTime2, timezone: userTimezone, displayName });
   };
 
   const handleToggleNotifications = async (enabled: boolean) => {
@@ -474,12 +477,20 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             {notificationsEnabled && <NotificationPermissionHelper />}
 
             <div className="rounded-lg bg-muted/50 border border-border/50 p-3 space-y-1.5">
-              <div className="flex items-center gap-1.5">
-                <Heart className="h-3 w-3 text-pink-500" />
-                <p className="text-xs font-medium text-foreground">Mood Reminders</p>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Heart className="h-3 w-3 text-pink-500" />
+                  <p className="text-xs font-medium text-foreground">Mood Check-ins</p>
+                </div>
+                <Switch
+                  checked={moodRemindersEnabled}
+                  onCheckedChange={setMoodRemindersEnabled}
+                />
               </div>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Three daily check-ins at 8 AM, 1 PM, and 9 PM (your local time).
+                {moodRemindersEnabled
+                  ? "Reminders at 8 AM, 1 PM, and 9 PM to log your mood."
+                  : "Mood check-in reminders are off."}
               </p>
             </div>
 
