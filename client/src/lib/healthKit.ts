@@ -61,6 +61,11 @@ const METRIC_MAP: Record<string, MetricDef> = {
     normalize: (v) => Math.min(100, Math.round(v / 480 * 100)), // minutes → 8h = 100
     permission: "READ_SLEEP",
   },
+  "Sleep Quality": {
+    dataType: "sleep-quality",
+    normalize: (v) => Math.min(100, Math.round(v)), // already 0–100% efficiency
+    permission: "READ_SLEEP",
+  },
   "Heart Rate": {
     dataType: "heart-rate",
     normalize: (v) => Math.round(v), // bpm stored directly (50–120 range meaningful)

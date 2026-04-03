@@ -604,7 +604,8 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
       focusMountedRef.current = true;
       return;
     }
-    if (!voice.isListening && !isStreaming) {
+    // Don't auto-focus on native/mobile — it pops the keyboard over the AI response
+    if (!Capacitor.isNativePlatform() && !voice.isListening && !isStreaming) {
       inputRef.current?.focus({ preventScroll: true });
     }
   }, [voice.isListening, isStreaming]);
