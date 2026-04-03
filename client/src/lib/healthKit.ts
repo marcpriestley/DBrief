@@ -33,77 +33,77 @@ interface MetricDef {
 const METRIC_MAP: Record<string, MetricDef> = {
   "Steps": {
     dataType: "steps",
-    normalize: (v) => Math.min(100, Math.round(v / 10000 * 100)),
+    normalize: (v) => Math.round(v), // raw step count
     permission: "READ_STEPS",
   },
   "Active Energy": {
     dataType: "active-calories",
-    normalize: (v) => Math.min(100, Math.round(v / 600 * 100)),
+    normalize: (v) => Math.round(v), // raw kcal
     permission: "READ_ACTIVE_CALORIES",
   },
   "Flights Climbed": {
     dataType: "flights-climbed",
-    normalize: (v) => Math.min(100, Math.round(v / 20 * 100)),
+    normalize: (v) => Math.round(v), // raw flight count
     permission: "READ_FLIGHTS_CLIMBED",
   },
   "Walking Distance": {
     dataType: "walking-distance",
-    normalize: (v) => Math.min(100, Math.round(v / 8 * 100)), // km
+    normalize: (v) => Math.round(v * 10) / 10, // km, 1 decimal
     permission: "READ_WALKING_DISTANCE",
   },
   "Exercise Minutes": {
     dataType: "exercise-minutes",
-    normalize: (v) => Math.min(100, Math.round(v / 60 * 100)),
+    normalize: (v) => Math.round(v), // raw minutes
     permission: "READ_EXERCISE_MINUTES",
   },
   "Sleep Duration": {
     dataType: "sleep",
-    normalize: (v) => Math.min(100, Math.round(v / 480 * 100)), // minutes → 8h = 100
+    normalize: (v) => Math.round(v / 60 * 10) / 10, // minutes → hours, 1 decimal
     permission: "READ_SLEEP",
   },
   "Sleep Quality": {
     dataType: "sleep-quality",
-    normalize: (v) => Math.min(100, Math.round(v)), // already 0–100% efficiency
+    normalize: (v) => Math.min(100, Math.round(v)), // efficiency % (0–100)
     permission: "READ_SLEEP",
   },
   "Heart Rate": {
     dataType: "heart-rate",
-    normalize: (v) => Math.round(v), // bpm stored directly (50–120 range meaningful)
+    normalize: (v) => Math.round(v), // bpm
     permission: "READ_HEART_RATE",
   },
   "Resting Heart Rate": {
     dataType: "resting-heart-rate",
-    normalize: (v) => Math.round(v), // bpm stored directly
+    normalize: (v) => Math.round(v), // bpm
     permission: "READ_RESTING_HEART_RATE",
   },
   "HRV": {
     dataType: "hrv",
-    normalize: (v) => Math.min(100, Math.round(v)), // ms, 0–100 range natural
+    normalize: (v) => Math.round(v), // ms
     permission: "READ_HRV",
   },
   "Blood Oxygen": {
     dataType: "oxygen-saturation",
-    normalize: (v) => Math.round(v), // % already 0–100
+    normalize: (v) => Math.round(v * 10) / 10, // %
     permission: "READ_OXYGEN_SATURATION",
   },
   "Body Weight": {
     dataType: "body-mass",
-    normalize: (v) => Math.round(v * 10) / 10, // kg stored directly
+    normalize: (v) => Math.round(v * 10) / 10, // kg
     permission: "READ_BODY_MASS",
   },
   "Body Fat %": {
     dataType: "body-fat",
-    normalize: (v) => Math.round(v), // % already 0–100
+    normalize: (v) => Math.round(v * 10) / 10, // %
     permission: "READ_BODY_FAT",
   },
   "Mindful Minutes": {
     dataType: "mindfulness",
-    normalize: (v) => Math.min(100, Math.round(v / 30 * 100)), // mins → 30m = 100
+    normalize: (v) => Math.round(v), // raw minutes
     permission: "READ_MINDFULNESS",
   },
   "Respiratory Rate": {
     dataType: "respiratory-rate",
-    normalize: (v) => Math.round(v), // breaths/min stored directly
+    normalize: (v) => Math.round(v * 10) / 10, // breaths/min
     permission: "READ_RESPIRATORY_RATE",
   },
 };

@@ -39,24 +39,21 @@ const APPLE_HEALTH_METRICS: {
   { name: "Steps",               category: "Activity",     color: "#10B981", maxValue: 20000, unit: "steps" },
   { name: "Active Energy",       category: "Activity",     color: "#F59E0B", maxValue: 800,   unit: "kcal" },
   { name: "Exercise Minutes",    category: "Activity",     color: "#3B82F6", maxValue: 60,    unit: "min" },
-  { name: "Stand Hours",         category: "Activity",     color: "#06B6D4", maxValue: 12,    unit: "hrs" },
   { name: "Flights Climbed",     category: "Activity",     color: "#84CC16", maxValue: 20,    unit: "" },
   { name: "Walking Distance",    category: "Activity",     color: "#0EA5E9", maxValue: 10,    unit: "km" },
   { name: "Sleep Duration",      category: "Sleep",        color: "#4F46E5", maxValue: 10,    unit: "hrs" },
-  { name: "Sleep Quality",       category: "Sleep",        color: "#7C3AED", maxValue: 100,   unit: "/100" },
+  { name: "Sleep Quality",       category: "Sleep",        color: "#7C3AED", maxValue: 100,   unit: "%" },
   { name: "Heart Rate",          category: "Heart",        color: "#EF4444", maxValue: 200,   unit: "bpm" },
   { name: "Resting Heart Rate",  category: "Heart",        color: "#E11D48", maxValue: 100,   unit: "bpm" },
   { name: "HRV",                 category: "Heart",        color: "#8B5CF6", maxValue: 120,   unit: "ms" },
   { name: "Blood Oxygen",        category: "Heart",        color: "#38BDF8", maxValue: 100,   unit: "%" },
   { name: "Body Weight",         category: "Body",         color: "#EC4899", maxValue: 200,   unit: "kg" },
   { name: "Body Fat %",          category: "Body",         color: "#F97316", maxValue: 50,    unit: "%" },
-  { name: "BMI",                 category: "Body",         color: "#6366F1", maxValue: 40,    unit: "" },
   { name: "Mindful Minutes",     category: "Mindfulness",  color: "#14B8A6", maxValue: 60,    unit: "min" },
   { name: "Respiratory Rate",    category: "Respiratory",  color: "#64748B", maxValue: 30,    unit: "brpm" },
-  { name: "Water",               category: "Nutrition",    color: "#0EA5E9", maxValue: 4,     unit: "L" },
 ];
 
-const CATEGORY_ORDER = ["Activity", "Sleep", "Heart", "Body", "Mindfulness", "Respiratory", "Nutrition"];
+const CATEGORY_ORDER = ["Activity", "Sleep", "Heart", "Body", "Mindfulness", "Respiratory"];
 
 function NotificationPermissionHelper() {
   const [permissionState, setPermissionState] = useState<NotificationPermission | "unsupported" | "native-unknown" | "native-denied" | "native-granted">("default");
