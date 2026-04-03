@@ -92,10 +92,10 @@ function generateApnsJwt(keyId: string, teamId: string, privateKey: Uint8Array):
   const claims = Buffer.from(JSON.stringify({ iss: teamId, iat: now })).toString("base64url");
   const signingInput = `${header}.${claims}`;
 
-  // p256.sign returns DER-encoded signature; we need IEEE-P1363 (raw r||s) for APNs
+  // p256.sign returns a 64-byte Uint8Array (r || s compact format) — exactly what APNs needs
   const msgHash = Buffer.from(signingInput);
   const sig = p256.sign(msgHash, privateKey, { lowS: true, prehash: true });
-  const signature = Buffer.from(sig.toCompactRawBytes()).toString("base64url");
+  const signature = Buffer.from(sig).toString("base64url");
 
   const token = `${signingInput}.${signature}`;
   cachedJwt = { token, issuedAt: now };
