@@ -1,8 +1,6 @@
-import { webcrypto, createPrivateKey } from "node:crypto";
+import { p256 } from "@noble/curves/p256";
 import http2 from "node:http2";
 import { storage } from "./storage";
-
-const { subtle } = webcrypto;
 
 export interface PushNotificationPayload {
   title: string;
@@ -15,61 +13,102 @@ const APNS_HOST_SANDBOX = "https://api.sandbox.push.apple.com";
 const APNS_HOST_PRODUCTION = "https://api.push.apple.com";
 
 let cachedJwt: { token: string; issuedAt: number } | null = null;
-let cachedCryptoKey: CryptoKey | null = null;
+let cachedPrivKey: Uint8Array | null = null;
 let cachedRawKey: string | null = null;
 
-async function importApnsKey(pemKey: string): Promise<CryptoKey> {
-  if (cachedCryptoKey && cachedRawKey === pemKey) return cachedCryptoKey;
+// --- Minimal DER reader to extract the raw 32-byte P-256 private key from PKCS#8 ---
 
-  // Use Node's createPrivateKey to handle all PEM formats robustly,
-  // then export as raw PKCS#8 DER bytes for crypto.subtle.importKey
-  const nodeKey = createPrivateKey({ key: pemKey, format: "pem" });
-  const der = nodeKey.export({ type: "pkcs8", format: "der" }) as Buffer;
+function readLength(der: Buffer, pos: number): { len: number; consumed: number } {
+  if (der[pos] < 0x80) return { len: der[pos], consumed: 1 };
+  const numBytes = der[pos] & 0x7f;
+  let len = 0;
+  for (let i = 1; i <= numBytes; i++) len = (len << 8) | der[pos + i];
+  return { len, consumed: 1 + numBytes };
+}
 
-  const key = await subtle.importKey(
-    "pkcs8",
-    der,
-    { name: "ECDSA", namedCurve: "P-256" },
-    false,
-    ["sign"]
-  );
+function extractP256PrivateKey(pem: string): Uint8Array {
+  // Strip PEM headers and decode base64 — handle both actual newlines and literal \n
+  const b64 = pem
+    .replace(/-----[^-]+-----/g, "")
+    .replace(/\s+/g, "");
+  const der = Buffer.from(b64, "base64");
 
-  cachedCryptoKey = key;
+  let pos = 0;
+
+  // outer SEQUENCE
+  pos++; // tag 0x30
+  const outerLen = readLength(der, pos);
+  pos += outerLen.consumed;
+
+  // version INTEGER
+  pos++; // tag 0x02
+  const verLen = readLength(der, pos);
+  pos += verLen.consumed + verLen.len;
+
+  // algorithm SEQUENCE
+  pos++; // tag 0x30
+  const algLen = readLength(der, pos);
+  pos += algLen.consumed + algLen.len;
+
+  // privateKey OCTET STRING (contains SEC1)
+  pos++; // tag 0x04
+  const pkOctetLen = readLength(der, pos);
+  pos += pkOctetLen.consumed;
+
+  // SEC1 SEQUENCE
+  pos++; // tag 0x30
+  const sec1Len = readLength(der, pos);
+  pos += sec1Len.consumed;
+
+  // SEC1 version INTEGER (= 1)
+  pos++; // tag 0x02
+  const sec1VerLen = readLength(der, pos);
+  pos += sec1VerLen.consumed + sec1VerLen.len;
+
+  // private key OCTET STRING — this is the 32-byte key
+  pos++; // tag 0x04
+  const keyLen = readLength(der, pos);
+  pos += keyLen.consumed;
+
+  return new Uint8Array(der.slice(pos, pos + keyLen.len));
+}
+
+function loadPrivateKey(pemKey: string): Uint8Array {
+  if (cachedPrivKey && cachedRawKey === pemKey) return cachedPrivKey;
+  const key = extractP256PrivateKey(pemKey);
+  if (key.length !== 32) throw new Error(`Expected 32-byte P-256 key, got ${key.length} bytes`);
+  cachedPrivKey = key;
   cachedRawKey = pemKey;
   return key;
 }
 
-async function generateApnsJwt(keyId: string, teamId: string, privateKey: string): Promise<string> {
+// --- JWT generation using pure-JS p256 signing ---
+
+function generateApnsJwt(keyId: string, teamId: string, privateKey: Uint8Array): string {
   const now = Math.floor(Date.now() / 1000);
-  if (cachedJwt && now - cachedJwt.issuedAt < 3000) {
-    return cachedJwt.token;
-  }
+  if (cachedJwt && now - cachedJwt.issuedAt < 3000) return cachedJwt.token;
 
   const header = Buffer.from(JSON.stringify({ alg: "ES256", kid: keyId })).toString("base64url");
   const claims = Buffer.from(JSON.stringify({ iss: teamId, iat: now })).toString("base64url");
   const signingInput = `${header}.${claims}`;
 
-  const cryptoKey = await importApnsKey(privateKey);
-  const signatureBuffer = await subtle.sign(
-    { name: "ECDSA", hash: "SHA-256" },
-    cryptoKey,
-    Buffer.from(signingInput)
-  );
+  // p256.sign returns DER-encoded signature; we need IEEE-P1363 (raw r||s) for APNs
+  const msgHash = Buffer.from(signingInput);
+  const sig = p256.sign(msgHash, privateKey, { lowS: true, prehash: true });
+  const signature = Buffer.from(sig.toCompactRawBytes()).toString("base64url");
 
-  // Web Crypto returns IEEE-P1363 format — this is exactly what APNs expects
-  const signature = Buffer.from(signatureBuffer).toString("base64url");
   const token = `${signingInput}.${signature}`;
   cachedJwt = { token, issuedAt: now };
   return token;
 }
 
+// --- HTTP/2 APNs connection ---
+
 let h2Session: http2.ClientHttp2Session | null = null;
 let h2Host: string | null = null;
 
 function getH2Session(host: string): http2.ClientHttp2Session {
-  if (h2Session && !h2Session.destroyed && h2Host === host) {
-    return h2Session;
-  }
+  if (h2Session && !h2Session.destroyed && h2Host === host) return h2Session;
   if (h2Session && !h2Session.destroyed) h2Session.destroy();
   h2Session = http2.connect(host);
   h2Host = host;
@@ -77,6 +116,8 @@ function getH2Session(host: string): http2.ClientHttp2Session {
   h2Session.on("close", () => { h2Session = null; h2Host = null; });
   return h2Session;
 }
+
+// --- Public API ---
 
 export async function sendApnsNotification(
   deviceToken: string,
@@ -91,19 +132,20 @@ export async function sendApnsNotification(
     return false;
   }
 
-  const privateKey = rawKey.replace(/\\n/g, "\n");
+  const pemKey = rawKey.replace(/\\n/g, "\n");
   const useProduction = process.env.APNS_PRODUCTION === "true";
   const host = useProduction ? APNS_HOST_PRODUCTION : APNS_HOST_SANDBOX;
   const bundleId = "com.dbrief.app";
 
-  console.log(`[APNs] Sending to ${deviceToken.slice(0, 10)}… env=${useProduction ? "production" : "sandbox"} keyLen=${privateKey.length}`);
+  console.log(`[APNs] Sending to ${deviceToken.slice(0, 10)}… env=${useProduction ? "production" : "sandbox"} keyLen=${pemKey.length}`);
 
   let jwt: string;
   try {
-    jwt = await generateApnsJwt(keyId, teamId, privateKey);
-    console.log("[APNs] JWT generated successfully");
+    const privKey = loadPrivateKey(pemKey);
+    jwt = generateApnsJwt(keyId, teamId, privKey);
+    console.log("[APNs] JWT generated OK");
   } catch (err) {
-    console.error("[APNs] JWT signing failed:", err);
+    console.error("[APNs] JWT generation failed:", err);
     return false;
   }
 
@@ -135,15 +177,11 @@ export async function sendApnsNotification(
       let responseData = "";
       let statusCode = 0;
 
-      req.on("response", (headers) => {
-        statusCode = headers[":status"] as number;
-      });
-
+      req.on("response", (headers) => { statusCode = headers[":status"] as number; });
       req.on("data", (chunk) => { responseData += chunk; });
-
       req.on("end", async () => {
         if (statusCode === 200) {
-          console.log(`[APNs] Sent successfully to ${deviceToken.slice(0, 10)}…`);
+          console.log(`[APNs] Delivered successfully to ${deviceToken.slice(0, 10)}…`);
           resolve(true);
         } else {
           let reason = "unknown";
@@ -155,7 +193,6 @@ export async function sendApnsNotification(
           resolve(false);
         }
       });
-
       req.on("error", (err) => {
         console.error("[APNs] Request error:", err);
         h2Session = null;
@@ -165,7 +202,7 @@ export async function sendApnsNotification(
       req.write(apnsPayload);
       req.end();
     } catch (err) {
-      console.error("[APNs] Failed to send:", err);
+      console.error("[APNs] Failed to create request:", err);
       resolve(false);
     }
   });
