@@ -1119,6 +1119,46 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
     res.json({ configured: isApnsConfigured() });
   });
 
+  // Check if user has a registered push subscription
+  app.get("/api/push/status", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const users = await storage.getAllUsersForReminder("");
+      const user = users.find(u => u.id === userId);
+      const subs = user?.subscriptions ?? [];
+      res.json({
+        registered: subs.length > 0,
+        count: subs.length,
+        hasApns: subs.some(s => !!s.apnsToken),
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to check push status" });
+    }
+  });
+
+  // Send a test push notification to the current user
+  app.post("/api/push/test", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const users = await storage.getAllUsersForReminder("");
+      const user = users.find(u => u.id === userId);
+      const subs = user?.subscriptions ?? [];
+      if (subs.length === 0) {
+        return res.status(404).json({ message: "No registered device found. Toggle notifications off and on to register." });
+      }
+      const { dispatchToUser } = await import("./notifications");
+      await dispatchToUser(subs, {
+        title: "🏁 Test Notification",
+        body: "DBrief notifications are working correctly!",
+        url: "/",
+        tag: `test-${userId}-${Date.now()}`,
+      });
+      res.json({ success: true, sent: subs.length });
+    } catch (error: any) {
+      res.status(500).json({ message: error?.message || "Failed to send test notification" });
+    }
+  });
+
   // User Settings Routes
   app.get("/api/user/settings", async (req, res) => {
     try {

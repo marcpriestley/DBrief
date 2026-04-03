@@ -149,6 +149,60 @@ function NotificationPermissionHelper() {
   return null;
 }
 
+function PushRegistrationStatus() {
+  const { data, refetch, isLoading } = useQuery<{ registered: boolean; hasApns: boolean }>({
+    queryKey: ["/api/push/status"],
+    staleTime: 10000,
+  });
+
+  const testMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/push/test", {}),
+    onSuccess: () => {
+      toast({ title: "Test sent", description: "You should receive a notification shortly." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Not registered", description: err?.message || "Toggle notifications off and back on to register this device.", variant: "destructive" });
+    },
+  });
+
+  const { toast } = useToast();
+
+  if (isLoading) return null;
+
+  if (!data?.registered) {
+    return (
+      <div className="flex items-start gap-2.5 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+        <AlertCircle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+        <div className="flex-1 text-xs text-amber-700 space-y-1.5">
+          <p className="font-medium">Device not registered</p>
+          <p>Toggle Daily Reminders off then back on to register this device for push notifications.</p>
+          <Button size="sm" variant="outline" className="h-7 text-xs border-amber-500/40 text-amber-700" onClick={() => refetch()}>
+            Re-check
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-between p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+      <div className="flex items-center gap-2">
+        <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+        <p className="text-xs text-emerald-700 font-medium">Device registered for push</p>
+      </div>
+      <Button
+        size="sm"
+        variant="outline"
+        className="h-7 text-xs border-emerald-500/40 text-emerald-700"
+        onClick={() => testMutation.mutate()}
+        disabled={testMutation.isPending}
+      >
+        {testMutation.isPending ? "Sending…" : "Send test"}
+      </Button>
+    </div>
+  );
+}
+
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -419,6 +473,8 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           <div className="py-8 text-center text-xs text-muted-foreground">Loading...</div>
         ) : (
           <div className="space-y-5 py-2">
+            {/* Invisible focus trap — prevents iOS from auto-focusing the first real input and opening the keyboard */}
+            <input aria-hidden="true" readOnly tabIndex={-1} style={{ position: "absolute", opacity: 0, height: 0, width: 0, pointerEvents: "none" }} />
             <div className="space-y-1.5">
               <Label htmlFor="displayName" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Driver Name</Label>
               <Input
@@ -475,6 +531,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             )}
 
             {notificationsEnabled && <NotificationPermissionHelper />}
+            {notificationsEnabled && isNativePlatform() && <PushRegistrationStatus />}
 
             <div className="rounded-lg bg-muted/50 border border-border/50 p-3 space-y-1.5">
               <div className="flex items-center justify-between">

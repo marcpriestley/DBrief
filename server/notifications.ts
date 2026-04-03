@@ -112,6 +112,13 @@ function isWithinDeliveryWindow(
   return diff >= 0 && diff < DELIVERY_WINDOW_MINUTES;
 }
 
+export async function dispatchToUser(
+  subscriptions: Array<{ apnsToken?: string | null; endpoint: string; p256dh: string; auth: string }>,
+  payload: PushNotificationPayload
+) {
+  return dispatchToSubscriptions(subscriptions, payload);
+}
+
 async function dispatchToSubscriptions(
   subscriptions: Array<{ apnsToken?: string | null; endpoint: string; p256dh: string; auth: string }>,
   payload: PushNotificationPayload

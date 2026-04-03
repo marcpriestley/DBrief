@@ -111,13 +111,15 @@ export async function registerNativePush(): Promise<PushPermissionResult> {
       return `error:${permission.receive}`;
     }
 
-    PushNotifications.addListener("registration", async (token) => {
+    // addListener returns a Promise in Capacitor — must await before calling register()
+    // so the listener is guaranteed to be set up before the registration event fires.
+    await PushNotifications.addListener("registration", async (token) => {
       console.log("[APNs] Device token via Capacitor plugin:", token.value.substring(0, 10) + "...");
       await sendTokenToServer(token.value);
     });
 
-    PushNotifications.addListener("registrationError", (err) => {
-      console.error("[APNs] Registration error:", err);
+    await PushNotifications.addListener("registrationError", (err) => {
+      console.error("[APNs] Registration error:", err.error);
     });
 
     await PushNotifications.register();
