@@ -1,6 +1,6 @@
 import { 
   users, journalEntries, dailyScores, userMetrics, streaks, aiInsights, pushSubscriptions,
-  goalTemplates, dailyGoals, journalAttachments, moodCheckins, debriefs, habits, habitLogs,
+  goalTemplates, dailyGoals, journalAttachments, moodCheckins, debriefs, habits, habitLogs, serverConfig,
   type User, type InsertUser, type JournalEntry, type InsertJournalEntry,
   type DailyScore, type InsertDailyScore, type UserMetric, type InsertUserMetric,
   type Streak, type InsertStreak, type AIInsight, type InsertAIInsight,
@@ -94,6 +94,10 @@ export interface IStorage {
   toggleHabitCompletion(habitId: number, userId: number, date: string): Promise<{ habit: Habit; completed: boolean }>;
   getHabitLogsForRange(habitId: number, userId: number, startDate: string, endDate: string): Promise<HabitLog[]>;
   getAllHabitsForReminder(): Promise<Array<Habit & { user: User; subscriptions: PushSubscription[] }>>;
+
+  // Server config methods
+  getServerConfig(key: string): Promise<string | undefined>;
+  setServerConfig(key: string, value: string): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
@@ -505,6 +509,8 @@ export class MemStorage implements IStorage {
   async toggleHabitCompletion(_habitId: number, _userId: number, _date: string): Promise<{ habit: Habit; completed: boolean }> { throw new Error("Not implemented in MemStorage"); }
   async getHabitLogsForRange(_habitId: number, _userId: number, _startDate: string, _endDate: string): Promise<HabitLog[]> { return []; }
   async getAllHabitsForReminder(): Promise<Array<Habit & { user: User; subscriptions: PushSubscription[] }>> { return []; }
+  async getServerConfig(_key: string): Promise<string | undefined> { return undefined; }
+  async setServerConfig(_key: string, _value: string): Promise<void> {}
 }
 
 // Database implementation
@@ -1044,6 +1050,16 @@ export class DatabaseStorage implements IStorage {
       }
     }
     return result;
+  }
+
+  async getServerConfig(key: string): Promise<string | undefined> {
+    const [row] = await db.select().from(serverConfig).where(eq(serverConfig.key, key));
+    return row?.value;
+  }
+
+  async setServerConfig(key: string, value: string): Promise<void> {
+    await db.insert(serverConfig).values({ key, value })
+      .onConflictDoUpdate({ target: serverConfig.key, set: { value } });
   }
 }
 

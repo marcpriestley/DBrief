@@ -385,4 +385,10 @@ export const habitLogsRelations = relations(habitLogs, ({ one }) => ({
   user: one(users, { fields: [habitLogs.userId], references: [users.id] }),
 }));
 
+// Server-side configuration key-value store (for APNs credentials, etc.)
+export const serverConfig = pgTable("server_config", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+});
+
 export * from "./models/chat";

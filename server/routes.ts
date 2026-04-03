@@ -10,7 +10,7 @@ import {
 import OpenAI from "openai";
 import type { HealthData } from "./oura";
 import { sendPushNotification, getVapidPublicKey } from "./notifications";
-import { sendApnsNotification, isApnsConfigured } from "./apns";
+import { sendApnsNotification, isApnsConfigured, clearApnsCache } from "./apns";
 import bcrypt from "bcrypt";
 import { OAuth2Client } from "google-auth-library";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
@@ -1117,6 +1117,49 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
   // Check APNs config status
   app.get("/api/push/apns-status", (_req, res) => {
     res.json({ configured: isApnsConfigured() });
+  });
+
+  // Save APNs credentials to DB (admin, user 1 only)
+  app.post("/api/admin/apns-credentials", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (userId !== 1) return res.status(403).json({ message: "Forbidden" });
+      const { keyId, teamId, authKey } = req.body;
+      if (!keyId || !teamId || !authKey) {
+        return res.status(400).json({ message: "keyId, teamId, and authKey are required" });
+      }
+      await Promise.all([
+        storage.setServerConfig("apns_key_id", String(keyId).trim()),
+        storage.setServerConfig("apns_team_id", String(teamId).trim()),
+        storage.setServerConfig("apns_auth_key", String(authKey).trim()),
+      ]);
+      clearApnsCache();
+      console.log(`[APNs] Credentials updated via UI by user ${userId}`);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message || "Failed to save credentials" });
+    }
+  });
+
+  // Read APNs credentials from DB (masked)
+  app.get("/api/admin/apns-credentials", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (userId !== 1) return res.status(403).json({ message: "Forbidden" });
+      const [keyId, teamId, authKey] = await Promise.all([
+        storage.getServerConfig("apns_key_id"),
+        storage.getServerConfig("apns_team_id"),
+        storage.getServerConfig("apns_auth_key"),
+      ]);
+      res.json({
+        keyId: keyId || "",
+        teamId: teamId || "",
+        hasAuthKey: !!authKey,
+        authKeyLength: authKey?.length ?? 0,
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message || "Failed to read credentials" });
+    }
   });
 
   // Check if user has a registered push subscription

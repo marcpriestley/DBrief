@@ -119,13 +119,28 @@ function getH2Session(host: string): http2.ClientHttp2Session {
 
 // --- Public API ---
 
+async function getApnsCredentials(): Promise<{ keyId: string; teamId: string; rawKey: string } | null> {
+  // Try DB first, fall back to env vars
+  const [dbKeyId, dbTeamId, dbAuthKey] = await Promise.all([
+    storage.getServerConfig("apns_key_id"),
+    storage.getServerConfig("apns_team_id"),
+    storage.getServerConfig("apns_auth_key"),
+  ]);
+  const keyId = dbKeyId || process.env.APNS_KEY_ID;
+  const teamId = dbTeamId || process.env.APNS_TEAM_ID;
+  const rawKey = dbAuthKey || process.env.APNS_AUTH_KEY;
+  if (!keyId || !teamId || !rawKey) return null;
+  return { keyId, teamId, rawKey };
+}
+
 export async function sendApnsNotification(
   deviceToken: string,
   payload: PushNotificationPayload
 ): Promise<boolean> {
-  const keyId = process.env.APNS_KEY_ID;
-  const teamId = process.env.APNS_TEAM_ID;
-  const rawKey = process.env.APNS_AUTH_KEY;
+  const creds = await getApnsCredentials();
+  const keyId = creds?.keyId;
+  const teamId = creds?.teamId;
+  const rawKey = creds?.rawKey;
 
   if (!keyId || !teamId || !rawKey) {
     console.log("[APNs] Missing credentials — skipping");
@@ -210,4 +225,13 @@ export async function sendApnsNotification(
 
 export function isApnsConfigured(): boolean {
   return !!(process.env.APNS_KEY_ID && process.env.APNS_TEAM_ID && process.env.APNS_AUTH_KEY);
+}
+
+export function clearApnsCache(): void {
+  cachedJwt = null;
+  cachedPrivKey = null;
+  cachedRawKey = null;
+  if (h2Session && !h2Session.destroyed) h2Session.destroy();
+  h2Session = null;
+  h2Host = null;
 }

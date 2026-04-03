@@ -14,7 +14,8 @@ import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Bell, BellOff, AlertCircle, CheckCircle2, Heart, Plus, Check, Info, User, Map, RefreshCw, Link } from "lucide-react";
+import { Bell, BellOff, AlertCircle, CheckCircle2, Heart, Plus, Check, Info, User, Map, RefreshCw, Link, KeyRound } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import type { UserMetric } from "@shared/schema";
 import { ProfileQuestionsSettings } from "./ProfileQuestions";
 import { resetTour } from "@/lib/tour";
@@ -200,6 +201,115 @@ function PushRegistrationStatus() {
         {testMutation.isPending ? "Sending…" : "Send test"}
       </Button>
     </div>
+  );
+}
+
+function ApnsCredentialsDialog() {
+  const [open, setOpen] = useState(false);
+  const [keyId, setKeyId] = useState("");
+  const [teamId, setTeamId] = useState("");
+  const [authKey, setAuthKey] = useState("");
+  const { toast } = useToast();
+
+  const { data: existing } = useQuery<{ keyId: string; teamId: string; hasAuthKey: boolean; authKeyLength: number }>({
+    queryKey: ["/api/admin/apns-credentials"],
+    enabled: open,
+  });
+
+  useEffect(() => {
+    if (existing) {
+      setKeyId(existing.keyId || "");
+      setTeamId(existing.teamId || "");
+    }
+  }, [existing]);
+
+  const saveMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/admin/apns-credentials", { keyId: keyId.trim(), teamId: teamId.trim(), authKey: authKey.trim() }),
+    onSuccess: () => {
+      toast({ title: "APNs credentials saved", description: "Try 'Send test' now." });
+      setAuthKey("");
+      setOpen(false);
+    },
+    onError: (err: any) => {
+      toast({ title: "Save failed", description: err?.message || "Check the values and try again.", variant: "destructive" });
+    },
+  });
+
+  const canSave = keyId.trim().length > 0 && teamId.trim().length > 0 && authKey.trim().length > 0;
+
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors mt-1"
+      >
+        <KeyRound className="h-3 w-3" />
+        Update APNs credentials
+      </button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>APNs Credentials</DialogTitle>
+            <DialogDescription>
+              Paste your Apple Push key details. Find these at developer.apple.com → Certificates, Identifiers &amp; Keys → Keys.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 pt-1">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Key ID <span className="text-muted-foreground">(10 characters, e.g. AB12CD34EF)</span></Label>
+              <Input
+                value={keyId}
+                onChange={e => setKeyId(e.target.value)}
+                placeholder="AB12CD34EF"
+                className="font-mono text-sm"
+                maxLength={10}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Team ID <span className="text-muted-foreground">(top-right of Apple Developer)</span></Label>
+              <Input
+                value={teamId}
+                onChange={e => setTeamId(e.target.value)}
+                placeholder="5T4F8AH2ZV"
+                className="font-mono text-sm"
+                maxLength={10}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">
+                .p8 Private Key content
+                {existing?.hasAuthKey && (
+                  <span className="ml-2 text-emerald-600">✓ key saved ({existing.authKeyLength} chars) — paste to replace</span>
+                )}
+              </Label>
+              <Textarea
+                value={authKey}
+                onChange={e => setAuthKey(e.target.value)}
+                placeholder={"-----BEGIN PRIVATE KEY-----\nMIGH...\n-----END PRIVATE KEY-----"}
+                className="font-mono text-xs h-28 resize-none"
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={() => saveMutation.mutate()}
+                disabled={!canSave || saveMutation.isPending}
+              >
+                {saveMutation.isPending ? "Saving…" : "Save credentials"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -531,7 +641,12 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             )}
 
             {notificationsEnabled && <NotificationPermissionHelper />}
-            {notificationsEnabled && isNativePlatform() && <PushRegistrationStatus />}
+            {notificationsEnabled && isNativePlatform() && (
+              <div className="space-y-1">
+                <PushRegistrationStatus />
+                <ApnsCredentialsDialog />
+              </div>
+            )}
 
             <div className="rounded-lg bg-muted/50 border border-border/50 p-3 space-y-1.5">
               <div className="flex items-center justify-between">
