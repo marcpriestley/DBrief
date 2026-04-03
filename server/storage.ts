@@ -10,7 +10,7 @@ import {
   type Habit, type InsertHabit, type HabitLog
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, gte, gt, sql } from "drizzle-orm";
+import { eq, and, desc, gte, gt } from "drizzle-orm";
 import { encrypt, decrypt } from "./encryption";
 
 export interface IStorage {
@@ -714,18 +714,16 @@ export class DatabaseStorage implements IStorage {
   async saveApnsToken(userId: number, apnsToken: string): Promise<PushSubscription> {
     // Normalise to lowercase to avoid duplicate rows from mixed-case tokens
     const token = apnsToken.toLowerCase();
-    // Delete any existing rows for this user (including old case variants) then upsert
-    await db.delete(pushSubscriptions)
-      .where(and(eq(pushSubscriptions.userId, userId), sql`lower(apns_token) = ${token}`));
     const endpoint = `apns:${token}`;
-    const [created] = await db.insert(pushSubscriptions).values({
-      userId,
-      endpoint,
-      p256dh: "",
-      auth: "",
-      apnsToken: token,
-    }).returning();
-    return created;
+    // Upsert — if endpoint already exists just update the userId/token in place
+    const [row] = await db.insert(pushSubscriptions)
+      .values({ userId, endpoint, p256dh: "", auth: "", apnsToken: token })
+      .onConflictDoUpdate({
+        target: pushSubscriptions.endpoint,
+        set: { userId, apnsToken: token },
+      })
+      .returning();
+    return row;
   }
 
   async deletePushSubscription(endpoint: string): Promise<void> {

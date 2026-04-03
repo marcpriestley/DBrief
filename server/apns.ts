@@ -1,6 +1,8 @@
-import { createSign } from "node:crypto";
+import { webcrypto } from "node:crypto";
 import http2 from "node:http2";
 import { storage } from "./storage";
+
+const { subtle } = webcrypto;
 
 export interface PushNotificationPayload {
   title: string;
@@ -13,8 +15,34 @@ const APNS_HOST_SANDBOX = "https://api.sandbox.push.apple.com";
 const APNS_HOST_PRODUCTION = "https://api.push.apple.com";
 
 let cachedJwt: { token: string; issuedAt: number } | null = null;
+let cachedCryptoKey: CryptoKey | null = null;
+let cachedRawKey: string | null = null;
 
-function generateApnsJwt(keyId: string, teamId: string, privateKey: string): string {
+async function importApnsKey(pemKey: string): Promise<CryptoKey> {
+  if (cachedCryptoKey && cachedRawKey === pemKey) return cachedCryptoKey;
+
+  // Strip PEM headers/footers and decode base64
+  const b64 = pemKey
+    .replace(/-----BEGIN PRIVATE KEY-----/g, "")
+    .replace(/-----END PRIVATE KEY-----/g, "")
+    .replace(/\s+/g, "");
+
+  const keyData = Buffer.from(b64, "base64");
+
+  const key = await subtle.importKey(
+    "pkcs8",
+    keyData,
+    { name: "ECDSA", namedCurve: "P-256" },
+    false,
+    ["sign"]
+  );
+
+  cachedCryptoKey = key;
+  cachedRawKey = pemKey;
+  return key;
+}
+
+async function generateApnsJwt(keyId: string, teamId: string, privateKey: string): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   if (cachedJwt && now - cachedJwt.issuedAt < 3000) {
     return cachedJwt.token;
@@ -24,11 +52,15 @@ function generateApnsJwt(keyId: string, teamId: string, privateKey: string): str
   const claims = Buffer.from(JSON.stringify({ iss: teamId, iat: now })).toString("base64url");
   const signingInput = `${header}.${claims}`;
 
-  const sign = createSign("SHA256");
-  sign.update(signingInput);
-  sign.end();
-  const signature = sign.sign({ key: privateKey, dsaEncoding: "ieee-p1363" }).toString("base64url");
+  const cryptoKey = await importApnsKey(privateKey);
+  const signatureBuffer = await subtle.sign(
+    { name: "ECDSA", hash: "SHA-256" },
+    cryptoKey,
+    Buffer.from(signingInput)
+  );
 
+  // Web Crypto returns IEEE-P1363 format — this is exactly what APNs expects
+  const signature = Buffer.from(signatureBuffer).toString("base64url");
   const token = `${signingInput}.${signature}`;
   cachedJwt = { token, issuedAt: now };
   return token;
@@ -69,7 +101,7 @@ export async function sendApnsNotification(
 
   let jwt: string;
   try {
-    jwt = generateApnsJwt(keyId, teamId, privateKey);
+    jwt = await generateApnsJwt(keyId, teamId, privateKey);
   } catch (err) {
     console.error("[APNs] JWT signing failed:", err);
     return false;
