@@ -68,7 +68,10 @@ function NotificationPermissionHelper() {
       return;
     }
     import("@capacitor/push-notifications").then(({ PushNotifications }) => {
-      PushNotifications.checkPermissions().then((result) => {
+      // Use requestPermissions (not checkPermissions) — on iOS it returns the
+      // real current state without showing a dialog, correctly reflecting manual
+      // changes made in iOS Settings after an initial denial.
+      PushNotifications.requestPermissions().then((result) => {
         if (result.receive === "granted") setPermissionState("native-granted");
         else if (result.receive === "denied") setPermissionState("native-denied");
         else setPermissionState("native-unknown");

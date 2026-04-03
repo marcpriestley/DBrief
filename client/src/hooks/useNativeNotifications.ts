@@ -95,10 +95,11 @@ export async function registerNativePush(): Promise<PushPermissionResult> {
     let permission = await PushNotifications.checkPermissions();
     console.log("[APNs] Current permission state:", permission.receive);
 
-    if (permission.receive === "prompt" || permission.receive === "prompt-with-rationale") {
-      permission = await PushNotifications.requestPermissions();
-      console.log("[APNs] After request:", permission.receive);
-    }
+    // Always call requestPermissions — on iOS it returns current state without
+    // showing a dialog if already granted or denied. This handles the case where
+    // the user manually enabled notifications in iOS Settings after an initial denial.
+    permission = await PushNotifications.requestPermissions();
+    console.log("[APNs] After requestPermissions:", permission.receive);
 
     if (permission.receive === "denied") {
       console.log("[APNs] Permission denied — user must enable in iOS Settings");
