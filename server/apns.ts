@@ -1,4 +1,4 @@
-import { webcrypto } from "node:crypto";
+import { webcrypto, createPrivateKey } from "node:crypto";
 import http2 from "node:http2";
 import { storage } from "./storage";
 
@@ -21,17 +21,14 @@ let cachedRawKey: string | null = null;
 async function importApnsKey(pemKey: string): Promise<CryptoKey> {
   if (cachedCryptoKey && cachedRawKey === pemKey) return cachedCryptoKey;
 
-  // Strip PEM headers/footers and decode base64
-  const b64 = pemKey
-    .replace(/-----BEGIN PRIVATE KEY-----/g, "")
-    .replace(/-----END PRIVATE KEY-----/g, "")
-    .replace(/\s+/g, "");
-
-  const keyData = Buffer.from(b64, "base64");
+  // Use Node's createPrivateKey to handle all PEM formats robustly,
+  // then export as raw PKCS#8 DER bytes for crypto.subtle.importKey
+  const nodeKey = createPrivateKey({ key: pemKey, format: "pem" });
+  const der = nodeKey.export({ type: "pkcs8", format: "der" }) as Buffer;
 
   const key = await subtle.importKey(
     "pkcs8",
-    keyData,
+    der,
     { name: "ECDSA", namedCurve: "P-256" },
     false,
     ["sign"]
@@ -99,9 +96,12 @@ export async function sendApnsNotification(
   const host = useProduction ? APNS_HOST_PRODUCTION : APNS_HOST_SANDBOX;
   const bundleId = "com.dbrief.app";
 
+  console.log(`[APNs] Sending to ${deviceToken.slice(0, 10)}… env=${useProduction ? "production" : "sandbox"} keyLen=${privateKey.length}`);
+
   let jwt: string;
   try {
     jwt = await generateApnsJwt(keyId, teamId, privateKey);
+    console.log("[APNs] JWT generated successfully");
   } catch (err) {
     console.error("[APNs] JWT signing failed:", err);
     return false;
