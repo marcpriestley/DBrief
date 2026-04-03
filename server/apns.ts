@@ -121,14 +121,21 @@ function getH2Session(host: string): http2.ClientHttp2Session {
 
 async function getApnsCredentials(): Promise<{ keyId: string; teamId: string; rawKey: string } | null> {
   // Try DB first, fall back to env vars
-  const [dbKeyId, dbTeamId, dbAuthKey] = await Promise.all([
-    storage.getServerConfig("apns_key_id"),
-    storage.getServerConfig("apns_team_id"),
-    storage.getServerConfig("apns_auth_key"),
-  ]);
+  let dbKeyId: string | undefined, dbTeamId: string | undefined, dbAuthKey: string | undefined;
+  try {
+    [dbKeyId, dbTeamId, dbAuthKey] = await Promise.all([
+      storage.getServerConfig("apns_key_id"),
+      storage.getServerConfig("apns_team_id"),
+      storage.getServerConfig("apns_auth_key"),
+    ]);
+    console.log(`[APNs] DB creds — keyId=${dbKeyId || "none"} teamId=${dbTeamId || "none"} authKeyLen=${dbAuthKey?.length ?? 0}`);
+  } catch (err) {
+    console.error("[APNs] DB config read failed:", err);
+  }
   const keyId = dbKeyId || process.env.APNS_KEY_ID;
   const teamId = dbTeamId || process.env.APNS_TEAM_ID;
   const rawKey = dbAuthKey || process.env.APNS_AUTH_KEY;
+  console.log(`[APNs] Using — keyId=${keyId} teamIdLen=${teamId?.length} rawKeyLen=${rawKey?.length}`);
   if (!keyId || !teamId || !rawKey) return null;
   return { keyId, teamId, rawKey };
 }
