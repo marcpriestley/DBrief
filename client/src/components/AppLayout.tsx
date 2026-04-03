@@ -10,7 +10,7 @@ import AppTour from "@/components/AppTour";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { haptic } from "@/lib/haptics";
 import { DateProvider, useDateContext } from "@/contexts/DateContext";
-import logoSrc from "@assets/DBrief_Logo_1774470968516.jpg";
+import logoSrc from "@assets/9071F600-13EE-4563-BC00-D0D7AB8E3782_1_105_c_1775250530025.jpeg";
 import { isNativeIOS, getHealthAuthState, syncHealthData } from "@/lib/healthKit";
 
 interface AppLayoutProps {
