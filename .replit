@@ -49,4 +49,3 @@ ENCRYPTION_KEY = "8f0e0f658bcfce71709d91af0603a01354f3c70136cec12e7117d6b202702f
 APNS_PRODUCTION = "true"
 
 [userenv.production]
-NODE_OPTIONS = "--openssl-legacy-provider"
