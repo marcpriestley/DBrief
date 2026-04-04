@@ -156,18 +156,6 @@ function PushRegistrationStatus() {
     staleTime: 10000,
   });
 
-  const testMutation = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/push/test", {}),
-    onSuccess: () => {
-      toast({ title: "Test sent", description: "You should receive a notification shortly." });
-    },
-    onError: (err: any) => {
-      toast({ title: "Not registered", description: err?.message || "Toggle notifications off and back on to register this device.", variant: "destructive" });
-    },
-  });
-
-  const { toast } = useToast();
-
   if (isLoading) return null;
 
   if (!data?.registered) {
@@ -186,20 +174,9 @@ function PushRegistrationStatus() {
   }
 
   return (
-    <div className="flex items-center justify-between p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-      <div className="flex items-center gap-2">
-        <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-        <p className="text-xs text-emerald-700 font-medium">Device registered for push</p>
-      </div>
-      <Button
-        size="sm"
-        variant="outline"
-        className="h-7 text-xs border-emerald-500/40 text-emerald-700"
-        onClick={() => testMutation.mutate()}
-        disabled={testMutation.isPending}
-      >
-        {testMutation.isPending ? "Sending…" : "Send test"}
-      </Button>
+    <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+      <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+      <p className="text-xs text-emerald-700 font-medium">Push notifications active</p>
     </div>
   );
 }

@@ -175,7 +175,7 @@ export async function sendApnsNotification(
     aps: {
       alert: { title: payload.title, body: payload.body },
       sound: "default",
-      badge: 1,
+      badge: 0,
     },
     ...(payload.url ? { url: payload.url } : {}),
   });

@@ -58,10 +58,56 @@ if (typeof window !== "undefined") {
  * Retries any token that arrived before authentication completed, or
  * kicks off a fresh Capacitor registration if no token exists yet.
  */
+// Dispatch a custom event to open the mood check-in modal
+function dispatchOpenMood() {
+  window.dispatchEvent(new CustomEvent("dbrief:open-mood"));
+}
+
+// Handle a notification tap URL
+function handleNotificationUrl(url?: string) {
+  if (!url) return;
+  if (url.includes("mood=checkin")) {
+    dispatchOpenMood();
+  }
+}
+
+// Set up notification tap listener (called once after registration)
+let tapListenerSetup = false;
+async function setupNotificationTapListener() {
+  if (tapListenerSetup || !Capacitor.isNativePlatform()) return;
+  tapListenerSetup = true;
+  try {
+    const { PushNotifications } = await import("@capacitor/push-notifications");
+    await PushNotifications.addListener("notificationActionPerformed", (action) => {
+      const url = action.notification?.data?.url as string | undefined;
+      console.log("[APNs] Notification tapped, url:", url);
+      handleNotificationUrl(url);
+    });
+    // Clear notification centre when app comes back to foreground
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") {
+        PushNotifications.removeAllDeliveredNotifications().catch(() => {});
+      }
+    });
+  } catch (err) {
+    console.log("[APNs] Tap listener setup skipped:", err);
+  }
+}
+
+// Also handle taps delivered via native bridge before React mounted
+if (typeof window !== "undefined") {
+  window.addEventListener("apns-notification-tap", (e: any) => {
+    handleNotificationUrl(e.detail?.url);
+  });
+}
+
 export function useNativeNotifications(enabled: boolean) {
   useEffect(() => {
     if (!enabled) return;
     if (!Capacitor.isNativePlatform()) return;
+
+    setupNotificationTapListener();
+
     if (apnsRegistered) return;
 
     // Case 1: token arrived pre-login via native bridge and needs to be re-sent now

@@ -133,12 +133,16 @@ function AppLayoutInner({ children }: AppLayoutProps) {
     return () => clearTimeout(t);
   }, []);
 
+  // Open mood modal from URL param (web push) or custom event (native notification tap)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("mood") === "checkin") {
       setIsMoodOpen(true);
       window.history.replaceState({}, "", window.location.pathname);
     }
+    const onOpenMood = () => setIsMoodOpen(true);
+    window.addEventListener("dbrief:open-mood", onOpenMood);
+    return () => window.removeEventListener("dbrief:open-mood", onOpenMood);
   }, []);
 
   const logoutMutation = useMutation({
