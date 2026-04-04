@@ -11,7 +11,7 @@ import Welcome from "@/pages/welcome";
 import OnboardingFlow from "@/components/OnboardingFlow";
 import NotFound from "@/pages/not-found";
 import PrivacyPolicy from "@/pages/privacy";
-import { registerNativePush, isNativePlatform } from "@/hooks/useNativeNotifications";
+import { registerNativePush, isNativePlatform, clearBadge } from "@/hooks/useNativeNotifications";
 
 function AuthenticatedRouter() {
   const { data: user, isLoading } = useQuery<any>({
@@ -22,9 +22,15 @@ function AuthenticatedRouter() {
   });
 
   useEffect(() => {
-    if (user && isNativePlatform() && user.notificationsEnabled !== false) {
+    if (!user || !isNativePlatform()) return;
+    if (user.notificationsEnabled !== false) {
       registerNativePush();
     }
+    // Clear the app icon badge immediately on app open, then again on every foreground.
+    clearBadge();
+    const onVisible = () => { if (document.visibilityState === "visible") clearBadge(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
   }, [user]);
 
   if (isLoading) {

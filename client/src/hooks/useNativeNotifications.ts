@@ -74,7 +74,7 @@ function handleNotificationUrl(url?: string) {
 // Clears the app icon badge via a silent server-side APNs push.
 // Throttled so we don't spam the server — at most once every 30 seconds.
 let lastBadgeClear = 0;
-function clearBadge() {
+export function clearBadge() {
   const now = Date.now();
   if (now - lastBadgeClear < 30_000) return;
   lastBadgeClear = now;
