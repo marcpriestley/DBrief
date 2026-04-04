@@ -1,6 +1,22 @@
+import { Capacitor } from "@capacitor/core";
+
 type HapticPattern = "light" | "medium" | "heavy" | "success" | "error" | "select";
 
-const patterns: Record<HapticPattern, number[]> = {
+// Cache the module after first import so subsequent calls are instant
+let hapticsCache: typeof import("@capacitor/haptics") | null = null;
+async function getNativeHaptics() {
+  if (!hapticsCache) {
+    hapticsCache = await import("@capacitor/haptics");
+  }
+  return hapticsCache;
+}
+
+// Pre-load on native so the first haptic fires without delay
+if (Capacitor.isNativePlatform()) {
+  getNativeHaptics().catch(() => {});
+}
+
+const webPatterns: Record<HapticPattern, number[]> = {
   light: [8],
   medium: [20],
   heavy: [40],
@@ -10,9 +26,38 @@ const patterns: Record<HapticPattern, number[]> = {
 };
 
 export function haptic(type: HapticPattern = "light") {
-  try {
-    if (navigator.vibrate) {
-      navigator.vibrate(patterns[type]);
-    }
-  } catch {}
+  if (Capacitor.isNativePlatform()) {
+    // Fire-and-forget — caller doesn't need to await
+    (async () => {
+      try {
+        const { Haptics, ImpactStyle, NotificationType } = await getNativeHaptics();
+        switch (type) {
+          case "light":
+            await Haptics.impact({ style: ImpactStyle.Light });
+            break;
+          case "select":
+            await Haptics.selectionStart();
+            break;
+          case "medium":
+            await Haptics.impact({ style: ImpactStyle.Medium });
+            break;
+          case "heavy":
+            await Haptics.impact({ style: ImpactStyle.Heavy });
+            break;
+          case "success":
+            await Haptics.notification({ type: NotificationType.Success });
+            break;
+          case "error":
+            await Haptics.notification({ type: NotificationType.Error });
+            break;
+        }
+      } catch {}
+    })();
+  } else {
+    try {
+      if (navigator.vibrate) {
+        navigator.vibrate(webPatterns[type]);
+      }
+    } catch {}
+  }
 }

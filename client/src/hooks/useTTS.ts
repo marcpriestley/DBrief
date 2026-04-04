@@ -5,37 +5,22 @@ const TTS_VOICE_KEY = "dbrief_tts_voice";
 
 export type TTSVoice = "nova" | "shimmer" | "echo" | "onyx" | "fable" | "alloy";
 
-// Keep one AudioContext alive for the lifetime of the page.
-// iOS requires AudioContext to be created/resumed during a user gesture.
-// Reusing the same context means subsequent speaks (including auto-speak after
-// streaming) work because the context is already in the "running" state.
-let sharedAudioCtx: AudioContext | null = null;
-
-function getAudioCtx(): AudioContext {
-  if (!sharedAudioCtx || sharedAudioCtx.state === "closed") {
-    sharedAudioCtx = new AudioContext();
+// Convert an ArrayBuffer to a base64 data URL so it can be played by
+// HTMLAudioElement in Capacitor's WKWebView without blob-URL restrictions
+// or AudioContext gesture requirements.
+function arrayBufferToDataUrl(buffer: ArrayBuffer, mimeType = "audio/mpeg"): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  // Process in chunks to avoid call-stack limits on large audio files
+  const chunkSize = 8192;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
   }
-  return sharedAudioCtx;
+  return `data:${mimeType};base64,${btoa(binary)}`;
 }
 
-// Call this inside any user-gesture handler to pre-warm the AudioContext so
-// that subsequent auto-triggered speaks work without a gesture.
-export async function warmAudioCtx() {
-  try {
-    const ctx = getAudioCtx();
-    if (ctx.state === "suspended") {
-      await ctx.resume();
-    }
-    // Play a silent buffer to fully unlock audio on iOS
-    if (ctx.state === "running") {
-      const silent = ctx.createBuffer(1, 1, ctx.sampleRate);
-      const src = ctx.createBufferSource();
-      src.buffer = silent;
-      src.connect(ctx.destination);
-      src.start(0);
-    }
-  } catch {}
-}
+// No-op kept for import compatibility — AudioContext warm-up is no longer needed
+export function warmAudioCtx() {}
 
 export function useTTS() {
   const [enabled, setEnabled] = useState(() => {
@@ -46,13 +31,16 @@ export function useTTS() {
   });
   const [speaking, setSpeaking] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
-  const sourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const cancel = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
-    try { sourceRef.current?.stop(); } catch {}
-    sourceRef.current = null;
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = "";
+      audioRef.current = null;
+    }
     setSpeaking(false);
   }, []);
 
@@ -78,31 +66,25 @@ export function useTTS() {
       const arrayBuffer = await res.arrayBuffer();
       if (ac.signal.aborted) return;
 
-      // Reuse the shared AudioContext — it was already resumed during the
-      // user's gesture (send / toggle), so auto-speak works without a new gesture.
-      const audioCtx = getAudioCtx();
-      if (audioCtx.state === "suspended") {
-        await audioCtx.resume();
-      }
-      if (ac.signal.aborted) return;
+      // Use a data URL so the audio plays in Capacitor WKWebView without
+      // needing a user gesture or AudioContext unlock dance
+      const dataUrl = arrayBufferToDataUrl(arrayBuffer);
+      const audio = new Audio(dataUrl);
+      audioRef.current = audio;
 
-      const decoded = await audioCtx.decodeAudioData(arrayBuffer);
-      if (ac.signal.aborted) return;
-
-      // Stop any previous source
-      try { sourceRef.current?.stop(); } catch {}
-
-      const source = audioCtx.createBufferSource();
-      source.buffer = decoded;
-      source.connect(audioCtx.destination);
-      sourceRef.current = source;
-
-      source.onended = () => {
+      const cleanup = () => {
         setSpeaking(false);
-        if (sourceRef.current === source) sourceRef.current = null;
+        if (audioRef.current === audio) audioRef.current = null;
       };
 
-      source.start(0);
+      audio.onended = cleanup;
+      audio.onerror = () => {
+        console.warn("[TTS] Audio element error");
+        cleanup();
+      };
+
+      if (ac.signal.aborted) { audio.src = ""; return; }
+      await audio.play();
     } catch (err: any) {
       if (err?.name !== "AbortError") {
         console.warn("[TTS] Error:", err?.message);
@@ -118,8 +100,6 @@ export function useTTS() {
       if (!next) cancel();
       return next;
     });
-    // Warm AudioContext on toggle (user gesture) so auto-speak works after
-    warmAudioCtx();
   }, [cancel]);
 
   useEffect(() => () => { cancel(); }, [cancel]);
