@@ -5,22 +5,38 @@ const TTS_VOICE_KEY = "dbrief_tts_voice";
 
 export type TTSVoice = "nova" | "shimmer" | "echo" | "onyx" | "fable" | "alloy";
 
-// Convert an ArrayBuffer to a base64 data URL so it can be played by
-// HTMLAudioElement in Capacitor's WKWebView without blob-URL restrictions
-// or AudioContext gesture requirements.
-function arrayBufferToDataUrl(buffer: ArrayBuffer, mimeType = "audio/mpeg"): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = "";
-  // Process in chunks to avoid call-stack limits on large audio files
-  const chunkSize = 8192;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-  }
-  return `data:${mimeType};base64,${btoa(binary)}`;
+// No-op kept for import compatibility
+export function warmAudioCtx() {}
+
+// Convert ArrayBuffer → base64 data URL without using btoa on a huge string.
+// We use FileReader (most reliable across environments incl. WKWebView).
+function arrayBufferToDataUrl(buffer: ArrayBuffer): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const blob = new Blob([buffer], { type: "audio/mpeg" });
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
 }
 
-// No-op kept for import compatibility — AudioContext warm-up is no longer needed
-export function warmAudioCtx() {}
+// Speak via the device's built-in SpeechSynthesis API.
+// Does not require a user gesture and works in Capacitor WKWebView on iOS 14+.
+function speakViaSynthesis(text: string, onEnd: () => void): SpeechSynthesisUtterance | null {
+  if (!window.speechSynthesis) {
+    onEnd();
+    return null;
+  }
+  // Cancel any existing utterance
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.rate = 0.95;
+  utterance.pitch = 1.0;
+  utterance.onend = onEnd;
+  utterance.onerror = onEnd;
+  window.speechSynthesis.speak(utterance);
+  return utterance;
+}
 
 export function useTTS() {
   const [enabled, setEnabled] = useState(() => {
@@ -30,8 +46,10 @@ export function useTTS() {
     try { return (localStorage.getItem(TTS_VOICE_KEY) as TTSVoice) || "nova"; } catch { return "nova"; }
   });
   const [speaking, setSpeaking] = useState(false);
+
   const abortRef = useRef<AbortController | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   const cancel = useCallback(() => {
     abortRef.current?.abort();
@@ -41,17 +59,22 @@ export function useTTS() {
       audioRef.current.src = "";
       audioRef.current = null;
     }
+    if (window.speechSynthesis?.speaking) {
+      window.speechSynthesis.cancel();
+    }
+    utteranceRef.current = null;
     setSpeaking(false);
   }, []);
 
   const speak = useCallback(async (text: string) => {
     if (!enabled || !text.trim()) return;
     cancel();
+    setSpeaking(true);
 
     const ac = new AbortController();
     abortRef.current = ac;
-    setSpeaking(true);
 
+    // ── Phase 1: try OpenAI TTS audio ────────────────────────────────────
     try {
       const res = await fetch("/api/tts", {
         method: "POST",
@@ -61,36 +84,56 @@ export function useTTS() {
         signal: ac.signal,
       });
 
-      if (!res.ok) throw new Error(`TTS ${res.status}`);
+      if (!res.ok) throw new Error(`tts-fetch-${res.status}`);
 
-      const arrayBuffer = await res.arrayBuffer();
+      const buffer = await res.arrayBuffer();
       if (ac.signal.aborted) return;
 
-      // Use a data URL so the audio plays in Capacitor WKWebView without
-      // needing a user gesture or AudioContext unlock dance
-      const dataUrl = arrayBufferToDataUrl(arrayBuffer);
-      const audio = new Audio(dataUrl);
+      const dataUrl = await arrayBufferToDataUrl(buffer);
+      if (ac.signal.aborted) return;
+
+      const audio = new Audio();
       audioRef.current = audio;
 
-      const cleanup = () => {
+      const done = () => {
         setSpeaking(false);
         if (audioRef.current === audio) audioRef.current = null;
       };
 
-      audio.onended = cleanup;
+      audio.onended = done;
+
+      // If the audio element is blocked (e.g. WKWebView gesture policy),
+      // fall through to SpeechSynthesis
       audio.onerror = () => {
-        console.warn("[TTS] Audio element error");
-        cleanup();
+        audioRef.current = null;
+        console.warn("[TTS] audio element error — falling back to SpeechSynthesis");
+        utteranceRef.current = speakViaSynthesis(text, () => setSpeaking(false));
+        if (!utteranceRef.current) setSpeaking(false);
       };
 
-      if (ac.signal.aborted) { audio.src = ""; return; }
-      await audio.play();
-    } catch (err: any) {
-      if (err?.name !== "AbortError") {
-        console.warn("[TTS] Error:", err?.message);
+      audio.src = dataUrl;
+
+      try {
+        await audio.play();
+        return; // success — return early
+      } catch (playErr: any) {
+        console.warn("[TTS] audio.play() rejected:", playErr?.name, "—", playErr?.message,
+          "→ falling back to SpeechSynthesis");
+        audio.src = "";
+        audioRef.current = null;
+        // Fall through to SpeechSynthesis below
       }
-      setSpeaking(false);
+    } catch (err: any) {
+      if (err?.name === "AbortError") return;
+      console.warn("[TTS] fetch/decode failed:", err?.message, "→ falling back to SpeechSynthesis");
     }
+
+    if (ac.signal.aborted) { setSpeaking(false); return; }
+
+    // ── Phase 2: SpeechSynthesis fallback ────────────────────────────────
+    utteranceRef.current = speakViaSynthesis(text, () => setSpeaking(false));
+    if (!utteranceRef.current) setSpeaking(false);
+
   }, [enabled, voice, cancel]);
 
   const toggle = useCallback(() => {
