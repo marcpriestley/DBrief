@@ -10,7 +10,7 @@ import {
   type Habit, type InsertHabit, type HabitLog
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, gte, gt } from "drizzle-orm";
+import { eq, and, desc, gte, lte, gt } from "drizzle-orm";
 import { encrypt, decrypt } from "./encryption";
 
 export interface IStorage {
@@ -90,7 +90,7 @@ export interface IStorage {
   createHabit(habit: InsertHabit): Promise<Habit>;
   updateHabit(id: number, userId: number, updates: Partial<InsertHabit>): Promise<Habit | undefined>;
   archiveHabit(id: number, userId: number): Promise<void>;
-  getHabitWithTodayStatus(userId: number, date: string): Promise<Array<Habit & { todayCompleted: boolean }>>;
+  getHabitWithTodayStatus(userId: number, date: string): Promise<Array<Habit & { todayCompleted: boolean; last7Days: boolean[] }>>;
   toggleHabitCompletion(habitId: number, userId: number, date: string): Promise<{ habit: Habit; completed: boolean }>;
   getHabitLogsForRange(habitId: number, userId: number, startDate: string, endDate: string): Promise<HabitLog[]>;
   getAllHabitsForReminder(): Promise<Array<Habit & { user: User; subscriptions: PushSubscription[] }>>;
@@ -505,7 +505,7 @@ export class MemStorage implements IStorage {
   async createHabit(h: InsertHabit): Promise<Habit> { return { ...h, id: 0, currentStreak: 0, longestStreak: 0, totalCompletions: 0, lastCompletedDate: null, isArchived: false, createdAt: new Date(), emoji: h.emoji ?? "⭐", category: h.category ?? "general", motivation: h.motivation ?? null, anchorHabit: h.anchorHabit ?? null, reminderTime: h.reminderTime ?? null, reminderEnabled: h.reminderEnabled ?? true } as Habit; }
   async updateHabit(_id: number, _userId: number, _updates: Partial<InsertHabit>): Promise<Habit | undefined> { return undefined; }
   async archiveHabit(_id: number, _userId: number): Promise<void> {}
-  async getHabitWithTodayStatus(_userId: number, _date: string): Promise<Array<Habit & { todayCompleted: boolean }>> { return []; }
+  async getHabitWithTodayStatus(_userId: number, _date: string): Promise<Array<Habit & { todayCompleted: boolean; last7Days: boolean[] }>> { return []; }
   async toggleHabitCompletion(_habitId: number, _userId: number, _date: string): Promise<{ habit: Habit; completed: boolean }> { throw new Error("Not implemented in MemStorage"); }
   async getHabitLogsForRange(_habitId: number, _userId: number, _startDate: string, _endDate: string): Promise<HabitLog[]> { return []; }
   async getAllHabitsForReminder(): Promise<Array<Habit & { user: User; subscriptions: PushSubscription[] }>> { return []; }
@@ -745,16 +745,25 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(goalTemplates.userId, userId), eq(goalTemplates.isActive, true)))
       .orderBy(goalTemplates.sortOrder);
 
-    // One-time migration: remove "Make my bed" goal template for users who now have Habit Lab
-    const makeMyBedTemplate = all.find(t => t.title.toLowerCase() === "make my bed");
-    if (makeMyBedTemplate) {
-      const userHabits = await db.select({ id: habits.id }).from(habits).where(eq(habits.userId, userId));
-      if (userHabits.length > 0) {
-        await db.update(goalTemplates)
-          .set({ isActive: false })
-          .where(eq(goalTemplates.id, makeMyBedTemplate.id));
-        return all.filter(t => t.id !== makeMyBedTemplate.id);
+    // Ensure "Make my bed" is always the first daily goal for every user.
+    const hasMakeMyBed = all.some(t => t.title.toLowerCase() === "make my bed");
+    if (!hasMakeMyBed) {
+      // Check if one exists but was previously deactivated (old migration) — reactivate it.
+      const [inactive] = await db.select().from(goalTemplates)
+        .where(and(eq(goalTemplates.userId, userId), eq(goalTemplates.isActive, false)));
+      if (inactive && inactive.title.toLowerCase() === "make my bed") {
+        await db.update(goalTemplates).set({ isActive: true }).where(eq(goalTemplates.id, inactive.id));
+        return [{ ...inactive, isActive: true }, ...all].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
       }
+      // Otherwise create a fresh one pinned at the front.
+      const [seeded] = await db.insert(goalTemplates).values({
+        userId,
+        title: "Make my bed",
+        recurring: true,
+        isActive: true,
+        sortOrder: 0,
+      }).returning();
+      return [seeded, ...all];
     }
 
     return all;
@@ -965,12 +974,27 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(habits.id, id), eq(habits.userId, userId)));
   }
 
-  async getHabitWithTodayStatus(userId: number, date: string): Promise<Array<Habit & { todayCompleted: boolean }>> {
+  async getHabitWithTodayStatus(userId: number, date: string): Promise<Array<Habit & { todayCompleted: boolean; last7Days: boolean[] }>> {
     const userHabits = await this.getHabits(userId);
-    const todayLogs = await db.select().from(habitLogs)
-      .where(and(eq(habitLogs.userId, userId), eq(habitLogs.date, date)));
-    const completedSet = new Set(todayLogs.map(l => l.habitId));
-    return userHabits.map(h => ({ ...h, todayCompleted: completedSet.has(h.id) }));
+    // Compute last 7 real calendar days (oldest → newest, ending today).
+    const today = new Date();
+    today.setHours(12, 0, 0, 0);
+    const last7Dates: string[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      last7Dates.push(d.toISOString().split('T')[0]);
+    }
+    const weekStart = last7Dates[0];
+    const weekEnd = last7Dates[6];
+    const weekLogs = await db.select().from(habitLogs)
+      .where(and(eq(habitLogs.userId, userId), gte(habitLogs.date, weekStart), lte(habitLogs.date, weekEnd)));
+    const todayCompletedSet = new Set(weekLogs.filter(l => l.date === date).map(l => l.habitId));
+    return userHabits.map(h => ({
+      ...h,
+      todayCompleted: todayCompletedSet.has(h.id),
+      last7Days: last7Dates.map(d => weekLogs.some(l => l.habitId === h.id && l.date === d)),
+    }));
   }
 
   async toggleHabitCompletion(habitId: number, userId: number, date: string): Promise<{ habit: Habit; completed: boolean }> {

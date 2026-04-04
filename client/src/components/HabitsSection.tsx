@@ -9,7 +9,7 @@ import { haptic } from "@/lib/haptics";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-type HabitWithStatus = Habit & { todayCompleted: boolean };
+type HabitWithStatus = Habit & { todayCompleted: boolean; last7Days: boolean[] };
 
 // ─── Emoji + category options ────────────────────────────────────────────────
 
@@ -79,6 +79,7 @@ export default function HabitsSection() {
   const [setup, setSetup] = useState<SetupState>(DEFAULT_SETUP);
   const [editingHabit, setEditingHabit] = useState<HabitWithStatus | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [motivationFlash, setMotivationFlash] = useState<string | null>(null);
 
   const { data: habits = [], isLoading } = useQuery<HabitWithStatus[]>({
     queryKey: ["/api/habits", selectedDate],
@@ -123,6 +124,11 @@ export default function HabitsSection() {
   });
 
   const handleToggle = useCallback((habit: HabitWithStatus) => {
+    // If completing (not yet done) and has a motivation, flash it briefly.
+    if (!habit.todayCompleted && habit.motivation) {
+      setMotivationFlash(habit.motivation);
+      setTimeout(() => setMotivationFlash(null), 2800);
+    }
     toggleMutation.mutate({ id: habit.id, date: selectedDate });
   }, [toggleMutation, selectedDate]);
 
@@ -149,13 +155,41 @@ export default function HabitsSection() {
     { title: "Remind me", subtitle: "Set a daily prompt (optional)" },
   ];
 
+  const completedToday = habits.filter(h => h.todayCompleted).length;
+  const totalHabits = habits.length;
+
   return (
-    <div className="bg-card rounded-xl border border-border/50 shadow-sm p-4">
+    <div className="relative bg-card rounded-xl border border-border/50 shadow-sm p-4">
+      {/* Motivation flash — fixed toast at the bottom of the screen */}
+      <AnimatePresence>
+        {motivationFlash && (
+          <motion.div
+            key="motivation-flash"
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 24 }}
+            transition={{ type: "spring", damping: 22, stiffness: 280 }}
+            className="fixed bottom-24 left-4 right-4 z-50 bg-primary text-black text-sm font-semibold rounded-2xl px-4 py-3.5 shadow-xl flex items-center gap-2.5 pointer-events-none"
+          >
+            <span className="text-lg">⚡</span>
+            <span className="leading-snug">{motivationFlash}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div>
           <h2 className="text-sm font-semibold text-foreground">Habit Lab</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">Build routines that stick</p>
+          {totalHabits > 0 ? (
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {completedToday === totalHabits
+                ? "All habits locked in 🎯"
+                : `${completedToday} of ${totalHabits} done today`}
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground mt-0.5">Build routines that stick</p>
+          )}
         </div>
         <button
           onClick={openSetup}
@@ -265,6 +299,36 @@ export default function HabitsSection() {
   );
 }
 
+// ─── 7-day dots ──────────────────────────────────────────────────────────────
+
+function WeekDots({ days }: { days: boolean[] }) {
+  // days[0] = 6 days ago, days[6] = today
+  const today = new Date();
+  // Work out which weekday index (0=Mon) corresponds to days[0]
+  const dotDays = days.map((done, i) => {
+    const d = new Date(today);
+    d.setDate(d.getDate() - (6 - i));
+    const dayLabel = ["S","M","T","W","T","F","S"][d.getDay()];
+    return { done, dayLabel };
+  });
+
+  return (
+    <div className="flex items-center gap-1 mt-1.5">
+      {dotDays.map(({ done, dayLabel }, i) => (
+        <div key={i} className="flex flex-col items-center gap-0.5">
+          <motion.div
+            className={`w-4 h-4 rounded-full ${done ? "bg-primary" : "bg-muted/60"}`}
+            initial={false}
+            animate={{ scale: done ? [1, 1.3, 1] : 1 }}
+            transition={{ duration: 0.3 }}
+          />
+          <span className="text-[8px] text-muted-foreground/50 leading-none">{dayLabel}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Habit card ──────────────────────────────────────────────────────────────
 
 function HabitCard({
@@ -323,6 +387,8 @@ function HabitCard({
           {habit.anchorHabit && (
             <p className="text-xs text-muted-foreground truncate mt-0.5">After {habit.anchorHabit}</p>
           )}
+          {/* 7-day completion dots */}
+          <WeekDots days={habit.last7Days ?? []} />
           {/* Progress bar to next milestone */}
           <div className="flex items-center gap-2 mt-1.5">
             <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
