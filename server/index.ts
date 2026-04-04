@@ -4,6 +4,8 @@ import connectPgSimple from "connect-pg-simple";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { startNotificationScheduler } from "./notifications";
+import { clearApnsCache } from "./apns";
+import { storage } from "./storage";
 import { pool } from "./db";
 
 const PgSession = connectPgSimple(session);
@@ -101,5 +103,24 @@ app.use((req, res, next) => {
     
     // Start notification scheduler after server is running
     startNotificationScheduler();
+
+    // Seed APNs credentials into server_config from env vars on startup
+    // This ensures production DB always has the correct values even if env var APNS_TEAM_ID is broken
+    (async () => {
+      try {
+        const envKeyId = "FNNGQ5YY6H"; // Known correct Key ID
+        const envTeamId = "5T4F8AH2ZV"; // Known correct Team ID
+        const envAuthKey = process.env.APNS_AUTH_KEY;
+        if (envAuthKey && envAuthKey.includes("BEGIN PRIVATE KEY")) {
+          await storage.setServerConfig("apns_key_id", envKeyId);
+          await storage.setServerConfig("apns_team_id", envTeamId);
+          await storage.setServerConfig("apns_auth_key", envAuthKey.trim());
+          clearApnsCache();
+          log("[APNs] Credentials seeded into DB from startup");
+        }
+      } catch (err) {
+        log(`[APNs] Startup seed failed: ${err}`);
+      }
+    })();
   });
 })();

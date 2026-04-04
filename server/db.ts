@@ -10,3 +10,7 @@ if (!process.env.DATABASE_URL) {
 
 export const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 export const db = drizzle(pool, { schema });
+
+// Ensure server_config table exists (needed in production where migrations don't auto-run)
+pool.query(`CREATE TABLE IF NOT EXISTS server_config (key TEXT PRIMARY KEY, value TEXT NOT NULL)`)
+  .catch(() => {}); // silently ignore if already exists
