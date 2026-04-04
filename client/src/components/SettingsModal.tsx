@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Bell, BellOff, AlertCircle, CheckCircle2, Heart, Plus, Check, Info, User, Map, RefreshCw, Link, KeyRound } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
+import { haptic } from "@/lib/haptics";
 import type { UserMetric } from "@shared/schema";
 import { ProfileQuestionsSettings } from "./ProfileQuestions";
 import { resetTour } from "@/lib/tour";
@@ -588,7 +589,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               </div>
               <Switch
                 checked={notificationsEnabled}
-                onCheckedChange={handleToggleNotifications}
+                onCheckedChange={(v) => { haptic("select"); handleToggleNotifications(v); }}
               />
             </div>
 
@@ -633,7 +634,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 </div>
                 <Switch
                   checked={moodRemindersEnabled}
-                  onCheckedChange={setMoodRemindersEnabled}
+                  onCheckedChange={(v) => { haptic("select"); setMoodRemindersEnabled(v); }}
                 />
               </div>
               <p className="text-[11px] text-muted-foreground leading-relaxed">

@@ -46,9 +46,18 @@ function MoodSlider({ value, onChange }: { value: number; onChange: (v: number) 
   const isDragging = useRef(false);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const lastHapticVal = useRef<number | null>(null);
 
   const pct = value;
   const moodColor = getMoodColor(value);
+
+  const emitWithHaptic = (newVal: number) => {
+    onChangeRef.current(newVal);
+    if (lastHapticVal.current === null || Math.abs(newVal - lastHapticVal.current) >= 5) {
+      haptic("light");
+      lastHapticVal.current = newVal;
+    }
+  };
 
   useEffect(() => {
     const el = trackRef.current;
@@ -62,11 +71,12 @@ function MoodSlider({ value, onChange }: { value: number; onChange: (v: number) 
     const onTouchStart = (e: TouchEvent) => {
       e.preventDefault();
       isDragging.current = true;
-      if (e.touches[0]) onChangeRef.current(getVal(e.touches[0].clientX));
+      lastHapticVal.current = null;
+      if (e.touches[0]) emitWithHaptic(getVal(e.touches[0].clientX));
 
       const onTouchMove = (ev: TouchEvent) => {
         ev.preventDefault();
-        if (ev.touches[0]) onChangeRef.current(getVal(ev.touches[0].clientX));
+        if (ev.touches[0]) emitWithHaptic(getVal(ev.touches[0].clientX));
       };
       const onTouchEnd = () => {
         isDragging.current = false;
@@ -82,9 +92,10 @@ function MoodSlider({ value, onChange }: { value: number; onChange: (v: number) 
     const onMouseDown = (e: MouseEvent) => {
       e.preventDefault();
       isDragging.current = true;
-      onChangeRef.current(getVal(e.clientX));
+      lastHapticVal.current = null;
+      emitWithHaptic(getVal(e.clientX));
       const onMouseMove = (ev: MouseEvent) => {
-        if (isDragging.current) onChangeRef.current(getVal(ev.clientX));
+        if (isDragging.current) emitWithHaptic(getVal(ev.clientX));
       };
       const onMouseUp = () => {
         isDragging.current = false;

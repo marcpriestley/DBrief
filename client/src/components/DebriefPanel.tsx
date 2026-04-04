@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import { Capacitor } from "@capacitor/core";
 import { openAppSettings } from "@/hooks/useNativeNotifications";
-import { useTTS } from "@/hooks/useTTS";
+import { useTTS, warmAudioCtx } from "@/hooks/useTTS";
 
 interface DebriefMessage {
   id: number;
@@ -550,6 +550,8 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     // Auto-stop mic before sending so the recording never blocks the next state
     if (voice.isListening) voice.stop();
     haptic("medium");
+    // Warm the AudioContext during this user gesture so auto-speak works after streaming
+    warmAudioCtx();
     if (showCheckpoint) setContinuedPastCheckpoint(true);
     sendMessage(textToSend);
   };
@@ -581,10 +583,12 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   };
 
   const handleContinue = () => {
+    haptic("medium");
     setContinuedPastCheckpoint(true);
   };
 
   const handleWrapUp = () => {
+    haptic("medium");
     if (debrief) {
       completeDebriefMutation.mutate(debrief.id);
     }
@@ -649,7 +653,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
             </p>
             <div className="flex items-center justify-center gap-3">
               <Button
-                onClick={() => startDebriefMutation.mutate({ fresh: false, userLed: true })}
+                onClick={() => { haptic("medium"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: false, userLed: true }); }}
                 disabled={startDebriefMutation.isPending}
                 variant="outline"
                 className="flex-1 max-w-[160px]"
@@ -664,7 +668,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                 )}
               </Button>
               <Button
-                onClick={() => startDebriefMutation.mutate({ fresh: false })}
+                onClick={() => { haptic("medium"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: false }); }}
                 disabled={startDebriefMutation.isPending}
                 className="flex-1 max-w-[160px]"
               >
@@ -771,7 +775,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => startDebriefMutation.mutate({ fresh: true })}
+              onClick={() => { haptic("select"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: true }); }}
               disabled={startDebriefMutation.isPending}
               className="text-muted-foreground hover:text-foreground"
             >

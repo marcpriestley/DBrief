@@ -61,8 +61,17 @@ function NativeSlider({ value, onChange, min = 0, max = 100, color = "hsl(40, 95
   onChangeRef.current = onChange;
   const minRef = useRef(min); minRef.current = min;
   const maxRef = useRef(max); maxRef.current = max;
+  const lastHapticVal = useRef<number | null>(null);
 
   const pct = Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100));
+
+  const emitWithHaptic = (newVal: number) => {
+    onChangeRef.current(newVal);
+    if (lastHapticVal.current === null || Math.abs(newVal - lastHapticVal.current) >= 5) {
+      haptic("light");
+      lastHapticVal.current = newVal;
+    }
+  };
 
   useEffect(() => {
     const el = trackRef.current;
@@ -78,22 +87,24 @@ function NativeSlider({ value, onChange, min = 0, max = 100, color = "hsl(40, 95
       e.preventDefault();
       e.stopPropagation();
       isDragging.current = true;
-      if (e.touches[0]) onChangeRef.current(getVal(e.touches[0].clientX));
+      lastHapticVal.current = null;
+      if (e.touches[0]) emitWithHaptic(getVal(e.touches[0].clientX));
     };
     const onTouchMove = (e: TouchEvent) => {
       if (!isDragging.current) return;
       e.preventDefault();
       e.stopPropagation();
-      if (e.touches[0]) onChangeRef.current(getVal(e.touches[0].clientX));
+      if (e.touches[0]) emitWithHaptic(getVal(e.touches[0].clientX));
     };
     const onTouchEnd = () => { isDragging.current = false; };
 
     const onMouseDown = (e: MouseEvent) => {
       e.preventDefault();
       isDragging.current = true;
-      onChangeRef.current(getVal(e.clientX));
+      lastHapticVal.current = null;
+      emitWithHaptic(getVal(e.clientX));
       const onMouseMove = (e: MouseEvent) => {
-        if (isDragging.current) onChangeRef.current(getVal(e.clientX));
+        if (isDragging.current) emitWithHaptic(getVal(e.clientX));
       };
       const onMouseUp = () => {
         isDragging.current = false;
@@ -265,6 +276,7 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
   }
 
   const handleMetricClick = (metric: UserMetric) => {
+    haptic("light");
     setSelectedMetric(metric);
     setDialogMode('edit');
     const existingScore = getScoreForMetric(metric.name);

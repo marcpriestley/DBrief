@@ -387,7 +387,7 @@ export default function LongTermGoals() {
                             min={0}
                             max={100}
                             step={5}
-                            onValueChange={([v]) => setLocalProgress(prev => ({ ...prev, [goal.id]: v }))}
+                            onValueChange={([v]) => { haptic("light"); setLocalProgress(prev => ({ ...prev, [goal.id]: v })); }}
                             onValueCommit={([v]) => handleProgressCommit(goal, v)}
                             className="w-full"
                           />
