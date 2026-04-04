@@ -60,27 +60,32 @@ function DateSelector() {
 
   return (
     <div className="flex w-full bg-muted rounded-xl p-1 gap-0.5 my-1.5">
-      {tabs.map(({ id, label, date }) => (
-        <button
-          key={id}
-          onClick={() => { haptic("select"); setDayView(id); }}
-          className={`flex-1 flex flex-col items-center py-2 rounded-lg transition-all duration-200 ${
-            dayView === id ? "bg-card shadow-sm" : "hover:bg-background/50"
-          }`}
-        >
-          <span className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground leading-tight">
-            {label}
-          </span>
-          <span className={`text-xs font-bold mt-0.5 transition-colors ${
-            dayView === id ? "text-foreground" : "text-muted-foreground"
-          }`}>
-            {formatDateShort(date)}
-          </span>
-          <div className={`h-0.5 rounded-full mt-1 transition-all duration-200 ${
-            dayView === id ? "w-5 bg-primary" : "w-0 bg-transparent"
-          }`} />
-        </button>
-      ))}
+      {tabs.map(({ id, label, date }) => {
+        const active = dayView === id;
+        return (
+          <button
+            key={id}
+            onClick={() => { haptic("select"); setDayView(id); }}
+            className={`flex-1 flex flex-col items-center py-2 rounded-lg transition-all duration-200 ${
+              active ? "bg-card shadow-sm" : "hover:bg-background/50"
+            }`}
+          >
+            <span className={`text-[10px] uppercase tracking-widest leading-tight transition-colors font-bold ${
+              active ? "text-primary" : "text-muted-foreground font-semibold"
+            }`}>
+              {label}
+            </span>
+            <span className={`text-xs mt-0.5 transition-colors ${
+              active ? "text-foreground font-extrabold" : "text-muted-foreground font-medium"
+            }`}>
+              {formatDateShort(date)}
+            </span>
+            <div className={`h-0.5 rounded-full mt-1 transition-all duration-200 ${
+              active ? "w-6 bg-primary" : "w-0 bg-transparent"
+            }`} />
+          </button>
+        );
+      })}
     </div>
   );
 }

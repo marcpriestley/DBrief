@@ -21,9 +21,7 @@ function getDateStr(offset = 0) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function getSmartDefault(journalPreference?: string): DayView {
-  const hour = new Date().getHours();
-  if (journalPreference === "morning" && hour < 12) return "yesterday";
+function getSmartDefault(_journalPreference?: string): DayView {
   return "today";
 }
 
