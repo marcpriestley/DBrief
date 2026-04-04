@@ -232,6 +232,59 @@ export async function sendApnsNotification(
   });
 }
 
+// Send a silent background push whose only job is to reset the badge to 0.
+// Uses apns-push-type=background + priority=5 so iOS delivers it without
+// showing any visible notification to the user.
+export async function sendSilentBadgeClear(deviceToken: string): Promise<boolean> {
+  const creds = await getApnsCredentials();
+  if (!creds) return false;
+  const { keyId, teamId, rawKey } = creds;
+  const pemKey = rawKey.replace(/\\n/g, "\n");
+  const useProduction = process.env.APNS_PRODUCTION === "true";
+  const host = useProduction ? APNS_HOST_PRODUCTION : APNS_HOST_SANDBOX;
+
+  let jwt: string;
+  try {
+    const privKey = loadPrivateKey(pemKey);
+    jwt = generateApnsJwt(keyId, teamId, privKey);
+  } catch {
+    return false;
+  }
+
+  const payload = JSON.stringify({ aps: { "content-available": 1, badge: 0 } });
+
+  return new Promise((resolve) => {
+    try {
+      const session = getH2Session(host);
+      const req = session.request({
+        ":method": "POST",
+        ":path": `/3/device/${deviceToken}`,
+        ":scheme": "https",
+        ":authority": new URL(host).hostname,
+        "authorization": `bearer ${jwt}`,
+        "apns-topic": "com.dbrief.app",
+        "apns-push-type": "background",
+        "apns-priority": "5",
+        "content-type": "application/json",
+        "content-length": Buffer.byteLength(payload).toString(),
+      });
+
+      let status = 0;
+      req.on("response", (h) => { status = h[":status"] as number; });
+      req.on("data", () => {});
+      req.on("end", () => {
+        console.log(`[APNs] badge-clear ${status === 200 ? "OK" : "failed (" + status + ")"} → ${deviceToken.slice(0, 10)}…`);
+        resolve(status === 200);
+      });
+      req.on("error", () => resolve(false));
+      req.write(payload);
+      req.end();
+    } catch {
+      resolve(false);
+    }
+  });
+}
+
 export function isApnsConfigured(): boolean {
   return !!(process.env.APNS_KEY_ID && process.env.APNS_TEAM_ID && process.env.APNS_AUTH_KEY);
 }

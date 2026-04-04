@@ -197,7 +197,7 @@ export default function AIInsights() {
                   if (tts.speaking) {
                     tts.cancel();
                   } else {
-                    tts.speak(latestInsight.insight);
+                    tts.speakNow(latestInsight.insight);
                   }
                 }}
                 title={tts.speaking ? "Stop" : "Read aloud"}

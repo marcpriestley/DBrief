@@ -710,7 +710,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                   variant="ghost"
                   size="icon"
                   className={`h-7 w-7 ${tts.speaking ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
-                  onClick={() => tts.speaking ? tts.cancel() : tts.speak(sessionText)}
+                  onClick={() => tts.speaking ? tts.cancel() : tts.speakNow(sessionText)}
                   title={tts.speaking ? "Stop" : "Listen to debrief"}
                 >
                   {tts.speaking

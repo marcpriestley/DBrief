@@ -10,7 +10,7 @@ import {
 import OpenAI from "openai";
 import type { HealthData } from "./oura";
 import { sendPushNotification, getVapidPublicKey } from "./notifications";
-import { sendApnsNotification, isApnsConfigured, clearApnsCache } from "./apns";
+import { sendApnsNotification, sendSilentBadgeClear, isApnsConfigured, clearApnsCache } from "./apns";
 import bcrypt from "bcrypt";
 import { OAuth2Client } from "google-auth-library";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
@@ -608,23 +608,19 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
       const now = new Date();
       const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-      const datesToCreate = new Set<string>([todayStr]);
-      if (requestedDate && typeof requestedDate === "string") {
-        datesToCreate.add(requestedDate);
-      }
-
-      for (const date of datesToCreate) {
-        const dateGoals = await storage.getDailyGoals(userId, date);
-        const alreadyExists = dateGoals.some(g => g.goalTemplateId === template.id);
-        if (!alreadyExists) {
-          await storage.createDailyGoal({
-            userId,
-            date,
-            goalTemplateId: template.id,
-            title: template.title,
-            completed: false,
-          });
-        }
+      // Only create a daily instance for the date the user was viewing when they
+      // added the goal — never silently add it to today if a different date was sent.
+      const targetDate = (requestedDate && typeof requestedDate === "string") ? requestedDate : todayStr;
+      const dateGoals = await storage.getDailyGoals(userId, targetDate);
+      const alreadyExists = dateGoals.some(g => g.goalTemplateId === template.id);
+      if (!alreadyExists) {
+        await storage.createDailyGoal({
+          userId,
+          date: targetDate,
+          goalTemplateId: template.id,
+          title: template.title,
+          completed: false,
+        });
       }
 
       res.json(template);
@@ -1111,6 +1107,21 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ message: "Failed to unregister APNs token" });
+    }
+  });
+
+  // Clear the app icon badge by sending a silent background push with badge=0
+  app.post("/api/push/clear-badge", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const subs = await storage.getPushSubscriptions(userId);
+      const apnsSubs = subs.filter(s => s.apnsToken);
+      if (apnsSubs.length > 0) {
+        await Promise.all(apnsSubs.map(s => sendSilentBadgeClear(s.apnsToken!)));
+      }
+      res.json({ success: true, devices: apnsSubs.length });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to clear badge" });
     }
   });
 

@@ -71,6 +71,16 @@ function handleNotificationUrl(url?: string) {
   }
 }
 
+// Clears the app icon badge via a silent server-side APNs push.
+// Throttled so we don't spam the server — at most once every 30 seconds.
+let lastBadgeClear = 0;
+function clearBadge() {
+  const now = Date.now();
+  if (now - lastBadgeClear < 30_000) return;
+  lastBadgeClear = now;
+  fetch("/api/push/clear-badge", { method: "POST", credentials: "include" }).catch(() => {});
+}
+
 // Set up notification tap listener (called once after registration)
 let tapListenerSetup = false;
 async function setupNotificationTapListener() {
@@ -83,10 +93,12 @@ async function setupNotificationTapListener() {
       console.log("[APNs] Notification tapped, url:", url);
       handleNotificationUrl(url);
     });
-    // Clear notification centre when app comes back to foreground
+    // When app comes to foreground: clear notification centre AND reset badge
+    clearBadge();
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") {
         PushNotifications.removeAllDeliveredNotifications().catch(() => {});
+        clearBadge();
       }
     });
   } catch (err) {

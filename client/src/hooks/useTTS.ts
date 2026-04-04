@@ -8,8 +8,7 @@ export type TTSVoice = "nova" | "shimmer" | "echo" | "onyx" | "fable" | "alloy";
 // No-op kept for import compatibility
 export function warmAudioCtx() {}
 
-// Convert ArrayBuffer → base64 data URL without using btoa on a huge string.
-// We use FileReader (most reliable across environments incl. WKWebView).
+// Convert ArrayBuffer → base64 data URL via FileReader (reliable in WKWebView).
 function arrayBufferToDataUrl(buffer: ArrayBuffer): Promise<string> {
   return new Promise((resolve, reject) => {
     const blob = new Blob([buffer], { type: "audio/mpeg" });
@@ -20,14 +19,10 @@ function arrayBufferToDataUrl(buffer: ArrayBuffer): Promise<string> {
   });
 }
 
-// Speak via the device's built-in SpeechSynthesis API.
-// Does not require a user gesture and works in Capacitor WKWebView on iOS 14+.
+// SpeechSynthesis fallback — works in Capacitor WKWebView on iOS 14+ and
+// does not need a user gesture when called from within an event handler chain.
 function speakViaSynthesis(text: string, onEnd: () => void): SpeechSynthesisUtterance | null {
-  if (!window.speechSynthesis) {
-    onEnd();
-    return null;
-  }
-  // Cancel any existing utterance
+  if (!window.speechSynthesis) { onEnd(); return null; }
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.rate = 0.95;
@@ -66,15 +61,15 @@ export function useTTS() {
     setSpeaking(false);
   }, []);
 
-  const speak = useCallback(async (text: string) => {
-    if (!enabled || !text.trim()) return;
+  // Core implementation — shared by speak() and speakNow().
+  const _doSpeak = useCallback(async (text: string) => {
     cancel();
     setSpeaking(true);
 
     const ac = new AbortController();
     abortRef.current = ac;
 
-    // ── Phase 1: try OpenAI TTS audio ────────────────────────────────────
+    // ── Phase 1: OpenAI TTS via data URL ─────────────────────────────────
     try {
       const res = await fetch("/api/tts", {
         method: "POST",
@@ -84,7 +79,7 @@ export function useTTS() {
         signal: ac.signal,
       });
 
-      if (!res.ok) throw new Error(`tts-fetch-${res.status}`);
+      if (!res.ok) throw new Error(`tts-${res.status}`);
 
       const buffer = await res.arrayBuffer();
       if (ac.signal.aborted) return;
@@ -101,31 +96,25 @@ export function useTTS() {
       };
 
       audio.onended = done;
-
-      // If the audio element is blocked (e.g. WKWebView gesture policy),
-      // fall through to SpeechSynthesis
       audio.onerror = () => {
         audioRef.current = null;
-        console.warn("[TTS] audio element error — falling back to SpeechSynthesis");
+        console.warn("[TTS] audio element error → SpeechSynthesis fallback");
         utteranceRef.current = speakViaSynthesis(text, () => setSpeaking(false));
         if (!utteranceRef.current) setSpeaking(false);
       };
 
       audio.src = dataUrl;
-
       try {
         await audio.play();
-        return; // success — return early
+        return; // success
       } catch (playErr: any) {
-        console.warn("[TTS] audio.play() rejected:", playErr?.name, "—", playErr?.message,
-          "→ falling back to SpeechSynthesis");
+        console.warn("[TTS] play() rejected:", playErr?.name, "→ SpeechSynthesis fallback");
         audio.src = "";
         audioRef.current = null;
-        // Fall through to SpeechSynthesis below
       }
     } catch (err: any) {
       if (err?.name === "AbortError") return;
-      console.warn("[TTS] fetch/decode failed:", err?.message, "→ falling back to SpeechSynthesis");
+      console.warn("[TTS] fetch/decode failed:", err?.message, "→ SpeechSynthesis fallback");
     }
 
     if (ac.signal.aborted) { setSpeaking(false); return; }
@@ -133,8 +122,19 @@ export function useTTS() {
     // ── Phase 2: SpeechSynthesis fallback ────────────────────────────────
     utteranceRef.current = speakViaSynthesis(text, () => setSpeaking(false));
     if (!utteranceRef.current) setSpeaking(false);
+  }, [voice, cancel]);
 
-  }, [enabled, voice, cancel]);
+  // Auto-speak (after AI responses) — respects the user's enabled toggle.
+  const speak = useCallback((text: string) => {
+    if (!enabled || !text.trim()) return Promise.resolve();
+    return _doSpeak(text);
+  }, [enabled, _doSpeak]);
+
+  // Manual play — always works regardless of the auto-speak toggle state.
+  const speakNow = useCallback((text: string) => {
+    if (!text.trim()) return Promise.resolve();
+    return _doSpeak(text);
+  }, [_doSpeak]);
 
   const toggle = useCallback(() => {
     setEnabled(prev => {
@@ -147,5 +147,5 @@ export function useTTS() {
 
   useEffect(() => () => { cancel(); }, [cancel]);
 
-  return { enabled, speaking, isSupported: true, speak, cancel, toggle };
+  return { enabled, speaking, isSupported: true, speak, speakNow, cancel, toggle };
 }
