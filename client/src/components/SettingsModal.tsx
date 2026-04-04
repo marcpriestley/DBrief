@@ -622,7 +622,6 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             {notificationsEnabled && isNativePlatform() && (
               <div className="space-y-1">
                 <PushRegistrationStatus />
-                <ApnsCredentialsDialog />
               </div>
             )}
 
