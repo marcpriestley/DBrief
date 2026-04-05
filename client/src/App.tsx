@@ -68,6 +68,16 @@ function AuthenticatedRouter() {
 }
 
 function App() {
+  // Apply dark mode class on startup from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem("dbrief_theme");
+    if (saved === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
