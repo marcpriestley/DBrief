@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { haptic } from "@/lib/haptics";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { MessageCircle, Send, CheckCircle, Loader2, RotateCcw, Mic, MicOff, ArrowRight, Volume2, VolumeX, Square, ChevronDown } from "lucide-react";
+import { MessageCircle, Send, CheckCircle, Loader2, RotateCcw, Mic, MicOff, ArrowRight, Volume2, VolumeX, Square, ChevronDown, Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiRequest } from "@/lib/queryClient";
@@ -68,6 +68,9 @@ function useInlineVoice() {
   const nativeSilenceCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // stopRef lets timers call stop() without a forward-reference problem
   const stopRef = useRef<() => Promise<void>>(async () => {});
+  // Configurable silence timeout and callback for conversation mode
+  const autoStopMsRef = useRef<number>(AUTO_STOP_SILENCE_MS);
+  const onSilenceStopRef = useRef<((text: string) => void) | null>(null);
 
   const isNative = Capacitor.isNativePlatform();
   const isSupported =
@@ -112,12 +115,14 @@ function useInlineVoice() {
         onFinalRef.current?.(accumulatedRef.current);
       }
       setInterimText(interim);
-      // Any speech resets the 30-second silence auto-stop timer
+      // Any speech resets the silence auto-stop timer
       lastSpeechTimeRef.current = Date.now();
       if (silenceAutoStopRef.current) clearTimeout(silenceAutoStopRef.current);
-      silenceAutoStopRef.current = setTimeout(() => {
-        if (shouldListenRef.current) stopRef.current();
-      }, AUTO_STOP_SILENCE_MS);
+      silenceAutoStopRef.current = setTimeout(async () => {
+        if (!shouldListenRef.current) return;
+        onSilenceStopRef.current?.(accumulatedRef.current);
+        await stopRef.current();
+      }, autoStopMsRef.current);
     };
 
     recognition.onerror = (e: any) => {
@@ -162,11 +167,13 @@ function useInlineVoice() {
   };
 
   const start = useCallback(
-    async (onFinal: (text: string) => void) => {
+    async (onFinal: (text: string) => void, opts?: { autoStopMs?: number; onSilenceStop?: (text: string) => void }) => {
       if (!isSupported) return;
 
       accumulatedRef.current = "";
       onFinalRef.current = onFinal;
+      autoStopMsRef.current = opts?.autoStopMs ?? AUTO_STOP_SILENCE_MS;
+      onSilenceStopRef.current = opts?.onSilenceStop ?? null;
 
       // --- Native iOS path via Capacitor plugin (with Web Speech API fallback) ---
       if (isNative) {
@@ -210,9 +217,11 @@ function useInlineVoice() {
             if (partial) {
               lastSpeechTimeRef.current = Date.now();
               if (silenceAutoStopRef.current) clearTimeout(silenceAutoStopRef.current);
-              silenceAutoStopRef.current = setTimeout(() => {
-                if (shouldListenRef.current) stopRef.current();
-              }, AUTO_STOP_SILENCE_MS);
+              silenceAutoStopRef.current = setTimeout(async () => {
+                if (!shouldListenRef.current) return;
+                onSilenceStopRef.current?.(accumulatedRef.current);
+                await stopRef.current();
+              }, autoStopMsRef.current);
             }
           });
 
@@ -220,14 +229,14 @@ function useInlineVoice() {
 
           // iOS kills speech recognition after a short pause (~1–2 s of silence).
           // This loop silently restarts it so the mic stays hot until the user taps stop
-          // or 30 seconds of unbroken silence triggers the auto-stop timer above.
+          // or the auto-stop timer above fires.
           if (nativeSilenceCheckRef.current) clearInterval(nativeSilenceCheckRef.current);
           nativeSilenceCheckRef.current = setInterval(async () => {
             if (!shouldListenRef.current || isStoppingRef.current) return;
             const silenceDuration = Date.now() - lastSpeechTimeRef.current;
-            // If iOS has been quiet for >2 s but we haven't hit the 30 s auto-stop,
+            // If iOS has been quiet for >2 s but we haven't hit the auto-stop,
             // restart recognition so the next utterance is captured.
-            if (silenceDuration > NATIVE_RESTART_POLL_MS && silenceDuration < AUTO_STOP_SILENCE_MS) {
+            if (silenceDuration > NATIVE_RESTART_POLL_MS && silenceDuration < autoStopMsRef.current) {
               try {
                 await SpeechRecognition.stop().catch(() => {});
                 if (!shouldListenRef.current || isStoppingRef.current) return;
@@ -366,6 +375,13 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const [isStreaming, setIsStreaming] = useState(false);
   const [openingStreamContent, setOpeningStreamContent] = useState("");
   const [isOpeningStreaming, setIsOpeningStreaming] = useState(false);
+  const [isConversationMode, setIsConversationMode] = useState(false);
+  const conversationActiveRef = useRef(false);
+  const conversationWaitingForTtsRef = useRef(false);
+  const prevTtsSpeakingRef = useRef(false);
+  const hadTtsResponseRef = useRef(false);
+  // Always up-to-date function for starting a conversation voice turn (ref avoids stale closures)
+  const startConversationVoiceRef = useRef<() => void>(() => {});
   const [continuedPastCheckpoint, setContinuedPastCheckpoint] = useState(false);
   const [actionNotifications, setActionNotifications] = useState<Array<{ type: string; message: string; success: boolean; id: number }>>([]);
   const [showAllMessages, setShowAllMessages] = useState(false);
@@ -519,6 +535,10 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
       queryClient.invalidateQueries({ queryKey: ["/api/journal-entries", selectedDate] });
       queryClient.invalidateQueries({ queryKey: ["/api/streak"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dates-with-data"] });
+      // Always end conversation mode when a debrief is completed
+      conversationActiveRef.current = false;
+      conversationWaitingForTtsRef.current = false;
+      setIsConversationMode(false);
     },
   });
 
@@ -528,7 +548,8 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     setUserInput("");
     setIsStreaming(true);
     setStreamingContent("");
-    ttsFirstSentenceRef.current = 0; // reset first-sentence tracker
+    ttsFirstSentenceRef.current = 0;
+    hadTtsResponseRef.current = false;
 
     if (voice.isListening) voice.stop();
     tts.cancel();
@@ -619,10 +640,11 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
         const remainder = ttsFirstSentenceRef.current
           ? accumulated.slice(ttsFirstSentenceRef.current).trim()
           : accumulated;
-        if (remainder) tts.speakOrQueue(remainder);
+        if (remainder) {
+          tts.speakOrQueue(remainder);
+          hadTtsResponseRef.current = tts.enabled; // TTS was queued — wait for it before restarting mic
+        }
       }
-      // Scroll the bottom of the messages into view so the latest AI response is visible.
-      // This moves both the inner chat container and the page scroll simultaneously.
       setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
       }, 100);
@@ -631,6 +653,14 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     } finally {
       setIsStreaming(false);
       setStreamingContent("");
+      // Conversation mode: if no TTS was queued, restart mic immediately after response
+      if (conversationActiveRef.current && !hadTtsResponseRef.current) {
+        setTimeout(() => {
+          if (conversationActiveRef.current) startConversationVoiceRef.current();
+        }, 600);
+      } else if (conversationActiveRef.current && hadTtsResponseRef.current) {
+        conversationWaitingForTtsRef.current = true;
+      }
     }
   };
 
@@ -690,6 +720,25 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     }
   };
 
+  const toggleConversation = () => {
+    haptic("medium");
+    if (conversationActiveRef.current) {
+      // End conversation
+      conversationActiveRef.current = false;
+      conversationWaitingForTtsRef.current = false;
+      setIsConversationMode(false);
+      if (voice.isListening) voice.stop();
+      tts.cancel();
+    } else {
+      // Start conversation
+      conversationActiveRef.current = true;
+      setIsConversationMode(true);
+      setUserInput("");
+      warmAudioCtx();
+      startConversationVoiceRef.current();
+    }
+  };
+
   useEffect(() => {
     // Scroll the chat container to its bottom so the latest message is visible.
     // This only moves the inner fixed-height div — it does NOT touch page scroll.
@@ -719,7 +768,27 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
 
   useEffect(() => {
     setShowAllMessages(false);
+    // End conversation mode when switching dates
+    if (conversationActiveRef.current) {
+      conversationActiveRef.current = false;
+      conversationWaitingForTtsRef.current = false;
+      setIsConversationMode(false);
+      voice.stop();
+      tts.cancel();
+    }
   }, [selectedDate]);
+
+  // Detect TTS finishing → restart mic for next conversation turn
+  useEffect(() => {
+    const wasSpeaking = prevTtsSpeakingRef.current;
+    prevTtsSpeakingRef.current = tts.speaking;
+    if (wasSpeaking && !tts.speaking && conversationWaitingForTtsRef.current) {
+      conversationWaitingForTtsRef.current = false;
+      setTimeout(() => {
+        if (conversationActiveRef.current) startConversationVoiceRef.current();
+      }, 400);
+    }
+  }, [tts.speaking]);
 
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
@@ -963,6 +1032,23 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     ? userInput + (userInput ? " " : "") + voice.interimText
     : userInput;
 
+  // Keep this ref current so timers can call the latest version without stale closures
+  startConversationVoiceRef.current = () => {
+    if (!conversationActiveRef.current || !debrief || debrief.isComplete) return;
+    setUserInput("");
+    voice.start(
+      (text) => setUserInput(text),
+      {
+        autoStopMs: 1800,
+        onSilenceStop: (finalText) => {
+          if (finalText.trim() && conversationActiveRef.current) {
+            sendMessage(finalText);
+          }
+        },
+      }
+    );
+  };
+
   const progressDots = Math.min(userMessageCount, CORE_EXCHANGES);
 
   return (
@@ -989,7 +1075,19 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
             </div>
           </div>
           <div className="flex items-center gap-1">
-            {tts.isSupported && (
+            {voice.isSupported && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={toggleConversation}
+                className={`h-7 px-2 gap-1 text-xs ${isConversationMode ? "text-primary" : "text-muted-foreground"}`}
+                title={isConversationMode ? "End voice conversation" : "Start hands-free voice conversation"}
+              >
+                <Radio className={`h-3.5 w-3.5 ${isConversationMode ? "animate-pulse" : ""}`} />
+                {isConversationMode ? "Live" : "Converse"}
+              </Button>
+            )}
+            {tts.isSupported && !isConversationMode && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -1160,64 +1258,112 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
         </div>
 
         <div className="px-4 pb-4 pt-2">
-          {voice.isListening && (
-            <div className="flex items-center gap-2 mb-2 px-2">
-              <div className="flex items-center gap-1">
-                <span className="w-1 h-3 bg-red-500 rounded-full animate-pulse" />
-                <span className="w-1 h-4 bg-red-500 rounded-full animate-pulse" style={{ animationDelay: "150ms" }} />
-                <span className="w-1 h-2.5 bg-red-500 rounded-full animate-pulse" style={{ animationDelay: "300ms" }} />
-                <span className="w-1 h-3.5 bg-red-500 rounded-full animate-pulse" style={{ animationDelay: "100ms" }} />
+          {/* Conversation mode — full-width status display */}
+          {isConversationMode ? (
+            <div className="flex items-center gap-3 bg-muted/50 rounded-xl border border-primary/30 p-3">
+              <div className="flex-1 min-w-0">
+                {isStreaming ? (
+                  <div className="flex items-center gap-2">
+                    <div className="flex gap-1">
+                      <span className="w-1 h-3 bg-primary rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                      <span className="w-1 h-4 bg-primary rounded-full animate-bounce" style={{ animationDelay: "100ms" }} />
+                      <span className="w-1 h-3 bg-primary rounded-full animate-bounce" style={{ animationDelay: "200ms" }} />
+                    </div>
+                    <span className="text-xs text-muted-foreground">Engineer thinking...</span>
+                  </div>
+                ) : tts.speaking ? (
+                  <div className="flex items-center gap-2">
+                    <Volume2 className="h-3.5 w-3.5 text-primary animate-pulse shrink-0" />
+                    <span className="text-xs text-muted-foreground">Engineer speaking...</span>
+                  </div>
+                ) : voice.isListening ? (
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="flex gap-0.5 shrink-0">
+                      <span className="w-0.5 h-2.5 bg-primary rounded-full animate-pulse" style={{ animationDelay: "0ms" }} />
+                      <span className="w-0.5 h-4 bg-primary rounded-full animate-pulse" style={{ animationDelay: "120ms" }} />
+                      <span className="w-0.5 h-3 bg-primary rounded-full animate-pulse" style={{ animationDelay: "240ms" }} />
+                      <span className="w-0.5 h-4.5 bg-primary rounded-full animate-pulse" style={{ animationDelay: "360ms" }} />
+                      <span className="w-0.5 h-2.5 bg-primary rounded-full animate-pulse" style={{ animationDelay: "480ms" }} />
+                    </div>
+                    {displayInput ? (
+                      <span className="text-sm text-foreground truncate">{displayInput}</span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Listening... speak, then pause</span>
+                    )}
+                  </div>
+                ) : (
+                  <span className="text-xs text-muted-foreground">Starting mic...</span>
+                )}
               </div>
-              <span className="text-xs text-red-500 font-medium">Recording — tap mic to stop</span>
-            </div>
-          )}
-          {voice.micError && (
-            <div className="flex items-start gap-2 mb-2 px-2 py-1.5 bg-destructive/10 rounded-lg">
-              {voice.micError === "SETTINGS_NEEDED" ? (
-                <div className="flex-1 space-y-1.5">
-                  <span className="text-xs text-destructive block">Microphone access denied. Enable it in iPhone Settings → DBrief → Microphone.</span>
-                  <button
-                    onClick={() => { openAppSettings(); voice.clearMicError(); }}
-                    className="text-[11px] font-medium text-destructive underline underline-offset-2"
-                  >
-                    Open iPhone Settings →
-                  </button>
-                </div>
-              ) : voice.micError?.startsWith("ERR:") ? (
-                <span className="text-xs text-destructive flex-1">Voice error: {voice.micError.slice(4)}</span>
-              ) : (
-                <span className="text-xs text-destructive flex-1">{voice.micError}</span>
-              )}
-              <button onClick={voice.clearMicError} className="text-destructive/60 hover:text-destructive text-xs shrink-0">✕</button>
-            </div>
-          )}
-          <div className="flex items-end gap-2 bg-muted/50 rounded-xl border border-border/50 p-2">
-            {voice.isSupported && (
               <button
-                onClick={handleMicToggle}
-                disabled={isStreaming}
-                className={`h-8 w-8 rounded-lg shrink-0 flex items-center justify-center transition-all ${
-                  voice.isListening
-                    ? "bg-red-500 text-white shadow-sm shadow-red-200"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                } ${isStreaming ? "opacity-40 cursor-not-allowed" : ""}`}
-                aria-label={voice.isListening ? "Stop listening" : "Start voice input"}
+                onClick={toggleConversation}
+                className="h-8 px-3 rounded-lg shrink-0 flex items-center gap-1.5 text-xs font-medium bg-muted hover:bg-muted/80 text-foreground transition-colors"
               >
-                {voice.isListening ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
+                <Square className="h-3 w-3 fill-current" />
+                End
               </button>
-            )}
-            <textarea
-              ref={inputRef}
-              rows={1}
-              value={displayInput}
-              onChange={(e) => setUserInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onInput={handleTextareaInput}
-              placeholder={voice.isListening ? "Speak freely — pausing is fine, mic stays on..." : "Message your engineer..."}
-              className="flex-1 min-w-0 bg-transparent border-0 outline-none text-sm placeholder:text-muted-foreground/60 text-foreground p-1 resize-none overflow-hidden leading-5"
-              style={{ height: "20px" }}
-              disabled={isStreaming}
-            />
+            </div>
+          ) : (
+            <>
+              {/* Normal mode — mic waveform indicator */}
+              {voice.isListening && (
+                <div className="flex items-center gap-2 mb-2 px-2">
+                  <div className="flex items-center gap-1">
+                    <span className="w-1 h-3 bg-red-500 rounded-full animate-pulse" />
+                    <span className="w-1 h-4 bg-red-500 rounded-full animate-pulse" style={{ animationDelay: "150ms" }} />
+                    <span className="w-1 h-2.5 bg-red-500 rounded-full animate-pulse" style={{ animationDelay: "300ms" }} />
+                    <span className="w-1 h-3.5 bg-red-500 rounded-full animate-pulse" style={{ animationDelay: "100ms" }} />
+                  </div>
+                  <span className="text-xs text-red-500 font-medium">Recording — tap mic to stop</span>
+                </div>
+              )}
+              {voice.micError && (
+                <div className="flex items-start gap-2 mb-2 px-2 py-1.5 bg-destructive/10 rounded-lg">
+                  {voice.micError === "SETTINGS_NEEDED" ? (
+                    <div className="flex-1 space-y-1.5">
+                      <span className="text-xs text-destructive block">Microphone access denied. Enable it in iPhone Settings → DBrief → Microphone.</span>
+                      <button
+                        onClick={() => { openAppSettings(); voice.clearMicError(); }}
+                        className="text-[11px] font-medium text-destructive underline underline-offset-2"
+                      >
+                        Open iPhone Settings →
+                      </button>
+                    </div>
+                  ) : voice.micError?.startsWith("ERR:") ? (
+                    <span className="text-xs text-destructive flex-1">Voice error: {voice.micError.slice(4)}</span>
+                  ) : (
+                    <span className="text-xs text-destructive flex-1">{voice.micError}</span>
+                  )}
+                  <button onClick={voice.clearMicError} className="text-destructive/60 hover:text-destructive text-xs shrink-0">✕</button>
+                </div>
+              )}
+              <div className="flex items-end gap-2 bg-muted/50 rounded-xl border border-border/50 p-2">
+                {voice.isSupported && (
+                  <button
+                    onClick={handleMicToggle}
+                    disabled={isStreaming}
+                    className={`h-8 w-8 rounded-lg shrink-0 flex items-center justify-center transition-all ${
+                      voice.isListening
+                        ? "bg-red-500 text-white shadow-sm shadow-red-200"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                    } ${isStreaming ? "opacity-40 cursor-not-allowed" : ""}`}
+                    aria-label={voice.isListening ? "Stop listening" : "Start voice input"}
+                  >
+                    {voice.isListening ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
+                  </button>
+                )}
+                <textarea
+                  ref={inputRef}
+                  rows={1}
+                  value={displayInput}
+                  onChange={(e) => setUserInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  onInput={handleTextareaInput}
+                  placeholder={voice.isListening ? "Speak freely — pausing is fine, mic stays on..." : "Message your engineer..."}
+                  className="flex-1 min-w-0 bg-transparent border-0 outline-none text-sm placeholder:text-muted-foreground/60 text-foreground p-1 resize-none overflow-hidden leading-5"
+                  style={{ height: "20px" }}
+                  disabled={isStreaming}
+                />
             <Button
               size="icon"
               onClick={handleSend}
@@ -1226,7 +1372,9 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
             >
               <Send className="h-3.5 w-3.5" />
             </Button>
-          </div>
+              </div>
+            </>
+          )}
         </div>
       </CardContent>
     </Card>
