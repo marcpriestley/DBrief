@@ -11,7 +11,7 @@ import Welcome from "@/pages/welcome";
 import OnboardingFlow from "@/components/OnboardingFlow";
 import NotFound from "@/pages/not-found";
 import PrivacyPolicy from "@/pages/privacy";
-import { registerNativePush, isNativePlatform, clearBadge } from "@/hooks/useNativeNotifications";
+import { registerNativePush, isNativePlatform, clearBadge, setupNotificationTapListener } from "@/hooks/useNativeNotifications";
 
 function AuthenticatedRouter() {
   const { data: user, isLoading } = useQuery<any>({
@@ -26,6 +26,8 @@ function AuthenticatedRouter() {
     if (user.notificationsEnabled !== false) {
       registerNativePush();
     }
+    // Set up the notification tap listener so tapping a push opens the right screen.
+    setupNotificationTapListener();
     // Clear the app icon badge immediately on app open, then again on every foreground.
     clearBadge();
     const onVisible = () => { if (document.visibilityState === "visible") clearBadge(); };

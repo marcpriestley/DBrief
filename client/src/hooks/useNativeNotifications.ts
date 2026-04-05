@@ -83,7 +83,7 @@ export function clearBadge() {
 
 // Set up notification tap listener (called once after registration)
 let tapListenerSetup = false;
-async function setupNotificationTapListener() {
+export async function setupNotificationTapListener() {
   if (tapListenerSetup || !Capacitor.isNativePlatform()) return;
   tapListenerSetup = true;
   try {

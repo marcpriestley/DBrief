@@ -45,8 +45,18 @@ export function useTTS() {
   const abortRef = useRef<AbortController | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  // Text queued to play immediately after the current speech ends
+  const continuationRef = useRef<string | null>(null);
+  // Ref mirror of speaking so callbacks don't capture stale state
+  const isSpeakingRef = useRef(false);
+
+  const setSpeakingBoth = (val: boolean) => {
+    isSpeakingRef.current = val;
+    setSpeaking(val);
+  };
 
   const cancel = useCallback(() => {
+    continuationRef.current = null;
     abortRef.current?.abort();
     abortRef.current = null;
     if (audioRef.current) {
@@ -58,16 +68,27 @@ export function useTTS() {
       window.speechSynthesis.cancel();
     }
     utteranceRef.current = null;
-    setSpeaking(false);
+    setSpeakingBoth(false);
   }, []);
 
-  // Core implementation — shared by speak() and speakNow().
-  const _doSpeak = useCallback(async (text: string) => {
-    cancel();
-    setSpeaking(true);
+  // Forward declaration so onended callbacks can reference it
+  const doSpeakRef = useRef<(text: string) => Promise<void>>(async () => {});
 
+  const _doSpeak = useCallback(async (text: string) => {
+    // Reset continuation but don't cancel existing speech — caller decides
     const ac = new AbortController();
     abortRef.current = ac;
+    setSpeakingBoth(true);
+
+    // Helper: called when audio finishes — plays continuation if any
+    const onDone = () => {
+      setSpeakingBoth(false);
+      const cont = continuationRef.current;
+      continuationRef.current = null;
+      if (cont && !ac.signal.aborted) {
+        doSpeakRef.current(cont);
+      }
+    };
 
     // ── Phase 1: OpenAI TTS via data URL ─────────────────────────────────
     try {
@@ -90,23 +111,21 @@ export function useTTS() {
       const audio = new Audio();
       audioRef.current = audio;
 
-      const done = () => {
-        setSpeaking(false);
+      audio.onended = () => {
         if (audioRef.current === audio) audioRef.current = null;
+        onDone();
       };
-
-      audio.onended = done;
       audio.onerror = () => {
         audioRef.current = null;
         console.warn("[TTS] audio element error → SpeechSynthesis fallback");
-        utteranceRef.current = speakViaSynthesis(text, () => setSpeaking(false));
-        if (!utteranceRef.current) setSpeaking(false);
+        utteranceRef.current = speakViaSynthesis(text, onDone);
+        if (!utteranceRef.current) onDone();
       };
 
       audio.src = dataUrl;
       try {
         await audio.play();
-        return; // success
+        return; // success — onended will fire onDone
       } catch (playErr: any) {
         console.warn("[TTS] play() rejected:", playErr?.name, "→ SpeechSynthesis fallback");
         audio.src = "";
@@ -117,24 +136,43 @@ export function useTTS() {
       console.warn("[TTS] fetch/decode failed:", err?.message, "→ SpeechSynthesis fallback");
     }
 
-    if (ac.signal.aborted) { setSpeaking(false); return; }
+    if (ac.signal.aborted) { setSpeakingBoth(false); return; }
 
     // ── Phase 2: SpeechSynthesis fallback ────────────────────────────────
-    utteranceRef.current = speakViaSynthesis(text, () => setSpeaking(false));
-    if (!utteranceRef.current) setSpeaking(false);
-  }, [voice, cancel]);
+    utteranceRef.current = speakViaSynthesis(text, onDone);
+    if (!utteranceRef.current) onDone();
+  }, [voice]);
+
+  // Keep doSpeakRef current so onDone closures can call the latest version
+  doSpeakRef.current = _doSpeak;
 
   // Auto-speak (after AI responses) — respects the user's enabled toggle.
+  // Cancels any in-progress speech and clears the continuation queue.
   const speak = useCallback((text: string) => {
     if (!enabled || !text.trim()) return Promise.resolve();
+    cancel();
     return _doSpeak(text);
-  }, [enabled, _doSpeak]);
+  }, [enabled, _doSpeak, cancel]);
 
   // Manual play — always works regardless of the auto-speak toggle state.
+  // Cancels any in-progress speech and clears the continuation queue.
   const speakNow = useCallback((text: string) => {
     if (!text.trim()) return Promise.resolve();
+    cancel();
     return _doSpeak(text);
-  }, [_doSpeak]);
+  }, [_doSpeak, cancel]);
+
+  // Queue text to play after the current speech ends (no interruption).
+  // If nothing is playing, starts immediately. Respects the enabled toggle.
+  const speakOrQueue = useCallback((text: string) => {
+    if (!enabled || !text.trim()) return;
+    if (isSpeakingRef.current) {
+      // Chain it: play after whatever is currently speaking (or already queued)
+      continuationRef.current = text;
+    } else {
+      _doSpeak(text);
+    }
+  }, [enabled, _doSpeak]);
 
   const toggle = useCallback(() => {
     setEnabled(prev => {
@@ -147,5 +185,5 @@ export function useTTS() {
 
   useEffect(() => () => { cancel(); }, [cancel]);
 
-  return { enabled, speaking, isSupported: true, speak, speakNow, cancel, toggle };
+  return { enabled, speaking, isSupported: true, speak, speakNow, speakOrQueue, cancel, toggle };
 }

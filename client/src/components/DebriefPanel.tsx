@@ -374,6 +374,8 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const debriefCardRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const focusMountedRef = useRef(false);
+  // Index into `accumulated` where the first sentence ends (0 = no sentence spoken yet)
+  const ttsFirstSentenceRef = useRef<number>(0);
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const voice = useInlineVoice();
@@ -454,6 +456,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     setUserInput("");
     setIsStreaming(true);
     setStreamingContent("");
+    ttsFirstSentenceRef.current = 0; // reset first-sentence tracker
 
     if (voice.isListening) voice.stop();
     tts.cancel();
@@ -507,6 +510,15 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
               if (data.content) {
                 accumulated += data.content;
                 setStreamingContent(accumulated);
+                // Speak the first complete sentence immediately (minimum latency TTS)
+                if (tts.enabled && ttsFirstSentenceRef.current === 0) {
+                  const sentMatch = /[^.!?\n]{15,}[.!?][\s\n]/.exec(accumulated);
+                  if (sentMatch) {
+                    const end = sentMatch.index + sentMatch[0].length;
+                    ttsFirstSentenceRef.current = end;
+                    tts.speakNow(accumulated.slice(0, end).trim());
+                  }
+                }
               }
               if (data.actions) {
                 const newNotifications = data.actions.map((a: any, i: number) => ({
@@ -530,12 +542,18 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
       }
 
       queryClient.invalidateQueries({ queryKey: ["/api/debriefs", selectedDate] });
-      if (accumulated) tts.speak(accumulated);
-      // Scroll to the top of the debrief card so the AI response is immediately visible.
-      // Use a short delay to let React flush the DOM update from the optimistic message.
+      // Speak: if first sentence was already started, queue the rest; otherwise speak all
+      if (accumulated) {
+        const remainder = ttsFirstSentenceRef.current
+          ? accumulated.slice(ttsFirstSentenceRef.current).trim()
+          : accumulated;
+        if (remainder) tts.speakOrQueue(remainder);
+      }
+      // Scroll the bottom of the messages into view so the latest AI response is visible.
+      // This moves both the inner chat container and the page scroll simultaneously.
       setTimeout(() => {
-        debriefCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 80);
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }, 100);
     } catch {
       toast({ title: "Error", description: "Failed to send message. Try again.", variant: "destructive" });
     } finally {
