@@ -535,7 +535,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-sm max-h-[90vh] flex flex-col p-0 gap-0">
+      <DialogContent className="max-w-sm flex flex-col p-0 gap-0" style={{ maxHeight: 'calc(90dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom))' }}>
         {/* Header */}
         <DialogHeader className="px-5 pt-5 pb-4 shrink-0 border-b border-border/50">
           <DialogTitle className="text-base">Settings</DialogTitle>

@@ -48,6 +48,15 @@
   --radius: 0.75rem;
 }
 
+/* Fill the entire screen (including safe areas) with the app background.
+   This prevents the white "rubber-band" flash when over-scrolling on iOS.
+   html.dark picks up --background from the .dark CSS variables automatically. */
+html {
+  background-color: hsl(var(--background));
+  min-height: 100dvh;
+  height: 100%;
+}
+
 @layer base {
   * {
     @apply border-border;
@@ -57,11 +66,16 @@
     @apply font-sans antialiased bg-background text-foreground;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     font-weight: 450;
-    padding-top: env(safe-area-inset-top);
+    /* No padding-top here — the sticky header covers the status-bar area and
+       applies env(safe-area-inset-top) internally. Adding it on body too caused
+       triple-stacking with Capacitor's contentInset. */
     padding-bottom: env(safe-area-inset-bottom);
     padding-left: env(safe-area-inset-left);
     padding-right: env(safe-area-inset-right);
+    min-height: 100dvh;
     -webkit-font-smoothing: antialiased;
+    /* Prevent iOS from resizing text after orientation change */
+    -webkit-text-size-adjust: 100%;
   }
 
   .bg-card {

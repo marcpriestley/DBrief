@@ -32,7 +32,14 @@ function NativeOverlay({ open, onClose, title, description, children }: {
             onClick={onClose}
           />
           <motion.div
-            className="relative bg-background rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-md mx-0 sm:mx-4 z-10 p-5 max-h-[90vh] overflow-y-auto"
+            className="relative bg-background rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-md mx-0 sm:mx-4 z-10 overflow-y-auto"
+            style={{
+              maxHeight: 'calc(88dvh - env(safe-area-inset-top))',
+              paddingTop: '1.25rem',
+              paddingLeft: '1.25rem',
+              paddingRight: '1.25rem',
+              paddingBottom: 'calc(env(safe-area-inset-bottom) + 1.25rem)',
+            }}
             initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 40 }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
             onPointerDown={(e) => e.stopPropagation()}

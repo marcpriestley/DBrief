@@ -163,7 +163,7 @@ function AppLayoutInner({ children }: AppLayoutProps) {
   const isActive = (href: string) => location === href;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="bg-background" style={{ minHeight: '100dvh' }}>
       <div
         className="fixed inset-0 z-0 pointer-events-none"
         style={{
