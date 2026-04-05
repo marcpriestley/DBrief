@@ -367,6 +367,12 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const [continuedPastCheckpoint, setContinuedPastCheckpoint] = useState(false);
   const [actionNotifications, setActionNotifications] = useState<Array<{ type: string; message: string; success: boolean; id: number }>>([]);
   const [showAllMessages, setShowAllMessages] = useState(false);
+  const [expandedSessions, setExpandedSessions] = useState<Set<number>>(new Set());
+  const toggleSession = (id: number) => setExpandedSessions(prev => {
+    const s = new Set(prev);
+    s.has(id) ? s.delete(id) : s.add(id);
+    return s;
+  });
 
   const VISIBLE_MESSAGES = 6;
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -706,68 +712,69 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     );
   }
 
-  // All debriefs complete — show full history + start new button
+  // All debriefs complete — collapsible history + prominent new session CTA
   if (!debrief && completedDebriefs.length > 0) {
-    const latestSession = completedDebriefs[completedDebriefs.length - 1];
-    const sessionText = latestSession?.messages
-      .filter(m => m.role === "assistant")
-      .map(m => m.content)
-      .join(" ");
-
     return (
-      <Card className="border border-border/50 shadow-sm bg-card">
-        <CardContent className="p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <CheckCircle className="h-5 w-5 text-emerald-500" />
-            <h3 className="text-lg font-semibold text-foreground">
-              {completedDebriefs.length === 1 ? "Debrief Complete" : `${completedDebriefs.length} Sessions`}
-            </h3>
-            <div className="flex items-center gap-1 ml-auto">
-              {tts.isSupported && sessionText && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={`h-7 w-7 ${tts.speaking ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
-                  onClick={() => tts.speaking ? tts.cancel() : tts.speakNow(sessionText)}
-                  title={tts.speaking ? "Stop" : "Listen to debrief"}
-                >
-                  {tts.speaking
-                    ? <Square className="h-3.5 w-3.5 fill-current" />
-                    : <Volume2 className="h-3.5 w-3.5" />
-                  }
-                </Button>
-              )}
-              <span className="text-xs text-muted-foreground">{dateLabel}</span>
+      <Card className="border border-border/50 shadow-sm bg-card overflow-hidden">
+        <CardContent className="p-0">
+          {/* New session CTA — front and centre */}
+          <div className="px-5 py-4 flex items-center justify-between border-b border-border/40">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="h-4 w-4 text-emerald-500" />
+              <span className="text-sm font-semibold text-foreground">
+                {completedDebriefs.length === 1 ? "Session complete" : `${completedDebriefs.length} sessions today`}
+              </span>
             </div>
+            <Button
+              size="sm"
+              onClick={() => { haptic("medium"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: true }); }}
+              disabled={startDebriefMutation.isPending}
+              className="text-xs h-8 gap-1.5"
+            >
+              {startDebriefMutation.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RotateCcw className="h-3.5 w-3.5" />
+              )}
+              New Session
+            </Button>
           </div>
 
-          <div className="space-y-4">
-            {completedDebriefs.map((d, idx) => (
-              <div key={d.id} className={completedDebriefs.length > 1 ? "pb-4 border-b border-border/50 last:border-0 last:pb-0" : ""}>
-                {completedDebriefs.length > 1 && (
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                    Session {idx + 1}
-                  </p>
-                )}
-                {d.summary && (
-                  <p className="text-sm text-muted-foreground italic leading-relaxed">
-                    {d.summary}
-                  </p>
-                )}
-                {d.messages.length > 0 && (
-                  <>
-                    <button
-                      onClick={() => setShowAllMessages(v => !v)}
-                      className="flex items-center gap-1.5 mt-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showAllMessages ? "rotate-180" : ""}`} />
-                      {showAllMessages ? "Hide transcript" : `Show transcript (${d.messages.length} messages)`}
-                    </button>
-                    {showAllMessages && (
-                      <div className="space-y-2 mt-3 max-h-[400px] overflow-y-auto">
+          {/* Collapsed session list */}
+          <div className="divide-y divide-border/30">
+            {completedDebriefs.map((d, idx) => {
+              const isExpanded = expandedSessions.has(d.id);
+              const sessionText = d.messages.filter(m => m.role === "assistant").map(m => m.content).join(" ");
+              return (
+                <div key={d.id} className="px-5 py-3">
+                  {/* Session header row — always visible */}
+                  <button
+                    onClick={() => { haptic("select"); toggleSession(d.id); }}
+                    className="w-full flex items-center gap-2 text-left"
+                  >
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground shrink-0">
+                      Session {idx + 1}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground/60 shrink-0">{formatMsgTime(d.createdAt)}</span>
+                    {d.summary && !isExpanded && (
+                      <span className="text-xs text-muted-foreground italic truncate flex-1 ml-1">{d.summary}</span>
+                    )}
+                    <span className="ml-auto shrink-0 flex items-center gap-1 text-[10px] text-muted-foreground">
+                      {isExpanded ? "Hide" : "Show"}
+                      <ChevronDown className={`h-3 w-3 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                    </span>
+                  </button>
+
+                  {/* Expanded content */}
+                  {isExpanded && (
+                    <div className="mt-3 space-y-2">
+                      {d.summary && (
+                        <p className="text-xs text-muted-foreground italic leading-relaxed pb-2 border-b border-border/30">{d.summary}</p>
+                      )}
+                      <div className="space-y-2 max-h-[300px] overflow-y-auto">
                         {d.messages.map((msg) => (
                           <div key={msg.id} className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
-                            <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+                            <div className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${
                               msg.role === "user"
                                 ? "bg-primary text-primary-foreground rounded-br-md"
                                 : "bg-muted text-foreground rounded-bl-md"
@@ -775,35 +782,25 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                               {msg.content}
                             </div>
                             {msg.createdAt && (
-                              <span className="text-[10px] text-muted-foreground/60 mt-0.5 px-1">
-                                {formatMsgTime(msg.createdAt)}
-                              </span>
+                              <span className="text-[10px] text-muted-foreground/60 mt-0.5 px-1">{formatMsgTime(msg.createdAt)}</span>
                             )}
                           </div>
                         ))}
                       </div>
-                    )}
-                  </>
-                )}
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-4 pt-3 border-t border-border">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => { haptic("select"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: true }); }}
-              disabled={startDebriefMutation.isPending}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              {startDebriefMutation.isPending ? (
-                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-              ) : (
-                <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
-              )}
-              Start New Session
-            </Button>
+                      {tts.isSupported && sessionText && (
+                        <button
+                          onClick={() => tts.speaking ? tts.cancel() : tts.speakNow(sessionText)}
+                          className="flex items-center gap-1.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors pt-1"
+                        >
+                          {tts.speaking ? <Square className="h-3 w-3 fill-current" /> : <Volume2 className="h-3 w-3" />}
+                          {tts.speaking ? "Stop" : "Listen"}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </CardContent>
       </Card>
@@ -818,22 +815,55 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
 
   return (
     <div className="space-y-3">
-      {/* Completed sessions from earlier in the day — collapsed summaries */}
-      {completedDebriefs.map((d, idx) => (
-        <Card key={d.id} className="border border-border/30 shadow-sm bg-card/60">
-          <CardContent className="px-5 py-3">
-            <div className="flex items-center gap-2 mb-1.5">
-              <CheckCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-              <span className="text-xs font-medium text-muted-foreground">
-                Session {idx + 1} — {formatMsgTime(d.createdAt)}
-              </span>
-            </div>
-            {d.summary && (
-              <p className="text-xs text-muted-foreground italic leading-relaxed">{d.summary}</p>
-            )}
-          </CardContent>
-        </Card>
-      ))}
+      {/* Completed sessions from earlier in the day — collapsible */}
+      {completedDebriefs.map((d, idx) => {
+        const isExpanded = expandedSessions.has(d.id);
+        return (
+          <Card key={d.id} className="border border-border/30 shadow-sm bg-card/60 overflow-hidden">
+            <CardContent className="p-0">
+              <button
+                onClick={() => { haptic("select"); toggleSession(d.id); }}
+                className="w-full flex items-center gap-2 px-5 py-3 text-left"
+              >
+                <CheckCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                <span className="text-xs font-medium text-muted-foreground shrink-0">
+                  Session {idx + 1} · {formatMsgTime(d.createdAt)}
+                </span>
+                {d.summary && !isExpanded && (
+                  <span className="text-xs text-muted-foreground italic truncate flex-1 ml-1">{d.summary}</span>
+                )}
+                <span className="ml-auto shrink-0 flex items-center gap-1 text-[10px] text-muted-foreground">
+                  {isExpanded ? "Hide" : "Show"}
+                  <ChevronDown className={`h-3 w-3 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                </span>
+              </button>
+              {isExpanded && (
+                <div className="px-5 pb-4 space-y-2 border-t border-border/30 pt-3">
+                  {d.summary && (
+                    <p className="text-xs text-muted-foreground italic leading-relaxed pb-2 border-b border-border/20">{d.summary}</p>
+                  )}
+                  <div className="space-y-2 max-h-[280px] overflow-y-auto">
+                    {d.messages.map((msg) => (
+                      <div key={msg.id} className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
+                        <div className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${
+                          msg.role === "user"
+                            ? "bg-primary text-primary-foreground rounded-br-md"
+                            : "bg-muted text-foreground rounded-bl-md"
+                        }`}>
+                          {msg.content}
+                        </div>
+                        {msg.createdAt && (
+                          <span className="text-[10px] text-muted-foreground/60 mt-0.5 px-1">{formatMsgTime(msg.createdAt)}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })}
 
     <Card ref={debriefCardRef} className="border border-border/50 shadow-sm bg-card">
       <CardContent className="p-0">
