@@ -18,6 +18,10 @@ const MOOD_CHECKIN_TIMES = [
 // the scheduled time. Protects against server restarts near the reminder time.
 const DELIVERY_WINDOW_MINUTES = 5;
 
+// Mood check-ins use a wider window (30 min) so restarts during the 1pm/9pm slot
+// don't cause the reminder to be silently dropped.
+const MOOD_DELIVERY_WINDOW_MINUTES = 30;
+
 // ─── VAPID / Web Push setup ────────────────────────────────────────────────
 
 let isNotificationsEnabled = !!(
@@ -104,12 +108,13 @@ function isWithinDeliveryWindow(
   scheduledHour: number,
   scheduledMinute: number,
   currentHour: number,
-  currentMinute: number
+  currentMinute: number,
+  windowMinutes: number = DELIVERY_WINDOW_MINUTES
 ): boolean {
   const scheduledTotalMinutes = scheduledHour * 60 + scheduledMinute;
   const currentTotalMinutes   = currentHour   * 60 + currentMinute;
   const diff = currentTotalMinutes - scheduledTotalMinutes;
-  return diff >= 0 && diff < DELIVERY_WINDOW_MINUTES;
+  return diff >= 0 && diff < windowMinutes;
 }
 
 export async function dispatchToUser(
@@ -215,10 +220,13 @@ export async function sendMoodCheckinReminders() {
       const currentMinute = parseInt(currentMinuteStr, 10);
 
       for (const checkinTime of MOOD_CHECKIN_TIMES) {
-        if (!isWithinDeliveryWindow(checkinTime.hour, checkinTime.minute, currentHour, currentMinute)) continue;
+        if (!isWithinDeliveryWindow(checkinTime.hour, checkinTime.minute, currentHour, currentMinute, MOOD_DELIVERY_WINDOW_MINUTES)) continue;
 
-        const key = `${user.id}-${userDateStr}-${checkinTime.label}`;
+        const key = `mood_sent_${user.id}_${userDateStr}_${checkinTime.label}`;
+        // Check in-memory cache first (fast), then DB (survives server restarts)
         if (lastMoodReminderSent.get(key)) continue;
+        const alreadySentInDb = await storage.getServerConfig(key);
+        if (alreadySentInDb) { lastMoodReminderSent.set(key, true); continue; }
 
         const payload: PushNotificationPayload = {
           title: checkinTime.title,
@@ -231,6 +239,8 @@ export async function sendMoodCheckinReminders() {
 
         console.log(`[Mood Reminders] Sending ${checkinTime.label} check-in to user ${user.id}`);
         await dispatchToSubscriptions(user.subscriptions, payload);
+        // Persist dedup to DB so a server restart doesn't re-send
+        await storage.setServerConfig(key, '1');
         lastMoodReminderSent.set(key, true);
       }
     } catch (error) {

@@ -14,8 +14,8 @@ DBrief is a personal performance engineering app built around the F1 debrief fra
 
 ## User Preferences
 - Infinite goal banner always at the very top of the dashboard
-- Score circles sit below the infinite goal
-- Daily goals section, then long-term targets, then debrief panel, calendar at the bottom
+- Dashboard order: InfiniteGoalBanner → DebriefPanel → GoalsSection → HabitsSection → LongTermGoals → ScoreDashboard → AIInsights
+- Attention rings: pulsing amber dot + glow ring shown on sections that need input (today only) — debrief (no session yet), goals (some incomplete), habits (some undone), scores (nothing logged)
 - All scores use a unified 0-100 scale (compatible with Apple Health)
 - Score input uses a slider (0-100) — dialog closes immediately after saving, no confirmation steps
 - Apple Health metric sync is customizable per-metric in Settings — 18 real HealthKit metric types across Activity, Sleep, Heart, Body, Mindfulness, Respiratory, and Nutrition categories
