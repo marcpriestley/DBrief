@@ -323,31 +323,52 @@ export function registerDebriefRoutes(app: Express): void {
         return res.json({ ...debrief, messages: [] });
       }
 
+      // AI-led: stream the opening message via SSE so it appears word-by-word
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+      // Send debriefId first so the client can reference it
+      res.write(`data: ${JSON.stringify({ debriefId: debrief.id })}\n\n`);
+
       const context = await gatherDayContext(userId, date);
       const [user] = await db.select().from(users).where(eq(users.id, userId));
       const systemPrompt = buildSystemPrompt(context, date, 0, user?.journalPreference || "evening", user?.userProfile, user?.displayName);
 
-      const response = await openai.chat.completions.create({
+      const openingStream = await openai.chat.completions.create({
         model: "gpt-4o",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: "Start the debrief." },
         ],
+        stream: true,
         max_tokens: 300,
       });
 
-      const openingMessage = response.choices[0].message.content || "How was your day?";
+      let openingMessage = "";
+      for await (const chunk of openingStream) {
+        const content = chunk.choices[0]?.delta?.content;
+        if (content) {
+          openingMessage += content;
+          res.write(`data: ${JSON.stringify({ content })}\n\n`);
+        }
+      }
 
-      const [msg] = await db.insert(debriefMessages).values({
+      await db.insert(debriefMessages).values({
         debriefId: debrief.id,
         role: "assistant",
-        content: encrypt(openingMessage),
-      }).returning();
+        content: encrypt(openingMessage || "Ready when you are. How did the session go?"),
+      });
 
-      res.json({ ...debrief, messages: [{ ...msg, content: openingMessage }] });
+      res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+      res.end();
     } catch (error) {
       console.error("Error starting debrief:", error);
-      res.status(500).json({ error: "Failed to start debrief" });
+      if (res.headersSent) {
+        res.write(`data: ${JSON.stringify({ error: "Failed to start debrief" })}\n\n`);
+        res.end();
+      } else {
+        res.status(500).json({ error: "Failed to start debrief" });
+      }
     }
   });
 

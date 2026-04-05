@@ -364,6 +364,8 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const [userInput, setUserInput] = useState("");
   const [streamingContent, setStreamingContent] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
+  const [openingStreamContent, setOpeningStreamContent] = useState("");
+  const [isOpeningStreaming, setIsOpeningStreaming] = useState(false);
   const [continuedPastCheckpoint, setContinuedPastCheckpoint] = useState(false);
   const [actionNotifications, setActionNotifications] = useState<Array<{ type: string; message: string; success: boolean; id: number }>>([]);
   const [showAllMessages, setShowAllMessages] = useState(false);
@@ -378,7 +380,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const debriefCardRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const focusMountedRef = useRef(false);
   // Index into `accumulated` where the first sentence ends (0 = no sentence spoken yet)
   const ttsFirstSentenceRef = useRef<number>(0);
@@ -429,16 +431,80 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
 
   const startDebriefMutation = useMutation({
     mutationFn: async (opts: { fresh?: boolean; userLed?: boolean } = {}) => {
-      const response = await apiRequest("POST", "/api/debriefs/start", { date: selectedDate, fresh: !!opts.fresh, userLed: !!opts.userLed });
-      return response.json() as Promise<Debrief>;
+      const response = await fetch("/api/debriefs/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ date: selectedDate, fresh: !!opts.fresh, userLed: !!opts.userLed }),
+      });
+
+      if (!response.ok) throw new Error("Failed to start debrief");
+
+      const contentType = response.headers.get("Content-Type") || "";
+
+      // Resuming an existing session or user-led mode returns JSON — no streaming needed
+      if (contentType.includes("application/json")) {
+        return response.json() as Promise<Debrief>;
+      }
+
+      // AI-led new debrief: the server streams the opening message via SSE
+      setIsOpeningStreaming(true);
+      setOpeningStreamContent("");
+      ttsFirstSentenceRef.current = 0;
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No stream");
+      const decoder = new TextDecoder();
+      let accumulated = "";
+
+      outer: while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        for (const line of chunk.split("\n")) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.error) throw new Error(data.error);
+            if (data.content) {
+              accumulated += data.content;
+              setOpeningStreamContent(accumulated);
+              // TTS: speak first complete sentence immediately
+              if (tts.enabled && ttsFirstSentenceRef.current === 0) {
+                const sentMatch = /[^.!?\n]{15,}[.!?][\s\n]/.exec(accumulated);
+                if (sentMatch) {
+                  const end = sentMatch.index + sentMatch[0].length;
+                  ttsFirstSentenceRef.current = end;
+                  tts.speakNow(accumulated.slice(0, end).trim());
+                }
+              }
+            }
+            if (data.done) break outer;
+          } catch {}
+        }
+      }
+
+      // TTS remainder after streaming completes
+      if (accumulated && tts.enabled) {
+        const remainder = ttsFirstSentenceRef.current
+          ? accumulated.slice(ttsFirstSentenceRef.current).trim()
+          : accumulated;
+        if (remainder) tts.speakOrQueue(remainder);
+      }
+
+      return null;
     },
     onSuccess: () => {
       // Always re-fetch from server so all sessions (including previous ones) are in the list
       queryClient.invalidateQueries({ queryKey: ["/api/debriefs", selectedDate] });
       queryClient.invalidateQueries({ queryKey: ["/api/dates-with-data"] });
       setContinuedPastCheckpoint(false);
+      setIsOpeningStreaming(false);
+      setOpeningStreamContent("");
     },
     onError: () => {
+      setIsOpeningStreaming(false);
+      setOpeningStreamContent("");
       toast({ title: "Couldn't start debrief", description: "Please try again.", variant: "destructive" });
     },
   });
@@ -580,11 +646,17 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     sendMessage(textToSend);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
+  };
+
+  const handleTextareaInput = (e: React.FormEvent<HTMLTextAreaElement>) => {
+    const el = e.currentTarget;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
   };
 
   const micLastToggleRef = useRef(0);
@@ -638,6 +710,13 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     }
   }, [voice.isListening, isStreaming]);
 
+  // Reset textarea height when input is cleared (e.g. after sending)
+  useEffect(() => {
+    if (!userInput && inputRef.current) {
+      inputRef.current.style.height = "20px";
+    }
+  }, [userInput]);
+
   useEffect(() => {
     setShowAllMessages(false);
   }, [selectedDate]);
@@ -652,6 +731,52 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
       <Card className="border border-border/50 shadow-sm bg-card">
         <CardContent className="p-6 flex items-center justify-center min-h-[200px]">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Opening message is streaming — show a live chat card so the text appears immediately
+  if (isOpeningStreaming) {
+    return (
+      <Card className="border border-border/50 shadow-sm bg-card">
+        <CardContent className="p-0">
+          <div className="px-5 py-3 border-b border-border/50 flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-sm font-medium text-foreground">Debrief</span>
+          </div>
+          <div className="px-5 py-4 space-y-3 min-h-[120px]">
+            <AnimatePresence>
+              {openingStreamContent ? (
+                <motion.div
+                  key="opening"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex justify-start"
+                >
+                  <div className="max-w-[85%] rounded-2xl rounded-bl-md px-4 py-2.5 text-sm leading-relaxed bg-muted text-foreground">
+                    {openingStreamContent}
+                    <span className="inline-block w-1.5 h-4 bg-foreground/40 ml-0.5 animate-pulse align-text-bottom" />
+                  </div>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="dots"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="flex justify-start"
+                >
+                  <div className="rounded-2xl rounded-bl-md px-4 py-3 bg-muted">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-1.5 h-1.5 rounded-full bg-foreground/30 animate-bounce" style={{ animationDelay: "0ms" }} />
+                      <div className="w-1.5 h-1.5 rounded-full bg-foreground/30 animate-bounce" style={{ animationDelay: "150ms" }} />
+                      <div className="w-1.5 h-1.5 rounded-full bg-foreground/30 animate-bounce" style={{ animationDelay: "300ms" }} />
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </CardContent>
       </Card>
     );
@@ -900,7 +1025,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
           </div>
         </div>
 
-        <div ref={chatContainerRef} className="px-5 py-4 space-y-3 max-h-[350px] overflow-y-auto">
+        <div ref={chatContainerRef} className="px-5 py-4 space-y-3 max-h-[520px] overflow-y-auto">
           {debrief.messages.length === 0 && !isStreaming && (
             <p className="text-sm text-muted-foreground text-center py-4">
               Your session, your opening. What's on your mind?
@@ -1066,7 +1191,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
               <button onClick={voice.clearMicError} className="text-destructive/60 hover:text-destructive text-xs shrink-0">✕</button>
             </div>
           )}
-          <div className="flex items-center gap-2 bg-muted/50 rounded-xl border border-border/50 p-2">
+          <div className="flex items-end gap-2 bg-muted/50 rounded-xl border border-border/50 p-2">
             {voice.isSupported && (
               <button
                 onClick={handleMicToggle}
@@ -1081,14 +1206,16 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                 {voice.isListening ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
               </button>
             )}
-            <input
+            <textarea
               ref={inputRef}
-              type="text"
+              rows={1}
               value={displayInput}
               onChange={(e) => setUserInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={voice.isListening ? "Speak freely — pausing is fine, mic stays on..." : "Type or tap the mic to talk..."}
-              className="flex-1 min-w-0 bg-transparent border-0 outline-none text-sm placeholder:text-muted-foreground/60 text-foreground p-1"
+              onInput={handleTextareaInput}
+              placeholder={voice.isListening ? "Speak freely — pausing is fine, mic stays on..." : "Message your engineer..."}
+              className="flex-1 min-w-0 bg-transparent border-0 outline-none text-sm placeholder:text-muted-foreground/60 text-foreground p-1 resize-none overflow-hidden leading-5"
+              style={{ height: "20px" }}
               disabled={isStreaming}
             />
             <Button
