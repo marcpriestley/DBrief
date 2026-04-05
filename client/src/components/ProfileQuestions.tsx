@@ -113,9 +113,16 @@ export function ProfileQuestionsSettings() {
       const res = await apiRequest("PUT", "/api/user/profile", data);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/user/profile"] });
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      // Immediately apply the saved data to local state so fields don't go blank on re-open
+      const savedProfile = data?.userProfile || {};
+      setAnswers(savedProfile);
+      setDateOfBirth(savedProfile.dateOfBirth || "");
+      setOccupation(savedProfile.occupation || "");
+      setLocation(savedProfile.location || "");
+      setGoalPref(data?.goalPreference || goalPref);
       toast({ title: "Profile saved", description: "Your AI debrief will now personalise to you." });
     },
     onError: () => {
@@ -141,6 +148,16 @@ export function ProfileQuestionsSettings() {
       setInitialised(true);
     }
   }, [profileData, initialised]);
+
+  // When fresh data arrives after a save (stale cache was used on first render),
+  // update the personal detail fields if they're still empty but the server has data.
+  useEffect(() => {
+    if (!initialised || !profileData) return;
+    const profile = profileData.userProfile || {};
+    if (!dateOfBirth && profile.dateOfBirth) setDateOfBirth(profile.dateOfBirth);
+    if (!occupation && profile.occupation) setOccupation(profile.occupation);
+    if (!location && profile.location) setLocation(profile.location);
+  }, [profileData]);
 
   if (!initialised) {
     return <div className="py-4 text-center text-xs text-muted-foreground">Loading profile...</div>;
