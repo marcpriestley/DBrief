@@ -11,6 +11,7 @@ import Welcome from "@/pages/welcome";
 import OnboardingFlow from "@/components/OnboardingFlow";
 import NotFound from "@/pages/not-found";
 import PrivacyPolicy from "@/pages/privacy";
+import BirthdayCelebration from "@/components/BirthdayCelebration";
 import { registerNativePush, isNativePlatform, clearBadge, setupNotificationTapListener } from "@/hooks/useNativeNotifications";
 
 function AuthenticatedRouter() {
@@ -56,14 +57,19 @@ function AuthenticatedRouter() {
     return <OnboardingFlow username={user.username} />;
   }
 
+  const dateOfBirth = user?.userProfile?.dateOfBirth ?? null;
+
   return (
-    <Switch>
-      <Route path="/" component={Dashboard} />
-      <Route path="/dashboard" component={Dashboard} />
-      <Route path="/calendar" component={CalendarPage} />
-      <Route path="/trends" component={Trends} />
-      <Route component={NotFound} />
-    </Switch>
+    <>
+      <Switch>
+        <Route path="/" component={Dashboard} />
+        <Route path="/dashboard" component={Dashboard} />
+        <Route path="/calendar" component={CalendarPage} />
+        <Route path="/trends" component={Trends} />
+        <Route component={NotFound} />
+      </Switch>
+      <BirthdayCelebration displayName={user?.displayName} dateOfBirth={dateOfBirth} />
+    </>
   );
 }
 

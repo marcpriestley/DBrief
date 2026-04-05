@@ -74,8 +74,29 @@ async function gatherDayContext(userId: number, date: string) {
   };
 }
 
-function buildUserProfileSummary(profile: Record<string, string> | null | undefined): string {
-  if (!profile || Object.keys(profile).length === 0) return "";
+/** Returns true if the provided date string (YYYY-MM-DD) matches today's month/day */
+function isTodayBirthday(dateOfBirth: string | undefined, todayDateStr: string): boolean {
+  if (!dateOfBirth) return false;
+  try {
+    const [, dobMonth, dobDay] = dateOfBirth.split("-");
+    const [, todayMonth, todayDay] = todayDateStr.split("-");
+    return dobMonth === todayMonth && dobDay === todayDay;
+  } catch {
+    return false;
+  }
+}
+
+/** Returns age in years from a YYYY-MM-DD string */
+function computeAge(dateOfBirth: string, todayDateStr: string): number {
+  const [dobYear, dobMonth, dobDay] = dateOfBirth.split("-").map(Number);
+  const [todayYear, todayMonth, todayDay] = todayDateStr.split("-").map(Number);
+  let age = todayYear - dobYear;
+  if (todayMonth < dobMonth || (todayMonth === dobMonth && todayDay < dobDay)) age--;
+  return age;
+}
+
+function buildUserProfileSummary(profile: Record<string, string> | null | undefined, date?: string): { summary: string; isBirthday: boolean } {
+  if (!profile || Object.keys(profile).length === 0) return { summary: "", isBirthday: false };
 
   const labels: Record<string, Record<string, string>> = {
     driver: {
@@ -123,13 +144,27 @@ function buildUserProfileSummary(profile: Record<string, string> | null | undefi
   };
 
   const parts: string[] = [];
+
+  // Personal details
+  const todayStr = date || new Date().toISOString().split("T")[0];
+  const birthday = isTodayBirthday(profile.dateOfBirth, todayStr);
+  if (profile.dateOfBirth) {
+    const age = computeAge(profile.dateOfBirth, todayStr);
+    if (age > 0) parts.push(`age ${age}`);
+  }
+  if (profile.occupation) parts.push(`works as: ${profile.occupation}`);
+  if (profile.location) parts.push(`based in ${profile.location}`);
+
+  // Behavioural questionnaire
   for (const [key, answer] of Object.entries(profile)) {
     if (labels[key]?.[answer]) parts.push(labels[key][answer]);
   }
 
-  return parts.length > 0
+  const summary = parts.length > 0
     ? `\nDRIVER PROFILE (adapt your style accordingly):\n${parts.map(p => `• ${p}`).join("\n")}`
     : "";
+
+  return { summary, isBirthday: birthday };
 }
 
 function buildSystemPrompt(context: Awaited<ReturnType<typeof gatherDayContext>>, date: string, userMessageCount: number, journalPreference: string = "evening", userProfile?: Record<string, string> | null, displayName?: string | null) {
@@ -177,10 +212,13 @@ ${context.isWeeklyAlignmentDay ? `TODAY IS THE WEEKLY ALIGNMENT CHECK. At some p
     ? `\nHABIT LAB — habits the driver is actively building:\n${context.habitSummary}\nIf relevant in the conversation, acknowledge habit completion as a win or gently nudge them on incomplete habits — but only if it flows naturally, never force it.`
     : "";
 
-  const profileSection = buildUserProfileSummary(userProfile);
+  const { summary: profileSection, isBirthday } = buildUserProfileSummary(userProfile, date);
   const driverName = displayName ? ` The driver's name is ${displayName} — use their name naturally in conversation, not every message, but enough that it feels personal.` : "";
+  const birthdayNote = isBirthday
+    ? `\n\nSPECIAL — TODAY IS THE DRIVER'S BIRTHDAY. Acknowledge this naturally and warmly at the start of the debrief — something brief, genuine and in-character (e.g. "Happy birthday by the way — another lap around the sun."). Don't overdo it, just make it feel human.`
+    : "";
 
-  return `You are the user's performance engineer — like an F1 race engineer debriefing their driver after a session.${driverName} Sharp, perceptive, and genuinely invested in helping them perform better. No therapy speak, no corporate nonsense, no cheerleading. Just honest analysis of the day's telemetry and whatever they bring to the conversation.${profileSection}
+  return `You are the user's performance engineer — like an F1 race engineer debriefing their driver after a session.${driverName} Sharp, perceptive, and genuinely invested in helping them perform better. No therapy speak, no corporate nonsense, no cheerleading. Just honest analysis of the day's telemetry and whatever they bring to the conversation.${profileSection}${birthdayNote}
 
 TIMING:
 ${timingContext}

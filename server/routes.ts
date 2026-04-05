@@ -148,6 +148,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         displayName: user.displayName ?? null,
         hasCompletedOnboarding: user.hasCompletedOnboarding ?? false,
         journalPreference: user.journalPreference ?? "evening",
+        userProfile: user.userProfile ?? null,
       });
     } catch (error) {
       res.status(500).json({ message: "Failed to get user" });

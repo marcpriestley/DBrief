@@ -20,6 +20,7 @@ type DataType =
   | "body-fat"
   | "respiratory-rate"
   | "sleep"
+  | "sleep-quality"
   | "mindfulness";
 
 interface MetricDef {
@@ -208,17 +209,43 @@ export interface HealthSyncResult {
 export async function syncHealthData(dateStr: string, enabledMetricNames: string[]): Promise<HealthSyncResult> {
   const results: Array<{ name: string; value: number }> = [];
 
-  const syncable = enabledMetricNames.filter(n => METRIC_MAP[n]);
+  // Ensure Sleep Duration is queried whenever Sleep Quality is requested (needed for fallback)
+  const toSync = new Set(enabledMetricNames.filter(n => METRIC_MAP[n]));
+  if (toSync.has("Sleep Quality") && !toSync.has("Sleep Duration")) {
+    toSync.add("Sleep Duration");
+  }
+
+  // Track raw sleep minutes for the Sleep Quality fallback
+  let rawSleepMinutes: number | null = null;
+
   await Promise.all(
-    syncable.map(async (name) => {
+    Array.from(toSync).map(async (name) => {
       const def = METRIC_MAP[name];
       const raw = await queryRawMetric(def.dataType, dateStr);
-      if (raw !== null && raw > 0) {
+
+      if (name === "Sleep Duration" && raw !== null) {
+        rawSleepMinutes = raw; // store raw minutes before normalization
+      }
+
+      // Only add to results if it was in the user's requested list
+      if (enabledMetricNames.includes(name) && raw !== null && raw > 0) {
         const score = def.normalize(raw);
         results.push({ name, value: score });
       }
     })
   );
+
+  // Sleep Quality fallback: if native "sleep-quality" returned nothing, compute from sleep duration
+  // (sleep efficiency proxy: minutes / 480 * 100, where 480 min = 8 hours = 100%)
+  if (
+    enabledMetricNames.includes("Sleep Quality") &&
+    !results.find(r => r.name === "Sleep Quality") &&
+    rawSleepMinutes !== null &&
+    rawSleepMinutes > 0
+  ) {
+    const quality = Math.min(100, Math.round((rawSleepMinutes / 480) * 100));
+    if (quality > 0) results.push({ name: "Sleep Quality", value: quality });
+  }
 
   if (results.length === 0) return { synced: 0, metrics: [] };
 

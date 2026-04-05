@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Check } from "lucide-react";
@@ -123,12 +125,19 @@ export function ProfileQuestionsSettings() {
 
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [goalPref, setGoalPref] = useState<string>("morning");
+  const [dateOfBirth, setDateOfBirth] = useState("");
+  const [occupation, setOccupation] = useState("");
+  const [location, setLocation] = useState("");
   const [initialised, setInitialised] = useState(false);
 
   useEffect(() => {
     if (profileData && !initialised) {
-      setAnswers(profileData.userProfile || {});
+      const profile = profileData.userProfile || {};
+      setAnswers(profile);
       setGoalPref(profileData.goalPreference || "morning");
+      setDateOfBirth(profile.dateOfBirth || "");
+      setOccupation(profile.occupation || "");
+      setLocation(profile.location || "");
       setInitialised(true);
     }
   }, [profileData, initialised]);
@@ -137,10 +146,68 @@ export function ProfileQuestionsSettings() {
     return <div className="py-4 text-center text-xs text-muted-foreground">Loading profile...</div>;
   }
 
+  const buildFullProfile = () => ({
+    ...answers,
+    ...(dateOfBirth ? { dateOfBirth } : {}),
+    ...(occupation.trim() ? { occupation: occupation.trim() } : {}),
+    ...(location.trim() ? { location: location.trim() } : {}),
+  });
+
   const allAnswered = PROFILE_QUESTIONS.every(q => answers[q.key]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+
+      {/* ── Personal Details ── */}
+      <div className="space-y-3">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Personal Details</p>
+        <p className="text-[11px] text-muted-foreground -mt-1 leading-relaxed">
+          Optional — helps the AI personalise your debrief and celebrate the moments that matter.
+        </p>
+
+        <div className="space-y-2">
+          <Label htmlFor="dateOfBirth" className="text-xs">Date of Birth</Label>
+          <Input
+            id="dateOfBirth"
+            type="date"
+            value={dateOfBirth}
+            onChange={(e) => setDateOfBirth(e.target.value)}
+            className="h-9"
+            max={new Date().toISOString().split("T")[0]}
+          />
+          {dateOfBirth && (
+            <p className="text-[11px] text-muted-foreground">
+              DBrief will celebrate your birthday each year 🎂
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="occupation" className="text-xs">Occupation / Role</Label>
+          <Input
+            id="occupation"
+            value={occupation}
+            onChange={(e) => setOccupation(e.target.value)}
+            placeholder="e.g. Software engineer, student, athlete…"
+            className="h-9"
+            maxLength={60}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="location" className="text-xs">City / Country</Label>
+          <Input
+            id="location"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            placeholder="e.g. London, UK"
+            className="h-9"
+            maxLength={60}
+          />
+        </div>
+      </div>
+
+      {/* ── Goal Prep Timing ── */}
       <div className="space-y-2">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Goal Prep Timing</p>
         <div className="grid grid-cols-2 gap-2">
@@ -164,6 +231,7 @@ export function ProfileQuestionsSettings() {
         </div>
       </div>
 
+      {/* ── Driver Profile questions ── */}
       <div>
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Driver Profile</p>
         <ProfileQuestions
@@ -176,7 +244,7 @@ export function ProfileQuestionsSettings() {
       <Button
         className="w-full"
         size="sm"
-        onClick={() => saveMutation.mutate({ userProfile: answers, goalPreference: goalPref })}
+        onClick={() => saveMutation.mutate({ userProfile: buildFullProfile(), goalPreference: goalPref })}
         disabled={!allAnswered || saveMutation.isPending}
       >
         {saveMutation.isPending ? "Saving..." : "Save Profile"}
