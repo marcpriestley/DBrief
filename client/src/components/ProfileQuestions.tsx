@@ -1,11 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Check } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 import { PROFILE_QUESTIONS } from "@/lib/profileData";
 
 interface ProfileQuestionsProps {
@@ -30,8 +31,8 @@ export default function ProfileQuestions({
       const res = await apiRequest("PUT", "/api/user/profile", { userProfile: data });
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/user/profile"] });
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/user/profile"], data);
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       toast({ title: "Profile updated", description: "Your AI debrief will now personalise to you." });
     },
@@ -108,21 +109,45 @@ export function ProfileQuestionsSettings() {
     queryKey: ["/api/user/profile"],
   });
 
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [goalPref, setGoalPref] = useState<string>("morning");
+  const [dateOfBirth, setDateOfBirth] = useState("");
+  const [occupation, setOccupation] = useState("");
+  const [location, setLocation] = useState("");
+  const [currentFocus, setCurrentFocus] = useState("");
+  const [showDriverQuestions, setShowDriverQuestions] = useState(false);
+  const initialisedRef = useRef(false);
+
+  useEffect(() => {
+    if (!profileData || initialisedRef.current) return;
+    initialisedRef.current = true;
+    const profile = profileData.userProfile || {};
+    setAnswers(profile);
+    setGoalPref(profileData.goalPreference || "morning");
+    setDateOfBirth(profile.dateOfBirth || "");
+    setOccupation(profile.occupation || "");
+    setLocation(profile.location || "");
+    setCurrentFocus(profile.currentFocus || "");
+    if (Object.keys(profile).some(k => PROFILE_QUESTIONS.map(q => q.key).includes(k))) {
+      setShowDriverQuestions(true);
+    }
+  }, [profileData]);
+
   const saveMutation = useMutation({
     mutationFn: async (data: { userProfile: Record<string, string>; goalPreference: string }) => {
       const res = await apiRequest("PUT", "/api/user/profile", data);
       return res.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/user/profile"] });
+      queryClient.setQueryData(["/api/user/profile"], data);
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      // Immediately apply the saved data to local state so fields don't go blank on re-open
       const savedProfile = data?.userProfile || {};
       setAnswers(savedProfile);
       setDateOfBirth(savedProfile.dateOfBirth || "");
       setOccupation(savedProfile.occupation || "");
       setLocation(savedProfile.location || "");
-      setGoalPref(data?.goalPreference || goalPref);
+      setCurrentFocus(savedProfile.currentFocus || "");
+      setGoalPref(data?.goalPreference || "morning");
       toast({ title: "Profile saved", description: "Your AI debrief will now personalise to you." });
     },
     onError: () => {
@@ -130,36 +155,7 @@ export function ProfileQuestionsSettings() {
     },
   });
 
-  const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [goalPref, setGoalPref] = useState<string>("morning");
-  const [dateOfBirth, setDateOfBirth] = useState("");
-  const [occupation, setOccupation] = useState("");
-  const [location, setLocation] = useState("");
-  const [initialised, setInitialised] = useState(false);
-
-  useEffect(() => {
-    if (profileData && !initialised) {
-      const profile = profileData.userProfile || {};
-      setAnswers(profile);
-      setGoalPref(profileData.goalPreference || "morning");
-      setDateOfBirth(profile.dateOfBirth || "");
-      setOccupation(profile.occupation || "");
-      setLocation(profile.location || "");
-      setInitialised(true);
-    }
-  }, [profileData, initialised]);
-
-  // When fresh data arrives after a save (stale cache was used on first render),
-  // update the personal detail fields if they're still empty but the server has data.
-  useEffect(() => {
-    if (!initialised || !profileData) return;
-    const profile = profileData.userProfile || {};
-    if (!dateOfBirth && profile.dateOfBirth) setDateOfBirth(profile.dateOfBirth);
-    if (!occupation && profile.occupation) setOccupation(profile.occupation);
-    if (!location && profile.location) setLocation(profile.location);
-  }, [profileData]);
-
-  if (!initialised) {
+  if (!profileData) {
     return <div className="py-4 text-center text-xs text-muted-foreground">Loading profile...</div>;
   }
 
@@ -168,9 +164,8 @@ export function ProfileQuestionsSettings() {
     ...(dateOfBirth ? { dateOfBirth } : {}),
     ...(occupation.trim() ? { occupation: occupation.trim() } : {}),
     ...(location.trim() ? { location: location.trim() } : {}),
+    ...(currentFocus.trim() ? { currentFocus: currentFocus.trim() } : {}),
   });
-
-  const allAnswered = PROFILE_QUESTIONS.every(q => answers[q.key]);
 
   return (
     <div className="space-y-5">
@@ -222,6 +217,20 @@ export function ProfileQuestionsSettings() {
             maxLength={60}
           />
         </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="currentFocus" className="text-xs">What are you focused on right now?</Label>
+          <Textarea
+            id="currentFocus"
+            value={currentFocus}
+            onChange={(e) => setCurrentFocus(e.target.value)}
+            placeholder="e.g. Training for a half marathon, launching a side project, improving my sleep…"
+            className="text-sm resize-none"
+            rows={2}
+            maxLength={120}
+          />
+          <p className="text-[11px] text-muted-foreground">Your AI engineer uses this to focus the debrief on what matters most right now.</p>
+        </div>
       </div>
 
       {/* ── Goal Prep Timing ── */}
@@ -248,21 +257,38 @@ export function ProfileQuestionsSettings() {
         </div>
       </div>
 
-      {/* ── Driver Profile questions ── */}
+      {/* ── Driver Profile questions (collapsible) ── */}
       <div>
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Driver Profile</p>
-        <ProfileQuestions
-          initialAnswers={answers}
-          onComplete={setAnswers}
-          compact
-        />
+        <button
+          onClick={() => setShowDriverQuestions(v => !v)}
+          className="w-full flex items-center justify-between py-2 group"
+        >
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">Driver Profile</p>
+          <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${showDriverQuestions ? "rotate-180" : ""}`} />
+        </button>
+        {!showDriverQuestions && (
+          <p className="text-[11px] text-muted-foreground">
+            {PROFILE_QUESTIONS.every(q => answers[q.key])
+              ? "All 7 questions answered — your AI engineer is calibrated."
+              : "7 questions that calibrate how your AI engineer debriefs you."}
+          </p>
+        )}
+        {showDriverQuestions && (
+          <div className="mt-2">
+            <ProfileQuestions
+              initialAnswers={answers}
+              onComplete={setAnswers}
+              compact
+            />
+          </div>
+        )}
       </div>
 
       <Button
         className="w-full"
         size="sm"
         onClick={() => saveMutation.mutate({ userProfile: buildFullProfile(), goalPreference: goalPref })}
-        disabled={!allAnswered || saveMutation.isPending}
+        disabled={saveMutation.isPending}
       >
         {saveMutation.isPending ? "Saving..." : "Save Profile"}
       </Button>

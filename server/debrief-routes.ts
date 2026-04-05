@@ -154,6 +154,7 @@ function buildUserProfileSummary(profile: Record<string, string> | null | undefi
   }
   if (profile.occupation) parts.push(`works as: ${profile.occupation}`);
   if (profile.location) parts.push(`based in ${profile.location}`);
+  if (profile.currentFocus) parts.push(`current focus: ${profile.currentFocus}`);
 
   // Behavioural questionnaire
   for (const [key, answer] of Object.entries(profile)) {

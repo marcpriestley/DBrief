@@ -552,7 +552,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           ) : (
             <>
               {/* ── Profile ─────────────────────────────────── */}
-              <SettingsSection title="Profile" icon={<User className="h-4 w-4" />} defaultOpen>
+              <SettingsSection title="Profile" icon={<User className="h-4 w-4" />}>
                 <div className="space-y-1.5">
                   <Label htmlFor="displayName" className="text-xs font-medium text-muted-foreground">Driver Name</Label>
                   <Input
