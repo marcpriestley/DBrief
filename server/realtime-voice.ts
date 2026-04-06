@@ -77,16 +77,15 @@ export function registerRealtimeVoiceWS(httpServer: HttpServer) {
       return;
     }
 
-    // The Replit AI integration supplies a dummy API key that only works through
-    // its HTTP proxy. For WebSocket we need a real ephemeral token.
-    // Step 1: Create an ephemeral session via the integration HTTP proxy.
-    const baseUrl = (process.env.AI_INTEGRATIONS_OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
+    // The Replit AI integration proxy does not support /realtime/sessions.
+    // Use the direct OpenAI API key (OPENAI_API_KEY) for the Realtime API.
+    const directKey = process.env.OPENAI_API_KEY || apiKey;
     let ephemeralKey: string;
     try {
-      const sessionRes = await fetch(`${baseUrl}/realtime/sessions`, {
+      const sessionRes = await fetch(`https://api.openai.com/v1/realtime/sessions`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${apiKey}`,
+          Authorization: `Bearer ${directKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ model: "gpt-4o-realtime-preview-2024-12-17" }),
