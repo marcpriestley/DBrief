@@ -3,9 +3,8 @@ import cron from 'node-cron';
 import { storage } from './storage';
 import { sendApnsNotification } from './apns';
 
-// Per-user, per-slot, per-date deduplication — prevents duplicate sends within
-// a single server process lifetime and across the 5-minute delivery window.
-const lastReminderSentDate = new Map<string, string>();
+// In-memory cache layer (fast-path, survives hot reloads). DB is the source of truth.
+const lastReminderSentDate = new Map<string, string>(); // key → dateStr (cache only)
 const lastMoodReminderSent = new Map<string, boolean>();
 
 const MOOD_CHECKIN_TIMES = [
@@ -15,11 +14,9 @@ const MOOD_CHECKIN_TIMES = [
 ];
 
 // Notifications window: fire if current time is within this many minutes AFTER
-// the scheduled time. Protects against server restarts near the reminder time.
-const DELIVERY_WINDOW_MINUTES = 5;
-
-// Mood check-ins use a wider window (30 min) so restarts during the 1pm/9pm slot
-// don't cause the reminder to be silently dropped.
+// the scheduled time. 30 min gives the server time to restart without missing slots.
+// DB-backed dedup prevents double-sends within the same window.
+const DELIVERY_WINDOW_MINUTES = 30;
 const MOOD_DELIVERY_WINDOW_MINUTES = 30;
 
 // ─── VAPID / Web Push setup ────────────────────────────────────────────────
@@ -128,15 +125,23 @@ async function dispatchToSubscriptions(
   subscriptions: Array<{ apnsToken?: string | null; endpoint: string; p256dh: string; auth: string }>,
   payload: PushNotificationPayload
 ) {
-  for (const sub of subscriptions) {
-    if (sub.apnsToken) {
-      await sendApnsNotification(sub.apnsToken, payload);
-    } else {
-      await sendPushNotification(
-        { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-        payload
-      );
+  // If this user has any native APNs token, send only via APNs.
+  // Sending both APNs and web push to the same person causes duplicate notifications
+  // on iOS (app + Safari both fire), so we prefer the native path.
+  const apnsTokens = subscriptions.map(s => s.apnsToken).filter(Boolean) as string[];
+  if (apnsTokens.length > 0) {
+    for (const token of apnsTokens) {
+      await sendApnsNotification(token, payload);
     }
+    return;
+  }
+
+  // No APNs tokens — send via web push (browser users)
+  for (const sub of subscriptions) {
+    await sendPushNotification(
+      { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+      payload
+    );
   }
 }
 
@@ -168,13 +173,17 @@ export async function sendDailyReminders() {
       ];
 
       for (const reminder of reminderTimes) {
-        // Skip if already sent today for this slot
-        const key = `${user.id}-${reminder.slot}`;
-        if (lastReminderSentDate.get(key) === userDateStr) continue;
-
         const [reminderHour, reminderMinute] = reminder.time.split(':').map(Number);
-
         if (!isWithinDeliveryWindow(reminderHour, reminderMinute, currentHour, currentMinute)) continue;
+
+        // Dedup key includes the date so each slot fires at most once per day.
+        // In-memory cache is checked first (fast-path); DB is the authoritative store
+        // that survives server restarts, preventing missed or duplicate notifications.
+        const dbKey = `daily_sent_${user.id}_${userDateStr}_slot${reminder.slot}`;
+        const memKey = `${user.id}-${reminder.slot}`;
+        if (lastReminderSentDate.get(memKey) === userDateStr) continue;
+        const alreadySentInDb = await storage.getServerConfig(dbKey);
+        if (alreadySentInDb) { lastReminderSentDate.set(memKey, userDateStr); continue; }
 
         const isMorning = reminderHour < 14;
         const payload: PushNotificationPayload = {
@@ -189,7 +198,8 @@ export async function sendDailyReminders() {
 
         console.log(`[Daily Reminders] Sending slot ${reminder.slot} to user ${user.id} (${user.timezone}, ${reminder.time})`);
         await dispatchToSubscriptions(user.subscriptions, payload);
-        lastReminderSentDate.set(key, userDateStr);
+        await storage.setServerConfig(dbKey, '1');
+        lastReminderSentDate.set(memKey, userDateStr);
       }
     } catch (error) {
       console.error(`[Daily Reminders] Error processing user ${user.id}:`, error);
