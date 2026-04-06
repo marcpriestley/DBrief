@@ -12,6 +12,7 @@ import { haptic } from "@/lib/haptics";
 import { DateProvider, useDateContext } from "@/contexts/DateContext";
 import logoSrc from "@assets/9071F600-13EE-4563-BC00-D0D7AB8E3782_1_105_c_1775250530025.jpeg";
 import { isNativeIOS, getHealthAuthState, syncHealthData } from "@/lib/healthKit";
+import { consumePendingMoodOpen } from "@/hooks/useNativeNotifications";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -141,13 +142,22 @@ function AppLayoutInner({ children }: AppLayoutProps) {
     return () => clearTimeout(t);
   }, []);
 
-  // Open mood modal from URL param (web push) or custom event (native notification tap)
+  // Open mood modal from: (1) URL param set by web-push click, (2) custom event
+  // fired by in-app notification tap, or (3) native notification tap that arrived
+  // before AppLayout mounted (pendingMoodOpen flag consumed here).
   useEffect(() => {
+    // URL param — set by service-worker notificationclick navigating to /?mood=checkin
     const params = new URLSearchParams(window.location.search);
     if (params.get("mood") === "checkin") {
       setIsMoodOpen(true);
       window.history.replaceState({}, "", window.location.pathname);
     }
+
+    // Native notification tap that fired before this component mounted
+    if (consumePendingMoodOpen()) {
+      setIsMoodOpen(true);
+    }
+
     const onOpenMood = () => setIsMoodOpen(true);
     window.addEventListener("dbrief:open-mood", onOpenMood);
     return () => window.removeEventListener("dbrief:open-mood", onOpenMood);

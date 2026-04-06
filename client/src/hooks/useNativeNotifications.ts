@@ -58,9 +58,27 @@ if (typeof window !== "undefined") {
  * Retries any token that arrived before authentication completed, or
  * kicks off a fresh Capacitor registration if no token exists yet.
  */
+// When the notification tap fires before React mounts, the dbrief:open-mood
+// event has no listeners yet. We persist the intent here and let AppLayout
+// pick it up via consumePendingMoodOpen() inside its mount useEffect.
+let pendingMoodOpen = false;
+
 // Dispatch a custom event to open the mood check-in modal
 function dispatchOpenMood() {
+  pendingMoodOpen = true;
   window.dispatchEvent(new CustomEvent("dbrief:open-mood"));
+}
+
+/**
+ * Called by AppLayout on mount. Returns true (and clears the flag) if a
+ * notification tap arrived before AppLayout's listener was registered.
+ */
+export function consumePendingMoodOpen(): boolean {
+  if (pendingMoodOpen) {
+    pendingMoodOpen = false;
+    return true;
+  }
+  return false;
 }
 
 // Handle a notification tap URL
