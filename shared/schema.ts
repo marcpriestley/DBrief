@@ -194,6 +194,7 @@ export const habits = pgTable("habits", {
   longestStreak: integer("longest_streak").default(0),
   totalCompletions: integer("total_completions").default(0),
   lastCompletedDate: text("last_completed_date"),
+  frequency: text("frequency").default("daily"),
   isArchived: boolean("is_archived").default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });

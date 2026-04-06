@@ -221,11 +221,15 @@ function StreakIncrement({ onDone }: { onDone: () => void }) {
 
   return (
     <motion.div
+      drag="y"
+      dragConstraints={{ top: -200, bottom: 0 }}
+      onDragEnd={(_, info) => { if (info.offset.y < -40) onDone(); }}
+      onClick={onDone}
       initial={{ opacity: 0, y: 60, x: "-50%" }}
       animate={{ opacity: 1, y: 0, x: "-50%" }}
       exit={{ opacity: 0, y: -20, x: "-50%" }}
       transition={{ type: "spring", damping: 18, stiffness: 260 }}
-      className="fixed bottom-24 left-1/2 z-50 flex items-center gap-2.5 px-5 py-3 rounded-full bg-amber-500 shadow-lg shadow-amber-500/30"
+      className="fixed bottom-24 left-1/2 z-50 flex items-center gap-2.5 px-5 py-3 rounded-full bg-amber-500 shadow-lg shadow-amber-500/30 cursor-grab active:cursor-grabbing touch-none"
     >
       <Flame className="h-4 w-4 text-black" />
       <span className="text-sm font-bold text-black">Streak extended +1</span>

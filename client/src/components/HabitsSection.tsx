@@ -50,6 +50,14 @@ function getMilestone(total: number): { next: number; label: string } {
 
 // ─── Setup modal state ───────────────────────────────────────────────────────
 
+const FREQUENCY_OPTIONS = [
+  { value: "daily", label: "Every day" },
+  { value: "weekdays", label: "Weekdays" },
+  { value: "weekends", label: "Weekends" },
+  { value: "alternate", label: "Every other day" },
+  { value: "weekly", label: "Once a week" },
+];
+
 type SetupState = {
   name: string;
   emoji: string;
@@ -58,6 +66,7 @@ type SetupState = {
   anchorHabit: string;
   reminderTime: string;
   reminderEnabled: boolean;
+  frequency: string;
 };
 
 const DEFAULT_SETUP: SetupState = {
@@ -68,6 +77,7 @@ const DEFAULT_SETUP: SetupState = {
   anchorHabit: "",
   reminderTime: "08:00",
   reminderEnabled: false,
+  frequency: "daily",
 };
 
 // ─── Main component ──────────────────────────────────────────────────────────
@@ -165,14 +175,19 @@ export default function HabitsSection() {
         {motivationFlash && (
           <motion.div
             key="motivation-flash"
+            drag="y"
+            dragConstraints={{ top: -200, bottom: 0 }}
+            onDragEnd={(_, info) => { if (info.offset.y < -40) setMotivationFlash(null); }}
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 24 }}
             transition={{ type: "spring", damping: 22, stiffness: 280 }}
-            className="fixed bottom-24 left-4 right-4 z-50 bg-primary text-black text-sm font-semibold rounded-2xl px-4 py-3.5 shadow-xl flex items-center gap-2.5 pointer-events-none"
+            onClick={() => setMotivationFlash(null)}
+            className="fixed bottom-24 left-4 right-4 z-50 bg-primary text-black text-sm font-semibold rounded-2xl px-4 py-3.5 shadow-xl flex items-center gap-2.5 cursor-grab active:cursor-grabbing touch-none"
           >
             <span className="text-lg">⚡</span>
-            <span className="leading-snug">{motivationFlash}</span>
+            <span className="leading-snug flex-1">{motivationFlash}</span>
+            <X className="h-4 w-4 opacity-50 flex-shrink-0" />
           </motion.div>
         )}
       </AnimatePresence>
@@ -652,6 +667,26 @@ function Step1({ setup, setSetup }: { setup: SetupState; setSetup: (s: SetupStat
           })}
         </div>
       </div>
+
+      {/* Frequency */}
+      <div>
+        <label className="text-xs text-muted-foreground block mb-2">How often?</label>
+        <div className="flex flex-wrap gap-1.5">
+          {FREQUENCY_OPTIONS.map(f => (
+            <button
+              key={f.value}
+              onClick={() => setSetup({ ...setup, frequency: f.value })}
+              className={`text-xs px-2.5 py-1 rounded-lg border transition-all ${
+                setup.frequency === f.value
+                  ? "border-primary/60 bg-primary/15 text-primary font-medium"
+                  : "border-border/50 bg-muted/30 text-muted-foreground"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -795,13 +830,18 @@ function EditModal({
   isSaving,
 }: {
   habit: HabitWithStatus;
-  onSave: (updates: Partial<SetupState>) => void;
+  onSave: (updates: Partial<SetupState & { frequency: string }>) => void;
   onClose: () => void;
   isSaving: boolean;
 }) {
   const [name, setName] = useState(habit.name);
   const [emoji, setEmoji] = useState(habit.emoji || "⭐");
+  const [motivation, setMotivation] = useState(habit.motivation || "");
+  const [categories, setCategories] = useState<string[]>(
+    habit.category ? habit.category.split(",").filter(Boolean) : []
+  );
   const [anchorHabit, setAnchorHabit] = useState(habit.anchorHabit || "");
+  const [frequency, setFrequency] = useState((habit as any).frequency || "daily");
   const [reminderTime, setReminderTime] = useState(habit.reminderTime || "08:00");
   const [reminderEnabled, setReminderEnabled] = useState(habit.reminderEnabled ?? false);
 
@@ -822,80 +862,147 @@ function EditModal({
         style={{ maxHeight: "82dvh" }}
       >
         <div className="p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-base font-semibold text-foreground">Edit habit</h3>
-          <button onClick={onClose} className="text-muted-foreground/60 hover:text-muted-foreground p-1">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        {/* Emoji */}
-        <div className="grid grid-cols-9 gap-1">
-          {EMOJIS.map(e => (
-            <button
-              key={e}
-              onClick={() => setEmoji(e)}
-              className={`text-xl p-1.5 rounded-lg transition-all ${emoji === e ? "bg-primary/30 scale-125 ring-2 ring-primary shadow-sm" : "hover:bg-muted/50"}`}
-            >
-              {e}
+          <div className="flex items-center justify-between">
+            <h3 className="text-base font-semibold text-foreground">Edit habit</h3>
+            <button onClick={onClose} className="text-muted-foreground/60 hover:text-muted-foreground p-1">
+              <X className="h-4 w-4" />
             </button>
-          ))}
-        </div>
-
-        <div>
-          <label className="text-xs text-muted-foreground block mb-1.5">Name</label>
-          <input
-            type="text"
-            value={name}
-            onChange={e => setName(e.target.value)}
-            className="w-full bg-muted/50 border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50"
-          />
-        </div>
-
-        <div>
-          <label className="text-xs text-muted-foreground block mb-1.5">Anchor routine (After I…)</label>
-          <input
-            type="text"
-            value={anchorHabit}
-            onChange={e => setAnchorHabit(e.target.value)}
-            placeholder="e.g. wake up, brush my teeth"
-            className="w-full bg-muted/50 border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-primary/50"
-          />
-        </div>
-
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            {reminderEnabled ? (
-              <Bell className="h-4 w-4 text-primary" />
-            ) : (
-              <BellOff className="h-4 w-4 text-muted-foreground" />
-            )}
-            <span className="text-sm font-medium text-foreground">Daily reminder</span>
           </div>
+
+          {/* Emoji */}
+          <div className="grid grid-cols-9 gap-1">
+            {EMOJIS.map(e => (
+              <button
+                key={e}
+                onClick={() => setEmoji(e)}
+                className={`text-xl p-1.5 rounded-lg transition-all ${emoji === e ? "bg-primary/30 scale-125 ring-2 ring-primary shadow-sm" : "hover:bg-muted/50"}`}
+              >
+                {e}
+              </button>
+            ))}
+          </div>
+
+          {/* Name */}
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1.5">Name</label>
+            <input
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              className="w-full bg-muted/50 border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50"
+            />
+          </div>
+
+          {/* Category */}
+          <div>
+            <label className="text-xs text-muted-foreground block mb-2">Category <span className="opacity-50">(pick any)</span></label>
+            <div className="flex flex-wrap gap-1.5">
+              {CATEGORIES.map(c => {
+                const selected = categories.includes(c.value);
+                return (
+                  <button
+                    key={c.value}
+                    onClick={() => setCategories(prev => selected ? prev.filter(v => v !== c.value) : [...prev, c.value])}
+                    className={`text-xs px-2.5 py-1 rounded-lg border transition-all ${
+                      selected ? "border-primary/60 bg-primary/15 text-primary font-medium" : "border-border/50 bg-muted/30 text-muted-foreground"
+                    }`}
+                  >
+                    {c.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Frequency */}
+          <div>
+            <label className="text-xs text-muted-foreground block mb-2">How often?</label>
+            <div className="flex flex-wrap gap-1.5">
+              {FREQUENCY_OPTIONS.map(f => (
+                <button
+                  key={f.value}
+                  onClick={() => setFrequency(f.value)}
+                  className={`text-xs px-2.5 py-1 rounded-lg border transition-all ${
+                    frequency === f.value ? "border-primary/60 bg-primary/15 text-primary font-medium" : "border-border/50 bg-muted/30 text-muted-foreground"
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Motivation */}
+          <div>
+            <label className="text-xs text-muted-foreground block mb-2">Your why</label>
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              {MOTIVATION_OPTIONS.map(m => (
+                <button
+                  key={m}
+                  onClick={() => setMotivation(m)}
+                  className={`text-xs text-left px-3 py-2 rounded-xl border transition-all ${
+                    motivation === m ? "border-primary/50 bg-primary/10 text-primary font-medium" : "border-border/50 bg-muted/30 text-muted-foreground"
+                  }`}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+            <textarea
+              value={MOTIVATION_OPTIONS.includes(motivation) ? "" : motivation}
+              onChange={e => setMotivation(e.target.value)}
+              placeholder="Or describe it in your own words…"
+              rows={2}
+              className="w-full bg-muted/50 border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-primary/50 resize-none"
+            />
+          </div>
+
+          {/* Anchor */}
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1.5">Anchor routine (After I…)</label>
+            <input
+              type="text"
+              value={anchorHabit}
+              onChange={e => setAnchorHabit(e.target.value)}
+              placeholder="e.g. wake up, brush my teeth"
+              className="w-full bg-muted/50 border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-primary/50"
+            />
+          </div>
+
+          {/* Reminder */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              {reminderEnabled ? <Bell className="h-4 w-4 text-primary" /> : <BellOff className="h-4 w-4 text-muted-foreground" />}
+              <span className="text-sm font-medium text-foreground">Daily reminder</span>
+            </div>
+            <button
+              onClick={() => setReminderEnabled(v => !v)}
+              className={`relative w-11 h-6 rounded-full transition-colors ${reminderEnabled ? "bg-primary" : "bg-muted"}`}
+            >
+              <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${reminderEnabled ? "translate-x-5" : "translate-x-0"}`} />
+            </button>
+          </div>
+
+          {reminderEnabled && (
+            <input
+              type="time"
+              value={reminderTime}
+              onChange={e => setReminderTime(e.target.value)}
+              className="w-full bg-muted/50 border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50"
+            />
+          )}
+
           <button
-            onClick={() => setReminderEnabled(v => !v)}
-            className={`relative w-11 h-6 rounded-full transition-colors ${reminderEnabled ? "bg-primary" : "bg-muted"}`}
+            onClick={() => onSave({
+              name, emoji, motivation,
+              category: categories.length > 0 ? categories.join(",") : "general",
+              frequency, anchorHabit, reminderTime, reminderEnabled,
+            } as any)}
+            disabled={!name.trim() || isSaving}
+            className="w-full py-3 bg-primary text-black text-sm font-semibold rounded-xl disabled:opacity-40"
           >
-            <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${reminderEnabled ? "translate-x-5" : "translate-x-0"}`} />
+            {isSaving ? "Saving…" : "Save changes"}
           </button>
-        </div>
-
-        {reminderEnabled && (
-          <input
-            type="time"
-            value={reminderTime}
-            onChange={e => setReminderTime(e.target.value)}
-            className="w-full bg-muted/50 border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50"
-          />
-        )}
-
-        <button
-          onClick={() => onSave({ name, emoji, anchorHabit, reminderTime, reminderEnabled })}
-          disabled={!name.trim() || isSaving}
-          className="w-full py-3 bg-primary text-black text-sm font-semibold rounded-xl disabled:opacity-40"
-        >
-          {isSaving ? "Saving…" : "Save changes"}
-        </button>
         </div>
       </motion.div>
     </motion.div>
