@@ -232,8 +232,11 @@ export async function syncHealthData(dateStr: string, enabledMetricNames: string
     toSync.add("Sleep Duration");
   }
 
-  // Track raw sleep minutes for the Sleep Quality fallback
-  let rawSleepMinutes: number | null = null;
+  // Track normalised sleep hours for the Sleep Quality fallback.
+  // We use the *normalised* value (hours) rather than the raw HealthKit value
+  // because different plugin/OS versions may return sleep duration in seconds,
+  // minutes, or hours — the normalize() function already handles the conversion.
+  let normalizedSleepHours: number | null = null;
 
   await Promise.all(
     Array.from(toSync).map(async (name) => {
@@ -241,7 +244,7 @@ export async function syncHealthData(dateStr: string, enabledMetricNames: string
       const raw = await queryRawMetric(def.dataType, dateStr);
 
       if (name === "Sleep Duration" && raw !== null) {
-        rawSleepMinutes = raw; // store raw minutes before normalization
+        normalizedSleepHours = def.normalize(raw); // decimal hours, e.g. 7.5
       }
 
       // Only add to results if it was in the user's requested list
@@ -252,15 +255,15 @@ export async function syncHealthData(dateStr: string, enabledMetricNames: string
     })
   );
 
-  // Sleep Quality fallback: if native "sleep-quality" returned nothing, compute from sleep duration
-  // (sleep efficiency proxy: minutes / 480 * 100, where 480 min = 8 hours = 100%)
+  // Sleep Quality fallback: if native "sleep-quality" returned nothing, compute from
+  // sleep duration (efficiency proxy: hours / 8 * 100, where 8 h = 100 quality).
   if (
     enabledMetricNames.includes("Sleep Quality") &&
     !results.find(r => r.name === "Sleep Quality") &&
-    rawSleepMinutes !== null &&
-    rawSleepMinutes > 0
+    normalizedSleepHours !== null &&
+    normalizedSleepHours > 0
   ) {
-    const quality = Math.min(100, Math.round((rawSleepMinutes / 480) * 100));
+    const quality = Math.min(100, Math.round((normalizedSleepHours / 8) * 100));
     if (quality > 0) results.push({ name: "Sleep Quality", value: quality });
   }
 
