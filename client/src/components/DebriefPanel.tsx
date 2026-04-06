@@ -1155,10 +1155,14 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
 
   return (
     <div className="space-y-3">
-    {/* Active session card — always first so the input is immediately visible */}
-    <Card ref={debriefCardRef} className="border border-border/50 shadow-sm bg-card">
-      <CardContent className="p-0">
-        <div className="px-5 py-3 border-b border-border/50 flex items-center justify-between">
+    {/* Active session card — viewport-height constrained so header + input always visible */}
+    <Card
+      ref={debriefCardRef}
+      className="border border-border/50 shadow-sm bg-card flex flex-col"
+      style={{ maxHeight: 'calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 10rem)' }}
+    >
+      <CardContent className="p-0 flex flex-col flex-1 overflow-hidden">
+        <div className="px-5 py-3 border-b border-border/50 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="text-sm font-medium text-foreground">Debrief</span>
@@ -1234,7 +1238,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
           </div>
         </div>
 
-        <div ref={chatContainerRef} className="px-5 py-4 space-y-3 max-h-[520px] overflow-y-auto">
+        <div ref={chatContainerRef} className="px-5 py-4 space-y-3 flex-1 overflow-y-auto min-h-0">
           {debrief.messages.length === 0 && realtimeMessages.length === 0 && !isStreaming && !realtimeVoice.isActive && (
             <p className="text-sm text-muted-foreground text-center py-4">
               Your session, your opening. What's on your mind?
@@ -1408,7 +1412,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
           <div ref={messagesEndRef} />
         </div>
 
-        <div className="px-4 pb-4 pt-2">
+        <div className="px-4 pb-4 pt-2 flex-shrink-0">
           {/* Realtime live voice mode — full-width status display */}
           {realtimeVoice.isActive ? (
             <div className="flex items-center gap-3 bg-muted/50 rounded-xl border border-primary/30 p-3">

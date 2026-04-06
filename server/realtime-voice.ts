@@ -77,10 +77,46 @@ export function registerRealtimeVoiceWS(httpServer: HttpServer) {
       return;
     }
 
-    // Open WebSocket to OpenAI Realtime API
+    // The Replit AI integration supplies a dummy API key that only works through
+    // its HTTP proxy. For WebSocket we need a real ephemeral token.
+    // Step 1: Create an ephemeral session via the integration HTTP proxy.
+    const baseUrl = (process.env.AI_INTEGRATIONS_OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
+    let ephemeralKey: string;
+    try {
+      const sessionRes = await fetch(`${baseUrl}/realtime/sessions`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ model: "gpt-4o-realtime-preview-2024-12-17" }),
+      });
+      if (!sessionRes.ok) {
+        const errText = await sessionRes.text();
+        log("[Realtime] Ephemeral session creation failed: " + errText.slice(0, 200));
+        clientWs.send(JSON.stringify({ type: "error", message: "Failed to initialise voice session" }));
+        clientWs.close();
+        return;
+      }
+      const sessionData = await sessionRes.json();
+      ephemeralKey = sessionData.client_secret?.value;
+      if (!ephemeralKey) {
+        log("[Realtime] No client_secret in session response: " + JSON.stringify(sessionData).slice(0, 200));
+        clientWs.send(JSON.stringify({ type: "error", message: "No ephemeral key returned" }));
+        clientWs.close();
+        return;
+      }
+    } catch (err) {
+      log("[Realtime] Session creation error: " + err);
+      clientWs.send(JSON.stringify({ type: "error", message: "Failed to start voice session" }));
+      clientWs.close();
+      return;
+    }
+
+    // Step 2: Connect to OpenAI Realtime WebSocket using the short-lived ephemeral key.
     const openAiWs = new WebSocket(OPENAI_REALTIME_WS, {
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${ephemeralKey}`,
         "OpenAI-Beta": "realtime=v1",
       },
     });
