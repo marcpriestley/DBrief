@@ -788,7 +788,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     if (container) {
       container.scrollTop = container.scrollHeight;
     }
-  }, [debrief?.messages, streamingContent]);
+  }, [debrief?.messages, streamingContent, realtimeMessages]);
 
   useEffect(() => {
     if (!focusMountedRef.current) {
