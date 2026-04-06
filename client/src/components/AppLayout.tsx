@@ -146,12 +146,16 @@ function AppLayoutInner({ children }: AppLayoutProps) {
   // fired by in-app notification tap, or (3) native notification tap that arrived
   // before AppLayout mounted (pendingMoodOpen flag consumed here).
   useEffect(() => {
-    // URL param — set by service-worker notificationclick navigating to /?mood=checkin
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("mood") === "checkin") {
-      setIsMoodOpen(true);
-      window.history.replaceState({}, "", window.location.pathname);
-    }
+    // Check URL for ?mood=checkin — works on initial mount AND after in-app navigation.
+    const checkMoodParam = () => {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("mood") === "checkin") {
+        setIsMoodOpen(true);
+        window.history.replaceState({}, "", window.location.pathname);
+      }
+    };
+
+    checkMoodParam();
 
     // Native notification tap that fired before this component mounted
     if (consumePendingMoodOpen()) {
@@ -160,7 +164,16 @@ function AppLayoutInner({ children }: AppLayoutProps) {
 
     const onOpenMood = () => setIsMoodOpen(true);
     window.addEventListener("dbrief:open-mood", onOpenMood);
-    return () => window.removeEventListener("dbrief:open-mood", onOpenMood);
+
+    // Re-check URL when the browser navigates (covers: service-worker navigate()
+    // called while the app is already open on the same route — no remount occurs,
+    // but a popstate / hashchange is fired).
+    window.addEventListener("popstate", checkMoodParam);
+
+    return () => {
+      window.removeEventListener("dbrief:open-mood", onOpenMood);
+      window.removeEventListener("popstate", checkMoodParam);
+    };
   }, []);
 
   const logoutMutation = useMutation({

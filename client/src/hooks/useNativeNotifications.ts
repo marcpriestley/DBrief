@@ -131,6 +131,15 @@ if (typeof window !== "undefined") {
   });
 }
 
+// Eagerly register the Capacitor notification-tap listener at module load time.
+// On a cold-start from a notification tap, Capacitor fires notificationActionPerformed
+// very early — before any React component mounts. If we wait until after auth to call
+// setupNotificationTapListener(), the event fires into the void. Calling it here
+// ensures the listener exists before the first event can arrive.
+if (typeof window !== "undefined" && Capacitor.isNativePlatform()) {
+  setupNotificationTapListener();
+}
+
 export function useNativeNotifications(enabled: boolean) {
   useEffect(() => {
     if (!enabled) return;
