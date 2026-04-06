@@ -382,6 +382,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const hadTtsResponseRef = useRef(false);
   // Always up-to-date function for starting a conversation voice turn (ref avoids stale closures)
   const startConversationVoiceRef = useRef<() => void>(() => {});
+  const bargeInRecognitionRef = useRef<any>(null);
   const [continuedPastCheckpoint, setContinuedPastCheckpoint] = useState(false);
   const [actionNotifications, setActionNotifications] = useState<Array<{ type: string; message: string; success: boolean; id: number }>>([]);
   const [showAllMessages, setShowAllMessages] = useState(false);
@@ -786,9 +787,66 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
       conversationWaitingForTtsRef.current = false;
       setTimeout(() => {
         if (conversationActiveRef.current) startConversationVoiceRef.current();
-      }, 400);
+      }, 200);
     }
   }, [tts.speaking]);
+
+  // Barge-in: arm a lightweight background recogniser while TTS is playing.
+  // The instant it detects speech (≥3 chars), cancel TTS and fire the main mic.
+  useEffect(() => {
+    const stopBargeIn = () => {
+      if (bargeInRecognitionRef.current) {
+        try { bargeInRecognitionRef.current.stop(); } catch {}
+        bargeInRecognitionRef.current = null;
+      }
+    };
+
+    if (!isConversationMode || !tts.speaking || isStreaming || voice.isListening) {
+      stopBargeIn();
+      return;
+    }
+
+    // Wait 700ms before arming — lets the start of TTS audio settle so the mic
+    // doesn't pick up the AI's own voice as a barge-in trigger.
+    const armTimer = setTimeout(() => {
+      if (!tts.speaking || !conversationActiveRef.current || voice.isListening) return;
+
+      const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SR) return;
+
+      const rec = new SR();
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.maxAlternatives = 1;
+      rec.lang = "en-US";
+
+      let didBarge = false;
+      rec.onresult = (e: any) => {
+        if (didBarge || !conversationActiveRef.current) return;
+        let text = "";
+        for (let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript;
+        if (text.trim().length >= 3) {
+          didBarge = true;
+          tts.cancel();
+          stopBargeIn();
+          conversationWaitingForTtsRef.current = false;
+          setTimeout(() => {
+            if (conversationActiveRef.current) startConversationVoiceRef.current();
+          }, 150);
+        }
+      };
+      rec.onerror = () => { bargeInRecognitionRef.current = null; };
+      rec.onend = () => { if (bargeInRecognitionRef.current === rec) bargeInRecognitionRef.current = null; };
+
+      bargeInRecognitionRef.current = rec;
+      try { rec.start(); } catch { bargeInRecognitionRef.current = null; }
+    }, 700);
+
+    return () => {
+      clearTimeout(armTimer);
+      stopBargeIn();
+    };
+  }, [isConversationMode, tts.speaking, isStreaming, voice.isListening]);
 
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
@@ -1039,7 +1097,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     voice.start(
       (text) => setUserInput(text),
       {
-        autoStopMs: 1800,
+        autoStopMs: 3000,
         onSilenceStop: (finalText) => {
           if (finalText.trim() && conversationActiveRef.current) {
             sendMessage(finalText);
