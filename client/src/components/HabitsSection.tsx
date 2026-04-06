@@ -547,10 +547,10 @@ function SetupModal({
           <AnimatePresence mode="wait">
             <motion.div
               key={step}
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.18 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
             >
               {step === 0 && <Step1 setup={setup} setSetup={setSetup} />}
               {step === 1 && <Step2 setup={setup} setSetup={setSetup} />}
@@ -636,7 +636,7 @@ function Step1({ setup, setSetup }: { setup: SetupState; setSetup: (s: SetupStat
           value={setup.name}
           onChange={e => setSetup({ ...setup, name: e.target.value })}
           placeholder="e.g. Meditate, Cold shower, Read 20 pages…"
-          className="w-full bg-muted/50 border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-primary/50"
+          className="w-full bg-muted/50 dark:bg-muted border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-primary/50"
         />
       </div>
 
@@ -719,7 +719,7 @@ function Step2({ setup, setSetup }: { setup: SetupState; setSetup: (s: SetupStat
           onChange={e => setSetup({ ...setup, motivation: e.target.value })}
           placeholder="e.g. I want to feel less reactive under pressure…"
           rows={3}
-          className="w-full bg-muted/50 border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-primary/50 resize-none"
+          className="w-full bg-muted/50 dark:bg-muted border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-primary/50 resize-none"
         />
       </div>
     </div>
@@ -728,13 +728,13 @@ function Step2({ setup, setSetup }: { setup: SetupState; setSetup: (s: SetupStat
 
 function Step3({ setup, setSetup }: { setup: SetupState; setSetup: (s: SetupState) => void }) {
   const ANCHORS = [
-    "wake up",
-    "make coffee",
-    "brush my teeth",
-    "shower",
-    "finish work",
-    "eat dinner",
-    "get into bed",
+    "waking up",
+    "making coffee",
+    "brushing my teeth",
+    "showering",
+    "finishing work",
+    "eating dinner",
+    "getting into bed",
   ];
   return (
     <div className="space-y-4">
@@ -765,8 +765,8 @@ function Step3({ setup, setSetup }: { setup: SetupState; setSetup: (s: SetupStat
           type="text"
           value={ANCHORS.includes(setup.anchorHabit) ? "" : setup.anchorHabit}
           onChange={e => setSetup({ ...setup, anchorHabit: e.target.value })}
-          placeholder="e.g. finish my morning run"
-          className="w-full bg-muted/50 border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-primary/50"
+          placeholder="e.g. finishing my morning run"
+          className="w-full bg-muted/50 dark:bg-muted border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-primary/50"
         />
       </div>
     </div>
@@ -808,7 +808,7 @@ function Step4({ setup, setSetup }: { setup: SetupState; setSetup: (s: SetupStat
             type="time"
             value={setup.reminderTime}
             onChange={e => setSetup({ ...setup, reminderTime: e.target.value })}
-            className="w-full bg-muted/50 border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50"
+            className="w-full bg-muted/50 dark:bg-muted border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50"
           />
           {setup.anchorHabit && (
             <p className="text-xs text-muted-foreground">
@@ -889,7 +889,7 @@ function EditModal({
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
-              className="w-full bg-muted/50 border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50"
+              className="w-full bg-muted/50 dark:bg-muted border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50"
             />
           </div>
 
@@ -953,7 +953,7 @@ function EditModal({
               onChange={e => setMotivation(e.target.value)}
               placeholder="Or describe it in your own words…"
               rows={2}
-              className="w-full bg-muted/50 border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-primary/50 resize-none"
+              className="w-full bg-muted/50 dark:bg-muted border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-primary/50 resize-none"
             />
           </div>
 
@@ -964,8 +964,8 @@ function EditModal({
               type="text"
               value={anchorHabit}
               onChange={e => setAnchorHabit(e.target.value)}
-              placeholder="e.g. wake up, brush my teeth"
-              className="w-full bg-muted/50 border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-primary/50"
+              placeholder="e.g. waking up, brushing my teeth"
+              className="w-full bg-muted/50 dark:bg-muted border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-primary/50"
             />
           </div>
 
@@ -988,7 +988,7 @@ function EditModal({
               type="time"
               value={reminderTime}
               onChange={e => setReminderTime(e.target.value)}
-              className="w-full bg-muted/50 border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50"
+              className="w-full bg-muted/50 dark:bg-muted border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50"
             />
           )}
 
