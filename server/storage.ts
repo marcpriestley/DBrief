@@ -818,7 +818,6 @@ export class DatabaseStorage implements IStorage {
         goalTemplateId: dailyGoals.goalTemplateId,
         title: dailyGoals.title,
         completed: dailyGoals.completed,
-        createdAt: dailyGoals.createdAt,
       })
       .from(dailyGoals)
       .leftJoin(goalTemplates, eq(dailyGoals.goalTemplateId, goalTemplates.id))
