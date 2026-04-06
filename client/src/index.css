@@ -49,12 +49,14 @@
 }
 
 /* Fill the entire screen (including safe areas) with the app background.
-   This prevents the white "rubber-band" flash when over-scrolling on iOS.
-   html.dark picks up --background from the .dark CSS variables automatically. */
+   Prevents the white "rubber-band" flash when over-scrolling on iOS.
+   --background is already a full hsl() value, so we use var() not hsl(var()).
+   overscroll-behavior: none stops iOS bounce from revealing a gap. */
 html {
-  background-color: hsl(var(--background));
+  background-color: var(--background);
   min-height: 100dvh;
   height: 100%;
+  overscroll-behavior: none;
 }
 
 @layer base {

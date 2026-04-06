@@ -117,8 +117,11 @@ function AppLayoutInner({ children }: AppLayoutProps) {
   // Auto-sync Apple Health on launch (native iOS, already authorized)
   useEffect(() => {
     if (!isNativeIOS() || !getHealthAuthState()) return;
-    const today = new Date().toISOString().split("T")[0];
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+    // Use local date (en-CA gives YYYY-MM-DD format) so UTC+ users in the
+    // evening don't end up with a "tomorrow" UTC date that misses last night's sleep.
+    const localDateStr = (d: Date) => d.toLocaleDateString("en-CA");
+    const today = localDateStr(new Date());
+    const yesterday = localDateStr(new Date(Date.now() - 86400000));
     // Delay slightly so user metrics have time to load
     const t = setTimeout(async () => {
       try {
@@ -194,7 +197,15 @@ function AppLayoutInner({ children }: AppLayoutProps) {
               <StreakDisplay streak={streak} />
               <div className="relative">
                 {showMoodPulse && (
-                  <span className="absolute inset-0 rounded-full animate-ping bg-primary/30 pointer-events-none" />
+                  <>
+                    {/* Pulsing amber dot — matches AttentionRing style */}
+                    <span className="absolute -top-0.5 -right-0.5 z-20 flex h-2.5 w-2.5 pointer-events-none">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-70" />
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary" />
+                    </span>
+                    {/* Amber glow ring around button */}
+                    <span className="absolute inset-0 rounded-lg ring-1 ring-primary/50 shadow-[0_0_10px_rgba(245,158,11,0.3)] pointer-events-none" />
+                  </>
                 )}
                 <Button
                   variant="ghost"
