@@ -23,7 +23,7 @@ function requireAuth(req: Request, res: Response): number | null {
   return userId;
 }
 
-async function gatherDayContext(userId: number, date: string) {
+export async function gatherDayContext(userId: number, date: string) {
   const [scores, metrics, goals, moods, entries, infiniteGoalRows, ltGoals, userHabits, todayHabitLogs] = await Promise.all([
     db.select().from(dailyScores).where(and(eq(dailyScores.userId, userId), eq(dailyScores.date, date))),
     db.select().from(userMetrics).where(and(eq(userMetrics.userId, userId), eq(userMetrics.isActive, true))),
@@ -168,7 +168,7 @@ function buildUserProfileSummary(profile: Record<string, string> | null | undefi
   return { summary, isBirthday: birthday };
 }
 
-function buildSystemPrompt(context: Awaited<ReturnType<typeof gatherDayContext>>, date: string, userMessageCount: number, journalPreference: string = "evening", userProfile?: Record<string, string> | null, displayName?: string | null) {
+export function buildSystemPrompt(context: Awaited<ReturnType<typeof gatherDayContext>>, date: string, userMessageCount: number, journalPreference: string = "evening", userProfile?: Record<string, string> | null, displayName?: string | null) {
   const now = new Date();
   const currentHour = now.getHours();
 
@@ -710,4 +710,123 @@ export function registerDebriefRoutes(app: Express): void {
       res.status(500).json({ error: "Failed to complete debrief" });
     }
   });
+}
+
+export const REALTIME_TOOLS: Array<{ type: "function"; name: string; description: string; parameters: object }> = [
+  {
+    type: "function",
+    name: "add_daily_goal",
+    description: "Add a new recurring daily goal for the user. Only call this if the user clearly wants this goal added.",
+    parameters: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Short, actionable goal title" },
+      },
+      required: ["title"],
+    },
+  },
+  {
+    type: "function",
+    name: "add_long_term_goal",
+    description: "Add a new long-term target for the user (max 3 total). Use when the user mentions a bigger objective they're working toward.",
+    parameters: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Concise goal title" },
+        description: { type: "string", description: "Optional brief description" },
+      },
+      required: ["title"],
+    },
+  },
+  {
+    type: "function",
+    name: "remove_daily_goal",
+    description: "Remove a recurring daily goal. Never remove 'Make my bed'.",
+    parameters: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Exact or approximate title of the goal to remove" },
+      },
+      required: ["title"],
+    },
+  },
+  {
+    type: "function",
+    name: "add_habit",
+    description: "Add a new habit to the user's Habit Lab.",
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Short habit name" },
+        emoji: { type: "string", description: "A single relevant emoji" },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    type: "function",
+    name: "remove_habit",
+    description: "Archive a habit from the user's Habit Lab.",
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Exact or approximate name of the habit to remove" },
+      },
+      required: ["name"],
+    },
+  },
+];
+
+export async function executeDebriefTool(toolName: string, args: Record<string, any>, userId: number, date: string): Promise<{ success: boolean; message: string }> {
+  if (toolName === "add_daily_goal") {
+    const existing = await db.select().from(goalTemplates)
+      .where(and(eq(goalTemplates.userId, userId), eq(goalTemplates.isActive, true)));
+    const alreadyExists = existing.some(g => g.title.toLowerCase() === args.title.toLowerCase());
+    if (!alreadyExists) {
+      await db.insert(goalTemplates).values({ userId, title: args.title, recurring: true, isActive: true, sortOrder: existing.length });
+      return { success: true, message: `Added daily goal: ${args.title}` };
+    }
+    return { success: false, message: `Goal already exists: ${args.title}` };
+  }
+
+  if (toolName === "add_long_term_goal") {
+    const existing = await db.select().from(longTermGoals)
+      .where(and(eq(longTermGoals.userId, userId), eq(longTermGoals.isActive, true)));
+    if (existing.length >= 3) return { success: false, message: "Already at 3 long-term targets (maximum reached)" };
+    await db.insert(longTermGoals).values({ userId, title: encrypt(args.title), description: args.description ? encrypt(args.description) : null, isActive: true, sortOrder: existing.length });
+    return { success: true, message: `Added long-term target: ${args.title}` };
+  }
+
+  if (toolName === "remove_daily_goal") {
+    if (args.title.toLowerCase().includes("make my bed")) return { success: false, message: "Make my bed cannot be removed." };
+    const allTemplates = await db.select().from(goalTemplates)
+      .where(and(eq(goalTemplates.userId, userId), eq(goalTemplates.isActive, true)));
+    const match = allTemplates.find(t => t.title.toLowerCase().includes(args.title.toLowerCase()) || args.title.toLowerCase().includes(t.title.toLowerCase()));
+    if (match) {
+      await db.update(goalTemplates).set({ isActive: false }).where(eq(goalTemplates.id, match.id));
+      await db.delete(dailyGoals).where(and(eq(dailyGoals.userId, userId), eq(dailyGoals.goalTemplateId, match.id)));
+      return { success: true, message: `Removed daily goal: ${match.title}` };
+    }
+    return { success: false, message: `Goal not found: ${args.title}` };
+  }
+
+  if (toolName === "add_habit") {
+    const existingHabits = await db.select().from(habits).where(and(eq(habits.userId, userId), eq(habits.isArchived, false)));
+    const alreadyExists = existingHabits.some(h => h.name.toLowerCase() === args.name.toLowerCase());
+    if (alreadyExists) return { success: false, message: `Habit already exists: ${args.name}` };
+    await db.insert(habits).values({ userId, name: args.name, emoji: args.emoji || "⭐", category: "general", isArchived: false });
+    return { success: true, message: `Added habit: ${args.name}` };
+  }
+
+  if (toolName === "remove_habit") {
+    const allHabits = await db.select().from(habits).where(and(eq(habits.userId, userId), eq(habits.isArchived, false)));
+    const match = allHabits.find(h => h.name.toLowerCase().includes(args.name.toLowerCase()) || args.name.toLowerCase().includes(h.name.toLowerCase()));
+    if (match) {
+      await db.update(habits).set({ isArchived: true }).where(eq(habits.id, match.id));
+      return { success: true, message: `Removed habit: ${match.name}` };
+    }
+    return { success: false, message: `Habit not found: ${args.name}` };
+  }
+
+  return { success: false, message: `Unknown tool: ${toolName}` };
 }

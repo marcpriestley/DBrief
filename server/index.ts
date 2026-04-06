@@ -1,34 +1,16 @@
 import express, { type Request, Response, NextFunction } from "express";
-import session from "express-session";
-import connectPgSimple from "connect-pg-simple";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { startNotificationScheduler } from "./notifications";
 import { clearApnsCache } from "./apns";
 import { storage } from "./storage";
-import { pool } from "./db";
-
-const PgSession = connectPgSimple(session);
+import { sessionMiddleware } from "./session";
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-app.use(session({
-  store: new PgSession({
-    pool,
-    tableName: "user_sessions",
-    createTableIfMissing: true,
-  }),
-  secret: process.env.SESSION_SECRET || "dbrief-session-secret-key",
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: false,
-    httpOnly: true,
-    maxAge: 30 * 24 * 60 * 60 * 1000,
-  },
-}));
+app.use(sessionMiddleware);
 
 app.use((req, res, next) => {
   const start = Date.now();

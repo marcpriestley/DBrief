@@ -16,6 +16,7 @@ import { OAuth2Client } from "google-auth-library";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { registerChatRoutes } from "./replit_integrations/chat/routes";
 import { registerDebriefRoutes } from "./debrief-routes";
+import { registerRealtimeVoiceWS } from "./realtime-voice";
 import { db } from "./db";
 import { eq, and, desc } from "drizzle-orm";
 import { encrypt, decrypt } from "./encryption";
@@ -1456,6 +1457,7 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
 
   registerChatRoutes(app);
   registerDebriefRoutes(app);
+  registerRealtimeVoiceWS(httpServer);
 
   return httpServer;
 }

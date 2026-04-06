@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { haptic } from "@/lib/haptics";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { MessageCircle, Send, CheckCircle, Loader2, RotateCcw, Mic, MicOff, ArrowRight, Volume2, VolumeX, Square, ChevronDown, Radio } from "lucide-react";
+import { MessageCircle, Send, CheckCircle, Loader2, RotateCcw, Mic, MicOff, ArrowRight, Volume2, VolumeX, Square, ChevronDown, Radio, Waves } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiRequest } from "@/lib/queryClient";
@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Capacitor } from "@capacitor/core";
 import { openAppSettings } from "@/hooks/useNativeNotifications";
 import { useTTS, warmAudioCtx } from "@/hooks/useTTS";
+import { useRealtimeVoice, type RealtimeTranscript } from "@/hooks/useRealtimeVoice";
 
 interface DebriefMessage {
   id: number;
@@ -406,6 +407,22 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const voice = useInlineVoice();
   const tts = useTTS();
 
+  // ── Realtime (OpenAI Realtime API) voice mode ──────────────────────────────
+  const [realtimeMessages, setRealtimeMessages] = useState<RealtimeTranscript[]>([]);
+  // activeDebriefId is set below after query loads; the hook reads it via a ref so it always uses latest
+  const [activeDebriefId, setActiveDebriefId] = useState<number | null>(null);
+  const realtimeVoice = useRealtimeVoice({
+    debriefId: activeDebriefId,
+    date: selectedDate,
+    onTranscript: (t) => setRealtimeMessages((prev) => [...prev, t]),
+    onToolExecuted: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/goal-templates"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/habits"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/long-term-goals"] });
+    },
+    onError: (msg) => toast({ title: "Voice error", description: msg, variant: "destructive" }),
+  });
+
   const { data: allDebriefs = [], isLoading } = useQuery<Debrief[]>({
     queryKey: ["/api/debriefs", selectedDate],
     queryFn: async () => {
@@ -445,6 +462,27 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     (userMessageCount - CORE_EXCHANGES) % 2 === 0;
 
   const showCheckpoint = isAtCheckpoint || isAtExtendedCheckpoint;
+
+  // Keep activeDebriefId in sync so the realtime voice hook always knows which debrief to save to
+  useEffect(() => {
+    if (debrief?.id && debrief.id !== activeDebriefId) setActiveDebriefId(debrief.id);
+  }, [debrief?.id]);
+
+  const toggleRealtimeVoice = async () => {
+    haptic("medium");
+    if (realtimeVoice.isActive) {
+      realtimeVoice.disconnect();
+      // Sync DB messages after session ends
+      setTimeout(() => queryClient.invalidateQueries({ queryKey: ["/api/debriefs", selectedDate] }), 800);
+    } else {
+      if (!debrief) {
+        toast({ title: "Start a debrief first", description: "Open a session before going live." });
+        return;
+      }
+      setRealtimeMessages([]);
+      realtimeVoice.connect();
+    }
+  };
 
   const startDebriefMutation = useMutation({
     mutationFn: async (opts: { fresh?: boolean; userLed?: boolean } = {}) => {
@@ -772,6 +810,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
 
   useEffect(() => {
     setShowAllMessages(false);
+    setRealtimeMessages([]);
     // End conversation mode when switching dates
     if (conversationActiveRef.current) {
       conversationActiveRef.current = false;
@@ -780,6 +819,8 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
       voice.stop();
       tts.cancel();
     }
+    // End realtime session when switching dates
+    if (realtimeVoice.isActive) realtimeVoice.disconnect();
   }, [selectedDate]);
 
   // Detect TTS finishing → restart mic for next conversation turn
@@ -1136,19 +1177,28 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
             </div>
           </div>
           <div className="flex items-center gap-1">
-            {voice.isSupported && (
+            {debrief && !debrief.isComplete && (
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={toggleConversation}
-                className={`h-7 px-2 gap-1 text-xs ${isConversationMode ? "text-primary" : "text-muted-foreground"}`}
-                title={isConversationMode ? "End voice conversation" : "Start hands-free voice conversation"}
+                onClick={toggleRealtimeVoice}
+                className={`h-7 px-2 gap-1 text-xs ${realtimeVoice.isActive ? "text-primary" : "text-muted-foreground"}`}
+                title={realtimeVoice.isActive ? "End live voice session" : "Start live voice conversation (OpenAI Realtime)"}
               >
-                <Radio className={`h-3.5 w-3.5 ${isConversationMode ? "animate-pulse" : ""}`} />
-                {isConversationMode ? "Live" : "Converse"}
+                {realtimeVoice.status === "connecting" ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : realtimeVoice.status === "user_speaking" ? (
+                  <Mic className="h-3.5 w-3.5 animate-pulse text-primary" />
+                ) : realtimeVoice.status === "ai_speaking" ? (
+                  <Waves className="h-3.5 w-3.5 animate-pulse text-primary" />
+                ) : (
+                  <Radio className={`h-3.5 w-3.5 ${realtimeVoice.isActive ? "animate-pulse" : ""}`} />
+                )}
+                {realtimeVoice.status === "connecting" ? "Connecting…" :
+                 realtimeVoice.isActive ? "Live" : "Live"}
               </Button>
             )}
-            {tts.isSupported && !isConversationMode && (
+            {tts.isSupported && !realtimeVoice.isActive && !isConversationMode && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -1185,9 +1235,14 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
         </div>
 
         <div ref={chatContainerRef} className="px-5 py-4 space-y-3 max-h-[520px] overflow-y-auto">
-          {debrief.messages.length === 0 && !isStreaming && (
+          {debrief.messages.length === 0 && realtimeMessages.length === 0 && !isStreaming && !realtimeVoice.isActive && (
             <p className="text-sm text-muted-foreground text-center py-4">
               Your session, your opening. What's on your mind?
+            </p>
+          )}
+          {realtimeVoice.status === "connecting" && (
+            <p className="text-sm text-muted-foreground text-center py-4 animate-pulse">
+              Connecting to your engineer…
             </p>
           )}
 
@@ -1225,6 +1280,41 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
               </motion.div>
             ))}
           </AnimatePresence>
+
+          {/* Live realtime transcripts shown during active voice session */}
+          <AnimatePresence>
+            {realtimeMessages.map((msg, i) => (
+              <motion.div
+                key={`rt-${i}`}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2 }}
+                className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}
+              >
+                <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+                  msg.role === "user"
+                    ? "bg-primary text-primary-foreground rounded-br-md"
+                    : "bg-muted text-foreground rounded-bl-md"
+                }`}>
+                  {msg.text}
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+
+          {/* AI responding indicator for realtime mode */}
+          {realtimeVoice.status === "ai_speaking" && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Waves className="h-3 w-3 animate-pulse text-primary" />
+              <span>Engineer speaking…</span>
+            </div>
+          )}
+          {realtimeVoice.status === "user_speaking" && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Mic className="h-3 w-3 animate-pulse text-primary" />
+              <span>Listening…</span>
+            </div>
+          )}
 
           {isStreaming && streamingContent && (
             <motion.div
@@ -1319,8 +1409,46 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
         </div>
 
         <div className="px-4 pb-4 pt-2">
-          {/* Conversation mode — full-width status display */}
-          {isConversationMode ? (
+          {/* Realtime live voice mode — full-width status display */}
+          {realtimeVoice.isActive ? (
+            <div className="flex items-center gap-3 bg-muted/50 rounded-xl border border-primary/30 p-3">
+              <div className="flex-1 min-w-0">
+                {realtimeVoice.status === "connecting" && (
+                  <span className="text-xs text-muted-foreground animate-pulse">Connecting to your engineer…</span>
+                )}
+                {realtimeVoice.status === "ai_speaking" && (
+                  <div className="flex items-center gap-2">
+                    <div className="flex gap-0.5 shrink-0">
+                      {[0, 80, 160, 240, 320].map((d) => (
+                        <span key={d} className="w-0.5 h-3.5 bg-primary rounded-full animate-pulse" style={{ animationDelay: `${d}ms` }} />
+                      ))}
+                    </div>
+                    <span className="text-xs text-muted-foreground">Engineer speaking…</span>
+                  </div>
+                )}
+                {realtimeVoice.status === "user_speaking" && (
+                  <div className="flex items-center gap-2">
+                    <div className="flex gap-0.5 shrink-0">
+                      {[0, 100, 200, 300].map((d) => (
+                        <span key={d} className="w-0.5 h-3 bg-red-400 rounded-full animate-bounce" style={{ animationDelay: `${d}ms` }} />
+                      ))}
+                    </div>
+                    <span className="text-xs text-muted-foreground">Listening…</span>
+                  </div>
+                )}
+                {realtimeVoice.status === "ready" && (
+                  <span className="text-xs text-muted-foreground">Live — speak when you're ready</span>
+                )}
+              </div>
+              <button
+                onClick={toggleRealtimeVoice}
+                className="h-8 px-3 rounded-lg shrink-0 flex items-center gap-1.5 text-xs font-medium bg-muted hover:bg-muted/80 text-foreground transition-colors"
+              >
+                <Square className="h-3 w-3 fill-current" />
+                End
+              </button>
+            </div>
+          ) : isConversationMode ? (
             <div className="flex items-center gap-3 bg-muted/50 rounded-xl border border-primary/30 p-3">
               <div className="flex-1 min-w-0">
                 {isStreaming ? (
