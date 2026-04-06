@@ -183,8 +183,25 @@ export async function requestHealthPermissions(): Promise<HealthAuthResult> {
 /** Query one metric for a date; returns the raw HealthKit value (pre-normalization) */
 async function queryRawMetric(dataType: DataType, dateStr: string): Promise<number | null> {
   try {
-    const startDate = `${dateStr}T00:00:00.000Z`;
-    const endDate   = `${dateStr}T23:59:59.999Z`;
+    let startDate: string;
+    let endDate: string;
+
+    if (dataType === "sleep" || dataType === "sleep-quality") {
+      // Sleep samples span midnight (e.g. 11 PM → 7 AM). Using UTC midnight as the
+      // query boundary misses them for UTC+ users because sample.startDate falls
+      // before the window. Use "previous local noon → today local noon" instead —
+      // this guarantees the previous night's sleep is always inside the window.
+      const todayLocalNoon = new Date(`${dateStr}T12:00:00`); // no Z → local time
+      const prevLocalNoon  = new Date(todayLocalNoon);
+      prevLocalNoon.setDate(prevLocalNoon.getDate() - 1);
+      startDate = prevLocalNoon.toISOString();
+      endDate   = todayLocalNoon.toISOString();
+    } else {
+      // For all other metrics, a UTC-day window is accurate enough
+      startDate = `${dateStr}T00:00:00.000Z`;
+      endDate   = `${dateStr}T23:59:59.999Z`;
+    }
+
     const { aggregatedData } = await (Health as any).queryAggregated({
       dataType,
       startDate,
@@ -192,7 +209,7 @@ async function queryRawMetric(dataType: DataType, dateStr: string): Promise<numb
       bucket: "day",
     });
     if (!aggregatedData || aggregatedData.length === 0) return null;
-    // For cumulative types, sum; for discrete/sleep, take the last (or only) value
+    // Sum all returned buckets (cumulative) or take the single value (discrete/sleep)
     const total = aggregatedData.reduce((s: number, d: any) => s + d.value, 0);
     return total;
   } catch (e) {
