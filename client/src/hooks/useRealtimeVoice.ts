@@ -45,6 +45,7 @@ export function useRealtimeVoice({
   const streamRef = useRef<MediaStream | null>(null);
   const scheduledSourcesRef = useRef<AudioBufferSourceNode[]>([]);
   const nextAudioTimeRef = useRef<number>(0);
+  const isAiSpeakingRef = useRef(false); // gate: suppress mic while AI audio plays
   const queryClient = useQueryClient();
 
   // ──────────────────────────────────────────────
@@ -131,7 +132,7 @@ export function useRealtimeVoice({
       processorRef.current = processor;
 
       processor.onaudioprocess = (e) => {
-        if (ws.readyState !== WebSocket.OPEN) return;
+        if (ws.readyState !== WebSocket.OPEN || isAiSpeakingRef.current) return;
         const float32 = e.inputBuffer.getChannelData(0);
         const int16 = new Int16Array(float32.length);
         for (let i = 0; i < float32.length; i++) {
@@ -189,27 +190,40 @@ export function useRealtimeVoice({
             break;
 
           case "audio.delta":
+            isAiSpeakingRef.current = true; // gate mic while AI audio plays
             setStatus("ai_speaking");
             queueAudioChunk(msg.audio);
             break;
 
-          case "audio.done":
-            // AI response audio stream finished — update status after last chunk plays
-            setTimeout(() => {
-              if (scheduledSourcesRef.current.length === 0) setStatus("ready");
-            }, 200);
+          case "audio.done": {
+            // Wait for all scheduled audio to finish, then re-open the mic with a
+            // 500 ms buffer so the tail of the AI voice doesn't leak into the mic.
+            const waitForPlaybackEnd = () => {
+              if (scheduledSourcesRef.current.length === 0) {
+                setTimeout(() => {
+                  isAiSpeakingRef.current = false;
+                  setStatus("ready");
+                }, 500);
+              } else {
+                setTimeout(waitForPlaybackEnd, 100);
+              }
+            };
+            setTimeout(waitForPlaybackEnd, 100);
             break;
+          }
 
           case "ai.responding":
+            isAiSpeakingRef.current = true;
             setStatus("ai_speaking");
             break;
 
           case "ai.done":
-            // Will flip back to ready once audio.done comes through
+            // Will flip back to ready once audio.done + playback finishes
             break;
 
           case "user.speaking":
-            // User started talking — cancel any AI audio being played
+            // Server VAD detected the real user voice — allow barge-in
+            isAiSpeakingRef.current = false;
             cancelAudio();
             setStatus("user_speaking");
             break;
