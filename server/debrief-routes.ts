@@ -447,6 +447,49 @@ export function registerDebriefRoutes(app: Express): void {
             },
           },
         },
+        {
+          type: "function",
+          function: {
+            name: "remove_daily_goal",
+            description: "Remove a recurring daily goal from the user's list. Use when the user explicitly asks to delete, remove, or stop tracking a daily goal. Never remove 'Make my bed'.",
+            parameters: {
+              type: "object",
+              properties: {
+                title: { type: "string", description: "Exact or approximate title of the goal to remove" },
+              },
+              required: ["title"],
+            },
+          },
+        },
+        {
+          type: "function",
+          function: {
+            name: "add_habit",
+            description: "Add a new habit to the user's Habit Lab. Use when the user explicitly asks to add or start tracking a new habit (distinct from daily goals — habits are about building behavioral routines).",
+            parameters: {
+              type: "object",
+              properties: {
+                name: { type: "string", description: "Short habit name (e.g. 'Cold shower', 'Read 20 pages')" },
+                emoji: { type: "string", description: "A single relevant emoji for the habit" },
+              },
+              required: ["name"],
+            },
+          },
+        },
+        {
+          type: "function",
+          function: {
+            name: "remove_habit",
+            description: "Remove (archive) a habit from the user's Habit Lab. Use only when the user explicitly asks to delete or remove a habit.",
+            parameters: {
+              type: "object",
+              properties: {
+                name: { type: "string", description: "Exact or approximate name of the habit to remove" },
+              },
+              required: ["name"],
+            },
+          },
+        },
       ];
 
       const stream = await openai.chat.completions.create({
@@ -513,6 +556,54 @@ export function registerDebriefRoutes(app: Express): void {
                 sortOrder: existing.length,
               });
               actions.push({ type: "add_long_term_goal", params, success: true, message: `Added long-term target: ${params.title}` });
+            }
+          } else if (tc.name === "remove_daily_goal") {
+            // Never allow removing "Make my bed"
+            if (params.title.toLowerCase().includes("make my bed")) {
+              actions.push({ type: "remove_daily_goal", params, success: false, message: "Make my bed cannot be removed — it's your foundational daily goal." });
+            } else {
+              const allTemplates = await db.select().from(goalTemplates)
+                .where(and(eq(goalTemplates.userId, userId), eq(goalTemplates.isActive, true)));
+              const match = allTemplates.find(t =>
+                t.title.toLowerCase().includes(params.title.toLowerCase()) ||
+                params.title.toLowerCase().includes(t.title.toLowerCase())
+              );
+              if (match) {
+                await db.update(goalTemplates).set({ isActive: false }).where(eq(goalTemplates.id, match.id));
+                await db.delete(dailyGoals).where(and(eq(dailyGoals.userId, userId), eq(dailyGoals.goalTemplateId, match.id)));
+                actions.push({ type: "remove_daily_goal", params, success: true, message: `Removed daily goal: ${match.title}` });
+              } else {
+                actions.push({ type: "remove_daily_goal", params, success: false, message: `Goal not found: ${params.title}` });
+              }
+            }
+          } else if (tc.name === "add_habit") {
+            const existingHabits = await db.select().from(habits)
+              .where(and(eq(habits.userId, userId), eq(habits.isArchived, false)));
+            const alreadyExists = existingHabits.some(h => h.name.toLowerCase() === params.name.toLowerCase());
+            if (alreadyExists) {
+              actions.push({ type: "add_habit", params, success: false, message: `Habit already exists: ${params.name}` });
+            } else {
+              await db.insert(habits).values({
+                userId,
+                name: params.name,
+                emoji: params.emoji || "⭐",
+                category: "general",
+                isArchived: false,
+              });
+              actions.push({ type: "add_habit", params, success: true, message: `Added habit: ${params.name}` });
+            }
+          } else if (tc.name === "remove_habit") {
+            const allHabits = await db.select().from(habits)
+              .where(and(eq(habits.userId, userId), eq(habits.isArchived, false)));
+            const match = allHabits.find(h =>
+              h.name.toLowerCase().includes(params.name.toLowerCase()) ||
+              params.name.toLowerCase().includes(h.name.toLowerCase())
+            );
+            if (match) {
+              await db.update(habits).set({ isArchived: true }).where(eq(habits.id, match.id));
+              actions.push({ type: "remove_habit", params, success: true, message: `Removed habit: ${match.name}` });
+            } else {
+              actions.push({ type: "remove_habit", params, success: false, message: `Habit not found: ${params.name}` });
             }
           }
         } catch (e) {

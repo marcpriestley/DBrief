@@ -745,25 +745,39 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(goalTemplates.userId, userId), eq(goalTemplates.isActive, true)))
       .orderBy(goalTemplates.sortOrder);
 
-    // Ensure "Make my bed" is always the first daily goal for every user.
-    const hasMakeMyBed = all.some(t => t.title.toLowerCase() === "make my bed");
-    if (!hasMakeMyBed) {
-      // Check if one exists but was previously deactivated (old migration) — reactivate it.
+    // Ensure "Make my bed" is always present and pinned first.
+    const mmbTemplate = all.find(t => t.title.toLowerCase() === "make my bed");
+    if (!mmbTemplate) {
+      // Check if one exists but was previously deactivated — reactivate it.
       const [inactive] = await db.select().from(goalTemplates)
         .where(and(eq(goalTemplates.userId, userId), eq(goalTemplates.isActive, false)));
       if (inactive && inactive.title.toLowerCase() === "make my bed") {
-        await db.update(goalTemplates).set({ isActive: true }).where(eq(goalTemplates.id, inactive.id));
-        return [{ ...inactive, isActive: true }, ...all].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+        await db.update(goalTemplates).set({ isActive: true, sortOrder: -1 }).where(eq(goalTemplates.id, inactive.id));
+        const revived = { ...inactive, isActive: true, sortOrder: -1 };
+        return [revived, ...all];
       }
-      // Otherwise create a fresh one pinned at the front.
+      // Create a fresh one pinned at sortOrder -1 so it always sorts first.
       const [seeded] = await db.insert(goalTemplates).values({
         userId,
         title: "Make my bed",
         recurring: true,
         isActive: true,
-        sortOrder: 0,
+        sortOrder: -1,
       }).returning();
       return [seeded, ...all];
+    }
+
+    // If "Make my bed" exists but isn't sortOrder -1, update it so it sticks first.
+    if ((mmbTemplate.sortOrder ?? 0) !== -1) {
+      await db.update(goalTemplates).set({ sortOrder: -1 }).where(eq(goalTemplates.id, mmbTemplate.id));
+      mmbTemplate.sortOrder = -1;
+    }
+
+    // Always move it to position 0 in the returned list regardless.
+    const idx = all.indexOf(mmbTemplate);
+    if (idx > 0) {
+      all.splice(idx, 1);
+      all.unshift(mmbTemplate);
     }
 
     return all;
@@ -795,15 +809,37 @@ export class DatabaseStorage implements IStorage {
 
   async getDailyGoals(userId: number, date: string): Promise<DailyGoal[]> {
     const { asc } = await import("drizzle-orm");
-    const goals = await db.select().from(dailyGoals)
+    // Join with goal_templates so we can order by template sortOrder, then id
+    const rows = await db
+      .select({
+        id: dailyGoals.id,
+        userId: dailyGoals.userId,
+        date: dailyGoals.date,
+        goalTemplateId: dailyGoals.goalTemplateId,
+        title: dailyGoals.title,
+        completed: dailyGoals.completed,
+        createdAt: dailyGoals.createdAt,
+      })
+      .from(dailyGoals)
+      .leftJoin(goalTemplates, eq(dailyGoals.goalTemplateId, goalTemplates.id))
       .where(and(eq(dailyGoals.userId, userId), eq(dailyGoals.date, date)))
-      .orderBy(asc(dailyGoals.id));
+      .orderBy(asc(goalTemplates.sortOrder), asc(dailyGoals.id));
+
     const seen = new Set<number>();
-    return goals.filter(g => {
+    const deduped = rows.filter(g => {
       if (seen.has(g.goalTemplateId)) return false;
       seen.add(g.goalTemplateId);
       return true;
     });
+
+    // Always pin "Make my bed" to the very first position
+    const mmbIdx = deduped.findIndex(g => g.title.toLowerCase() === "make my bed");
+    if (mmbIdx > 0) {
+      const [mmb] = deduped.splice(mmbIdx, 1);
+      deduped.unshift(mmb);
+    }
+
+    return deduped;
   }
 
   async createDailyGoal(goal: InsertDailyGoal): Promise<DailyGoal> {

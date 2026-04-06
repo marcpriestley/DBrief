@@ -622,12 +622,15 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                   success: a.success,
                 }));
                 setActionNotifications(prev => [...prev, ...newNotifications]);
-                if (data.actions.some((a: any) => a.type === "add_daily_goal" && a.success)) {
+                if (data.actions.some((a: any) => (a.type === "add_daily_goal" || a.type === "remove_daily_goal") && a.success)) {
                   queryClient.invalidateQueries({ queryKey: ["/api/goal-templates"] });
                   queryClient.invalidateQueries({ queryKey: ["/api/daily-goals"] });
                 }
                 if (data.actions.some((a: any) => a.type === "add_long_term_goal" && a.success)) {
                   queryClient.invalidateQueries({ queryKey: ["/api/long-term-goals"] });
+                }
+                if (data.actions.some((a: any) => (a.type === "add_habit" || a.type === "remove_habit") && a.success)) {
+                  queryClient.invalidateQueries({ queryKey: ["/api/habits"] });
                 }
               }
             } catch {}
