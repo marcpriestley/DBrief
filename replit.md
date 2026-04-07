@@ -1,16 +1,7 @@
 # DBrief - Daily Performance Engineering App
 
 ## Overview
-DBrief is a personal performance engineering app built around the F1 debrief framework. It helps users extract maximum performance from their daily lives through AI-driven conversational debriefs (like a race engineer reviewing telemetry with their driver), customizable wellness metric tracking (0-100 scale), and data-driven pattern analysis. The app frames daily self-improvement as a high-performance pursuit — not therapy, but a structured approach to performing better every day.
-
-## Core Concepts
-- **Infinite Goal**: An overarching aspirational target that can never be fully achieved but always drives forward (like an F1 team's pursuit of perfection). Displayed at the top of the dashboard. AI assists users in articulating it. Weekly alignment check during debriefs.
-- **Long-Term Targets**: Up to 3 bigger objectives the user is working toward. Sits between daily goals and the infinite goal. Each has a progress slider (0–100%), a tick-to-complete button, completion celebration overlay, and a 7-day review nudge when stale.
-- **Daily Goals**: Task list of recurring daily actions (shown as "Today's Goals" in the UI) — differentiated from habits. "Make my bed" is always seeded as the first recurring daily goal for every user (new and existing). `getGoalTemplates` ensures it is always present — reactivating it if it was deactivated by a prior migration, or creating it fresh if missing.
-- **Habit Lab**: Separate habit formation feature. Users build new behavioral routines (distinct from daily task goals). Supports per-habit streaks, 66-day milestone progress, habit stacking (anchor to existing routine via implementation intentions: "After I X, I will Y"), AI-guided 4-step setup (name/emoji/multi-select categories → motivation → habit stack → reminder time), per-habit customizable push notification reminders. AI debrief is aware of active habits and their completion status for motivational nudges. "Make my bed" (🛏️, anchored to "I wake up") is seeded as the first habit for every new user and for existing users on first Habit Lab visit. UI features: 7-day completion dot tracker per habit (shows the last 7 days as filled/empty circles with day labels); motivation flash toast (amber banner at bottom of screen showing the habit's "why" when completing it); real-time "X of Y done today" count in the header.
-- **Performance Telemetry**: 0-100 metric scores tracked daily.
-- **Daily Debrief**: AI-guided conversational review of the day's "session" — framed as a post-race debrief.
-- **AI Insights Access**: Two-phase gate. Phase 1 (initial unlock): requires a 7-day consecutive streak — stored permanently in `longestStreak`. Phase 2 (ongoing access): requires ≥5 of the last 7 days with data (`recentActiveDays`), allowing 1 missed day without losing access. Missing 3+ days pauses insights; logging any day restores them automatically without needing to rebuild the 7-day streak. Three UI states: Locked / Standby (amber) / Active.
+DBrief is a personal performance engineering app built around the F1 debrief framework. It helps users extract maximum performance from their daily lives through AI-driven conversational debriefs, customizable wellness metric tracking, and data-driven pattern analysis. The app frames daily self-improvement as a high-performance pursuit, offering a structured approach to performing better every day. It aims to empower users to achieve an "Infinite Goal" supported by "Long-Term Targets" and "Daily Goals," all while tracking "Performance Telemetry" and engaging in "Daily Debriefs" to unlock "AI Insights."
 
 ## User Preferences
 - Infinite goal banner always at the very top of the dashboard
@@ -36,59 +27,33 @@ DBrief is a personal performance engineering app built around the F1 debrief fra
 - Language throughout the app uses F1/high-performance framing, not therapy/wellness speak
 
 ## System Architecture
-**Frontend**: React with TypeScript, Wouter for routing, and TanStack Query for data fetching, utilizing Shadcn/ui components and Tailwind CSS for styling.
-**Backend**: Express server with Drizzle ORM and express-session for authentication.
-**Authentication**: Session-based email/password authentication. Google Sign-In implemented via Google Identity Services SDK (requires `GOOGLE_CLIENT_ID` + `VITE_GOOGLE_CLIENT_ID` env vars). Apple Sign-In available in the native iOS app only.
-**Database**: PostgreSQL for persistent storage, managed by Drizzle ORM.
-**AI Integration**: OpenAI API powers conversational debriefs, journal insights, pattern analysis, infinite goal refinement, and habit suggestions. Voice recording uses Web Speech API for speech-to-text.
-**Health Tracking**: Apple Health (HealthKit) via `capacitor-health` plugin. Supports 15 metrics: Steps, Active Energy, Exercise Minutes, Flights Climbed, Walking Distance, Sleep Duration, Sleep Quality, Heart Rate, Resting Heart Rate, HRV, Blood Oxygen, Body Weight, Body Fat %, Mindful Minutes, Respiratory Rate. Auto-syncs today + yesterday on launch (native iOS, if authorized). "Connect Apple Health" button in Settings requests permissions. Xcode requires: HealthKit capability, NSHealthShareUsageDescription + NSHealthUpdateUsageDescription in Info.plist, then `npx cap sync ios`.
-**Notifications**: Dual-path notification system — Web Push API (VAPID/service worker) for browser users; Apple Push Notifications (APNs via `node-apn`) for native iOS. Uses `@capacitor/push-notifications` for device token registration. Requires `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_AUTH_KEY` env secrets + Push Notifications entitlement in Xcode. Speech recognition uses `@capacitor-community/speech-recognition` natively.
-**Key Features**:
-- AI Debrief: F1-style performance debrief with 3 core exchanges, then opt-in to continue deeper. Performance engineer persona reviews "telemetry" (scores, goals, mood). Weekly infinite goal alignment check on Sundays. Voice + text input. Auto-summarization.
-- Infinite Goal: AI-assisted articulation of an overarching never-completable aspiration. Always displayed at dashboard top. Weekly debrief alignment check. Prompt to set one if unset.
-- Long-Term Targets: Up to 3 medium-term objectives between daily goals and the infinite goal. Encrypted at rest.
-- Customizable Metric Tracking: Interactive 0-100 score circles with simplified input flow.
-- Streak Tracking: Duolingo-style system with milestone celebrations and motivational messages.
-- Trends & Analytics: Dedicated page with various timeline options and AI-driven insights, focusing on user-input data.
-- Daily Goals System: Goal templates with daily instances, one-tap completion, and tracking on the Trends page.
-- Onboarding: 5-step flow (welcome, performance toolkit, privacy/encryption, driver profile, debrief timing preference) with F1 high-performance language.
-- Driver Profile: 7 multiple-choice questions (`client/src/lib/profileData.ts`) + optional personal details (date of birth, occupation, city/country, current focus — free-text "What are you focused on right now?") stored in `users.userProfile` jsonb. Step 4 of onboarding (skippable). Editable in Settings modal → Profile section (collapsed by default) → "Personal Details". Driver Profile questions are collapsible (auto-expand if previously answered). `GET /api/user/profile`, `PUT /api/user/profile`. `buildSystemPrompt` receives `userProfile` and `displayName` for personalised AI debrief tone. Age, occupation, location, and current focus are included in the AI prompt. Birthday is detected server-side (`isTodayBirthday`) and a birthday note is injected into the system prompt when the debrief date matches the user's birth month/day. Profile save uses `queryClient.setQueryData` (immediate cache update) to prevent blank-fields-on-remount bug.
-- Birthday Celebration: `BirthdayCelebration` component checks if today matches the user's `userProfile.dateOfBirth` (month/day). Shows a full-screen celebration overlay with animated cake emoji and F1-framed copy 1.8s after login. Shown once per year per user, stored in `localStorage` (`dbrief_birthday_celebrated_${year}`). Rendered in `AuthenticatedRouter` with `displayName` and `dateOfBirth` from `/api/auth/me` (which now includes `userProfile`).
-- Driver Name: Collected on the onboarding welcome step. Stored in `users.display_name`. Passed to `buildSystemPrompt` — AI uses it naturally in conversation. Editable via Settings modal ("Driver Name" field).
-- Voice Readback (TTS): `useTTS` hook in DebriefPanel wraps `window.speechSynthesis`. Speaker icon toggle in debrief chat header — amber when on. AI responses spoken aloud after streaming completes. Preference persisted in localStorage (`dbrief_tts_enabled`). Defaults to enabled. AI Insights card also has a manual play/stop TTS button.
-- Live Voice Mode (OpenAI Realtime API): "Live" button in debrief header starts a real-time voice conversation using the OpenAI Realtime API (`gpt-4o-realtime-preview-2024-12-17`). Server-side WebSocket proxy at `/api/realtime/voice` (server/realtime-voice.ts) relays audio between the client and OpenAI. Mic audio captured as PCM16 at 24kHz via ScriptProcessorNode; playback uses Web Audio API with scheduled BufferSourceNodes. Server-side VAD handles turn detection and interruptions natively — no silence timeouts or barge-in hacks needed. Transcripts saved to the existing debrief DB in real-time. Tool calls (add_daily_goal, remove_habit, etc.) executed server-side via `executeDebriefTool` in debrief-routes.ts. Session middleware shared via server/session.ts.
-- App Tour: 6-step first-run tutorial (`client/src/components/AppTour.tsx`) shows 1.2s after first login. Covers Infinite Goal, telemetry circles, debrief, goals, analytics. Persisted via localStorage (`dbrief_tour_v1_complete`). "Replay app tour" button in Settings dispatches `dbrief:replay-tour` custom event. Tour utility in `client/src/lib/tour.ts`.
-- Push Notifications (Web): Service worker at `client/public/sw.js` handles push events and notification clicks. `client/public/icon-192.png` used as notification icon. Web push subscription via `navigator.serviceWorker.register('/sw.js')` in SettingsModal.
-- Retrospective Editing: Users can input scores and journal entries for past dates.
-- Mood Check-in: Slider-based modal with time-of-day labels, integrated into trends.
-- Data Encryption: AES-256-GCM encryption for sensitive user data at rest.
-- Haptics: `client/src/lib/haptics.ts` — light/medium/heavy/select/success/error vibration patterns via `navigator.vibrate`. Used on mic, send, tabs, toggle, goals.
-- Smart Default View: Morning journalers see Yesterday by default if opening before 12pm; evening journalers always see Today.
-- Color Theme: Grey + yellow (`hsl(40, 95%, 48%)` amber primary on clean grey backgrounds). Updated across all components. Dark mode supported — toggled from Settings → Appearance, persisted in `localStorage` (`dbrief_theme`), applied on app startup in `App.tsx` via `document.documentElement.classList`.
+The application uses a **React with TypeScript** frontend, styled with **Shadcn/ui components and Tailwind CSS**, and **Wouter** for routing. Data fetching is managed by **TanStack Query**. The backend is an **Express server** utilizing **Drizzle ORM** for PostgreSQL interaction and `express-session` for authentication.
 
-## Database Tables
-- `users` - Auth, settings, onboarding status, journal preference
-- `journal_entries` - Daily journal content (encrypted)
-- `daily_scores` - Performance metric scores per day
-- `user_metrics` - User-configured metrics to track
-- `streaks` - Streak tracking data
-- `ai_insights` - AI-generated pattern analysis
-- `goal_templates` - Recurring daily goal definitions
-- `daily_goals` - Daily goal instances
-- `infinite_goals` - User's infinite goal (encrypted, one per user)
-- `long_term_goals` - Up to 3 long-term targets per user (encrypted)
-- `debriefs` / `debrief_messages` - AI debrief conversations (encrypted)
-- `habits` - User habit definitions (name, emoji, category, motivation, anchorHabit, reminderTime, streak stats)
-- `habit_logs` - Daily completion records per habit (date + habitId)
-- `mood_checkins` - Mood check-in data
-- `push_subscriptions` - Web push notification subscriptions + APNs device tokens (`apns_token` column)
-- `journal_attachments` - File attachments for journal entries
+**Key Architectural Decisions & Features:**
+- **Authentication**: Session-based email/password authentication is supported, along with Google Sign-In via the Google Identity Services SDK.
+- **AI Integration**: OpenAI API is central to conversational debriefs, journal insights, pattern analysis, infinite goal refinement, and habit suggestions. It also powers an AI Debrief feature with a performance engineer persona.
+- **Voice Features**: The Web Speech API provides speech-to-text for voice input. A `useTTS` hook enables text-to-speech for AI responses. Live Voice Mode uses the OpenAI Realtime API for real-time voice conversations with server-side VAD for turn detection.
+- **Health Tracking**: Integration with Apple Health (HealthKit) via `capacitor-health` plugin allows tracking of 15 metrics, with auto-sync capabilities for native iOS builds.
+- **Notification System**: A dual-path system uses Web Push API for browsers and Apple Push Notifications (APNs) for native iOS, managed by `@capacitor/push-notifications`.
+- **Data Management**: Sensitive user data, including journal entries, debrief messages, and goals, is encrypted at rest using AES-256-GCM.
+- **User Onboarding & Profile**: A 5-step onboarding process introduces users to the app with F1-themed language. A "Driver Profile" captures user details for personalized AI interactions.
+- **Goal Systems**: Includes "Infinite Goal" (an aspirational target), "Long-Term Targets" (up to 3 medium-term objectives), and "Daily Goals" (recurring daily actions).
+- **Habit Lab**: A dedicated feature for habit formation with streak tracking, milestone progress, habit stacking, and AI-guided setup.
+- **Performance Telemetry**: Users track daily metric scores on a 0-100 scale.
+- **Streak Tracking**: A Duolingo-style system with milestone celebrations and motivational messages.
+- **AI Insights Access**: Gated access requiring streaks of active days, dynamically managed based on recent activity.
+- **Retrospective Editing**: Users can input scores and journal entries for past dates.
+- **Mood Check-in**: Slider-based modal for daily mood tracking.
+- **Color Theme**: Uses a grey and yellow (amber primary) color scheme with dark mode support.
+- **Weekly Race Report**: AI-generated summary of the past week, available on-demand or automatically.
+- **Performance Patterns**: AI analyzes 30 days of user data to identify correlations and insights.
+- **Haptics**: Implemented for tactile feedback on various UI interactions.
 
 ## External Dependencies
-- **PostgreSQL**: Primary database for all persistent data.
-- **Apple Health (HealthKit)**: For syncing health metrics (Sleep Quality, Readiness, Activity) via Capacitor.
-- **OpenAI API**: Core for AI-powered features (debriefs, insights, analysis, infinite goal refinement).
-- **Web Push API**: For browser push notifications and reminders (requires VAPID keys).
-- **express-session**: Middleware for session-based user authentication.
-- **react-icons**: Used for UI icons, including social sign-in buttons.
-- **framer-motion**: Animations for onboarding, goal celebrations, and UI transitions.
+- **PostgreSQL**: Primary database.
+- **Apple Health (HealthKit)**: For syncing health metrics on iOS devices via Capacitor.
+- **OpenAI API**: Powers all AI-driven features.
+- **Web Push API**: For browser-based push notifications.
+- **express-session**: For server-side session management and authentication.
+- **react-icons**: Icon library for UI elements.
+- **framer-motion**: For animations and UI transitions.

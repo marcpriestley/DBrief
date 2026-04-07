@@ -2,6 +2,7 @@ import webPush from 'web-push';
 import cron from 'node-cron';
 import { storage } from './storage';
 import { sendApnsNotification } from './apns';
+import { generateWeeklyReport, getWeekBounds } from './weekly-report';
 
 // In-memory cache layer (fast-path, survives hot reloads). DB is the source of truth.
 const lastReminderSentDate = new Map<string, string>(); // key → dateStr (cache only)
@@ -307,6 +308,74 @@ export async function sendHabitReminders() {
   }
 }
 
+// ─── Weekly Race Report notifications ────────────────────────────────────────
+
+async function sendWeeklyReportNotifications() {
+  const now = new Date();
+  // Only run on Sundays (0) between 20:00–20:29 user-local time
+  // We check the server clock; per-user timezone is handled by offset comparison
+  const currentDay = now.getDay(); // 0 = Sunday
+  const currentHour = now.getHours();
+  const currentMinute = now.getMinutes();
+
+  if (currentDay !== 0) return; // Not Sunday
+  if (!isWithinDeliveryWindow(20, 0, currentHour, currentMinute)) return;
+
+  const { weekStart } = getWeekBounds();
+
+  // Check if we've already sent this week's notification (server-wide dedup key)
+  // We'll use a simple in-memory flag per weekStart
+  if ((sendWeeklyReportNotifications as any)._sentWeek === weekStart) return;
+
+  try {
+    const users = await storage.getAllUsersForWeeklyReport();
+    let sentCount = 0;
+
+    for (const user of users) {
+      if (!user.subscriptions || user.subscriptions.length === 0) continue;
+
+      // Generate or retrieve the report
+      const report = await generateWeeklyReport(user.id);
+      if (!report) continue;
+      if (report.notificationSent) continue;
+
+      const payload = {
+        title: "🏁 Your Weekly Race Report is ready",
+        body: "Your engineer has reviewed this week's telemetry. Tap to read your debrief.",
+        icon: "/icon-192.png",
+        url: "/",
+        tag: `weekly-report-${weekStart}`,
+      };
+
+      let sent = false;
+      for (const sub of user.subscriptions) {
+        if (sub.apnsToken) {
+          await sendApnsNotification(sub.apnsToken, payload.title, payload.body, { url: "/" });
+          sent = true;
+        } else if (sub.endpoint && sub.keys) {
+          const ok = await sendPushNotification(
+            { endpoint: sub.endpoint, keys: sub.keys as any },
+            payload
+          );
+          if (ok) sent = true;
+        }
+      }
+
+      if (sent) {
+        await storage.markWeeklyReportNotificationSent(report.id);
+        sentCount++;
+      }
+    }
+
+    if (sentCount > 0) {
+      (sendWeeklyReportNotifications as any)._sentWeek = weekStart;
+      console.log(`[Weekly Report] Sent notifications to ${sentCount} users for week ${weekStart}`);
+    }
+  } catch (err) {
+    console.error('[Weekly Report] Scheduler error:', err);
+  }
+}
+
 // ─── Scheduler ──────────────────────────────────────────────────────────────
 
 export function startNotificationScheduler() {
@@ -320,6 +389,7 @@ export function startNotificationScheduler() {
       await sendDailyReminders();
       await sendMoodCheckinReminders();
       await sendHabitReminders();
+      await sendWeeklyReportNotifications();
     } catch (error) {
       console.error('[Scheduler] Error:', error);
     }

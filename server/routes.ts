@@ -17,6 +17,7 @@ import { registerObjectStorageRoutes } from "./replit_integrations/object_storag
 import { registerChatRoutes } from "./replit_integrations/chat/routes";
 import { registerDebriefRoutes } from "./debrief-routes";
 import { registerRealtimeVoiceWS } from "./realtime-voice";
+import { generateWeeklyReport, generatePerformancePatterns } from "./weekly-report";
 import { db } from "./db";
 import { eq, and, desc } from "drizzle-orm";
 import { encrypt, decrypt } from "./encryption";
@@ -1042,6 +1043,54 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ message: "Failed to deactivate insight" });
+    }
+  });
+
+  // ─── Weekly Race Report ─────────────────────────────────────────────────────
+
+  app.get("/api/weekly-report/latest", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const report = await storage.getLatestWeeklyReport(userId);
+      if (!report) return res.json(null);
+      res.json({ ...report, content: decrypt(report.content) });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch weekly report" });
+    }
+  });
+
+  app.post("/api/weekly-report/generate", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const report = await generateWeeklyReport(userId);
+      if (!report) return res.json({ skipped: true, reason: "Not enough data" });
+      res.json({ ...report, content: decrypt(report.content) });
+    } catch (error) {
+      console.error("[Weekly Report] Error:", error);
+      res.status(500).json({ message: "Failed to generate weekly report" });
+    }
+  });
+
+  // ─── Performance Patterns ────────────────────────────────────────────────────
+
+  app.get("/api/performance-patterns", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const patterns = await storage.getActivePerformancePatterns(userId);
+      res.json(patterns);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch patterns" });
+    }
+  });
+
+  app.post("/api/performance-patterns/generate", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const patterns = await generatePerformancePatterns(userId);
+      res.json(patterns);
+    } catch (error) {
+      console.error("[Patterns] Error:", error);
+      res.status(500).json({ message: "Failed to generate patterns" });
     }
   });
 

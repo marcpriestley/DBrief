@@ -5,6 +5,8 @@ import AppLayout from "@/components/AppLayout";
 import ScoreDashboard from "@/components/ScoreDashboard";
 import DebriefPanel from "@/components/DebriefPanel";
 import AIInsights from "@/components/AIInsights";
+import WeeklyRaceReport from "@/components/WeeklyRaceReport";
+import PerformancePatterns from "@/components/PerformancePatterns";
 import GoalsSection from "@/components/GoalsSection";
 import InfiniteGoalBanner from "@/components/InfiniteGoalBanner";
 import LongTermGoals from "@/components/LongTermGoals";
@@ -112,6 +114,8 @@ function DashboardContent() {
               </AttentionRing>
 
               <AIInsights />
+              <WeeklyRaceReport />
+              <PerformancePatterns />
             </>
           )}
         </motion.div>

@@ -386,6 +386,44 @@ export const habitLogsRelations = relations(habitLogs, ({ one }) => ({
   user: one(users, { fields: [habitLogs.userId], references: [users.id] }),
 }));
 
+// Weekly race reports — AI-generated narrative of the past 7 days
+export const weeklyReports = pgTable("weekly_reports", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  weekStart: text("week_start").notNull(),   // YYYY-MM-DD (Monday)
+  weekEnd: text("week_end").notNull(),         // YYYY-MM-DD (Sunday)
+  content: text("content").notNull(),          // AES-256-GCM encrypted narrative
+  notificationSent: boolean("notification_sent").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertWeeklyReportSchema = createInsertSchema(weeklyReports).omit({
+  id: true,
+  createdAt: true,
+});
+export type WeeklyReport = typeof weeklyReports.$inferSelect;
+export type InsertWeeklyReport = z.infer<typeof insertWeeklyReportSchema>;
+
+// Performance patterns — AI-detected correlations surfaced as "Engineer spotted something"
+export const performancePatterns = pgTable("performance_patterns", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  insight: text("insight").notNull(),          // Narrative correlation insight
+  metric1: text("metric1"),                    // Primary metric e.g. "sleep"
+  metric2: text("metric2"),                    // Secondary metric e.g. "energy"
+  correlation: text("correlation"),            // e.g. "+23 points average"
+  confidence: text("confidence").default("medium"), // "high" | "medium"
+  generatedAt: timestamp("generated_at").defaultNow(),
+  isActive: boolean("is_active").default(true),
+});
+
+export const insertPerformancePatternSchema = createInsertSchema(performancePatterns).omit({
+  id: true,
+  generatedAt: true,
+});
+export type PerformancePattern = typeof performancePatterns.$inferSelect;
+export type InsertPerformancePattern = z.infer<typeof insertPerformancePatternSchema>;
+
 // Server-side configuration key-value store (for APNs credentials, etc.)
 export const serverConfig = pgTable("server_config", {
   key: text("key").primaryKey(),

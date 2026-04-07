@@ -1,13 +1,16 @@
 import { 
   users, journalEntries, dailyScores, userMetrics, streaks, aiInsights, pushSubscriptions,
   goalTemplates, dailyGoals, journalAttachments, moodCheckins, debriefs, habits, habitLogs, serverConfig,
+  weeklyReports, performancePatterns,
   type User, type InsertUser, type JournalEntry, type InsertJournalEntry,
   type DailyScore, type InsertDailyScore, type UserMetric, type InsertUserMetric,
   type Streak, type InsertStreak, type AIInsight, type InsertAIInsight,
   type PushSubscription, type InsertPushSubscription,
   type GoalTemplate, type InsertGoalTemplate, type DailyGoal, type InsertDailyGoal,
   type JournalAttachment, type InsertJournalAttachment, type MoodCheckin, type InsertMoodCheckin,
-  type Habit, type InsertHabit, type HabitLog
+  type Habit, type InsertHabit, type HabitLog,
+  type WeeklyReport, type InsertWeeklyReport,
+  type PerformancePattern, type InsertPerformancePattern,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, gte, lte, gt } from "drizzle-orm";
@@ -98,6 +101,17 @@ export interface IStorage {
   // Server config methods
   getServerConfig(key: string): Promise<string | undefined>;
   setServerConfig(key: string, value: string): Promise<void>;
+
+  // Weekly report methods
+  getLatestWeeklyReport(userId: number): Promise<WeeklyReport | undefined>;
+  getWeeklyReportByWeek(userId: number, weekStart: string): Promise<WeeklyReport | undefined>;
+  createWeeklyReport(report: InsertWeeklyReport): Promise<WeeklyReport>;
+  markWeeklyReportNotificationSent(id: number): Promise<void>;
+  getAllUsersForWeeklyReport(): Promise<Array<User & { subscriptions: PushSubscription[] }>>;
+
+  // Performance pattern methods
+  getActivePerformancePatterns(userId: number): Promise<PerformancePattern[]>;
+  replacePerformancePatterns(userId: number, patterns: InsertPerformancePattern[]): Promise<PerformancePattern[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -511,6 +525,13 @@ export class MemStorage implements IStorage {
   async getAllHabitsForReminder(): Promise<Array<Habit & { user: User; subscriptions: PushSubscription[] }>> { return []; }
   async getServerConfig(_key: string): Promise<string | undefined> { return undefined; }
   async setServerConfig(_key: string, _value: string): Promise<void> {}
+  async getLatestWeeklyReport(_userId: number): Promise<WeeklyReport | undefined> { return undefined; }
+  async getWeeklyReportByWeek(_userId: number, _weekStart: string): Promise<WeeklyReport | undefined> { return undefined; }
+  async createWeeklyReport(report: InsertWeeklyReport): Promise<WeeklyReport> { return { id: 1, ...report, createdAt: new Date() } as any; }
+  async markWeeklyReportNotificationSent(_id: number): Promise<void> {}
+  async getAllUsersForWeeklyReport(): Promise<Array<User & { subscriptions: PushSubscription[] }>> { return []; }
+  async getActivePerformancePatterns(_userId: number): Promise<PerformancePattern[]> { return []; }
+  async replacePerformancePatterns(_userId: number, _patterns: InsertPerformancePattern[]): Promise<PerformancePattern[]> { return []; }
 }
 
 // Database implementation
@@ -1119,6 +1140,55 @@ export class DatabaseStorage implements IStorage {
   async setServerConfig(key: string, value: string): Promise<void> {
     await db.insert(serverConfig).values({ key, value })
       .onConflictDoUpdate({ target: serverConfig.key, set: { value } });
+  }
+
+  // ─── Weekly Reports ─────────────────────────────────────────────────────────
+  async getLatestWeeklyReport(userId: number): Promise<WeeklyReport | undefined> {
+    const [row] = await db.select().from(weeklyReports)
+      .where(eq(weeklyReports.userId, userId))
+      .orderBy(desc(weeklyReports.createdAt))
+      .limit(1);
+    return row;
+  }
+
+  async getWeeklyReportByWeek(userId: number, weekStart: string): Promise<WeeklyReport | undefined> {
+    const [row] = await db.select().from(weeklyReports)
+      .where(and(eq(weeklyReports.userId, userId), eq(weeklyReports.weekStart, weekStart)));
+    return row;
+  }
+
+  async createWeeklyReport(report: InsertWeeklyReport): Promise<WeeklyReport> {
+    const [created] = await db.insert(weeklyReports).values(report).returning();
+    return created;
+  }
+
+  async markWeeklyReportNotificationSent(id: number): Promise<void> {
+    await db.update(weeklyReports).set({ notificationSent: true }).where(eq(weeklyReports.id, id));
+  }
+
+  async getAllUsersForWeeklyReport(): Promise<Array<User & { subscriptions: PushSubscription[] }>> {
+    const allUsers = await db.select().from(users)
+      .where(eq(users.notificationsEnabled, true));
+    return Promise.all(allUsers.map(async (u) => {
+      const subs = await db.select().from(pushSubscriptions).where(eq(pushSubscriptions.userId, u.id));
+      return { ...u, subscriptions: subs };
+    }));
+  }
+
+  // ─── Performance Patterns ───────────────────────────────────────────────────
+  async getActivePerformancePatterns(userId: number): Promise<PerformancePattern[]> {
+    return db.select().from(performancePatterns)
+      .where(and(eq(performancePatterns.userId, userId), eq(performancePatterns.isActive, true)))
+      .orderBy(desc(performancePatterns.generatedAt));
+  }
+
+  async replacePerformancePatterns(userId: number, patterns: InsertPerformancePattern[]): Promise<PerformancePattern[]> {
+    await db.update(performancePatterns)
+      .set({ isActive: false })
+      .where(eq(performancePatterns.userId, userId));
+    if (patterns.length === 0) return [];
+    const created = await db.insert(performancePatterns).values(patterns).returning();
+    return created;
   }
 }
 
