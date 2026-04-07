@@ -188,9 +188,8 @@ async function queryRawMetric(dataType: DataType, dateStr: string): Promise<numb
 
     if (dataType === "sleep" || dataType === "sleep-quality") {
       // Sleep samples span midnight and can start/end at irregular times.
-      // Use a wide 40-hour window anchored to local noon to ensure no session
-      // is missed regardless of timezone or nap timing.
-      // e.g. for dateStr = "2024-01-15": window = Jan 14 04:00 local → Jan 15 20:00 local
+      // Use a wide 40-hour window (previous day 4 AM → today 8 PM local) to
+      // ensure no session is missed regardless of timezone or nap timing.
       const todayLocal = new Date(`${dateStr}T20:00:00`); // no Z → local time
       const prevLocal  = new Date(`${dateStr}T04:00:00`);
       prevLocal.setDate(prevLocal.getDate() - 1);
@@ -202,6 +201,63 @@ async function queryRawMetric(dataType: DataType, dateStr: string): Promise<numb
       endDate   = `${dateStr}T23:59:59.999Z`;
     }
 
+    // For sleep, HealthKit stores categorical samples — queryAggregated may return
+    // nothing or an empty array for categorical types. Try three approaches in order:
+    // 1. queryAggregated with bucket:"day"
+    // 2. queryAggregated without a bucket (plugin may return total directly)
+    // 3. Health.query() — raw sample list; sum durations of asleep samples
+    if (dataType === "sleep" || dataType === "sleep-quality") {
+      // Attempt 1: standard aggregated daily bucket
+      try {
+        const { aggregatedData } = await (Health as any).queryAggregated({
+          dataType,
+          startDate,
+          endDate,
+          bucket: "day",
+        });
+        if (aggregatedData && aggregatedData.length > 0) {
+          const total = aggregatedData.reduce((s: number, d: any) => s + (d.value ?? 0), 0);
+          if (total > 0) return total;
+        }
+      } catch (_) { /* fall through */ }
+
+      // Attempt 2: aggregated without bucket (some plugin versions work this way)
+      try {
+        const result = await (Health as any).queryAggregated({
+          dataType,
+          startDate,
+          endDate,
+        });
+        const data = result?.aggregatedData ?? result?.data ?? [];
+        if (data.length > 0) {
+          const total = data.reduce((s: number, d: any) => s + (d.value ?? 0), 0);
+          if (total > 0) return total;
+        }
+      } catch (_) { /* fall through */ }
+
+      // Attempt 3: raw sample query — sum durations (in minutes) of sleep samples
+      try {
+        const result = await (Health as any).query({
+          dataType,
+          startDate,
+          endDate,
+        });
+        const samples = result?.data ?? result?.values ?? [];
+        if (samples.length > 0) {
+          // Each sample has startDate + endDate; convert duration to minutes
+          const totalMinutes = samples.reduce((sum: number, s: any) => {
+            const sStart = new Date(s.startDate ?? s.start).getTime();
+            const sEnd   = new Date(s.endDate ?? s.end).getTime();
+            return sum + Math.max(0, (sEnd - sStart) / 60000);
+          }, 0);
+          if (totalMinutes > 0) return totalMinutes;
+        }
+      } catch (_) { /* fall through */ }
+
+      return null;
+    }
+
+    // Standard path for all other data types
     const { aggregatedData } = await (Health as any).queryAggregated({
       dataType,
       startDate,
@@ -209,8 +265,8 @@ async function queryRawMetric(dataType: DataType, dateStr: string): Promise<numb
       bucket: "day",
     });
     if (!aggregatedData || aggregatedData.length === 0) return null;
-    // Sum all returned buckets (cumulative) or take the single value (discrete/sleep)
-    const total = aggregatedData.reduce((s: number, d: any) => s + d.value, 0);
+    // Sum all returned buckets (cumulative) or take the single value (discrete)
+    const total = aggregatedData.reduce((s: number, d: any) => s + (d.value ?? 0), 0);
     return total;
   } catch (e) {
     console.error(`[HealthKit] Error reading ${dataType}:`, e);

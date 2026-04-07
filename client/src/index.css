@@ -59,10 +59,6 @@ body,
   background-color: var(--background);
 }
 
-body {
-  overscroll-behavior-y: none;
-}
-
 @layer base {
   * {
     @apply border-border;
