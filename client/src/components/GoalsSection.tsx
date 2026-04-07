@@ -24,6 +24,7 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
   const [newGoalTitle, setNewGoalTitle] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editTitle, setEditTitle] = useState("");
+  const editCancelledRef = useRef(false);
   const [placeholderValues, setPlaceholderValues] = useState<Record<number, string>>({});
   const [submittingPlaceholder, setSubmittingPlaceholder] = useState<number | null>(null);
   const [showCelebration, setShowCelebration] = useState(false);
@@ -123,7 +124,7 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
       (e.target as HTMLElement).blur(); // save is handled by onBlur
     }
     if (e.key === "Escape") {
-      setEditTitle(""); // clear so onBlur sees nothing to save
+      editCancelledRef.current = true; // tell onBlur not to save
       setEditingId(null);
     }
   };
@@ -231,7 +232,18 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
                   value={editTitle}
                   onChange={(e) => setEditTitle(e.target.value)}
                   onKeyDown={(e) => handleEditKeyDown(e, goal.goalTemplateId)}
-                  onBlur={() => setEditingId(null)}
+                  onBlur={() => {
+                    if (editCancelledRef.current) {
+                      editCancelledRef.current = false;
+                      return;
+                    }
+                    const trimmed = editTitle.trim();
+                    if (trimmed) {
+                      updateTemplateMutation.mutate({ id: goal.goalTemplateId, title: trimmed });
+                    } else {
+                      setEditingId(null);
+                    }
+                  }}
                   className="flex-1 h-8 text-sm"
                   autoFocus
                 />
