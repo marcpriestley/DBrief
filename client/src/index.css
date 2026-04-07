@@ -48,16 +48,19 @@
   --radius: 0.75rem;
 }
 
-/* Fill the entire screen (including safe areas) with the app background.
-   Prevents the white "rubber-band" flash when over-scrolling on iOS.
-   --background is already a full hsl() value, so we use var() not hsl(var()).
-   overscroll-behavior: none stops iOS bounce from revealing a gap. */
+/* Fill every layer with the app background so that iOS WKWebView's native
+   rubber-band bounce never reveals white.  --background is a full hsl() value
+   so we use var() directly (not hsl(var())) to avoid double-wrapping.
+   #root ensures the React mount point is also coloured (the layer WKWebView
+   bounces against in Capacitor). */
 html,
-body {
+body,
+#root {
   background-color: var(--background);
-  min-height: 100dvh;
-  overscroll-behavior: none;
-  -webkit-overflow-scrolling: auto;
+}
+
+body {
+  overscroll-behavior-y: none;
 }
 
 @layer base {
