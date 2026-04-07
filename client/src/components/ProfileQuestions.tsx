@@ -139,8 +139,11 @@ export function ProfileQuestionsSettings() {
       return res.json();
     },
     onSuccess: (data) => {
+      // Update cache with server response and force a fresh fetch on next mount
       queryClient.setQueryData(["/api/user/profile"], data);
+      queryClient.invalidateQueries({ queryKey: ["/api/user/profile"] });
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      // Keep local state in sync with what the server confirmed was saved
       const savedProfile = data?.userProfile || {};
       setAnswers(savedProfile);
       setDateOfBirth(savedProfile.dateOfBirth || "");
@@ -148,6 +151,8 @@ export function ProfileQuestionsSettings() {
       setLocation(savedProfile.location || "");
       setCurrentFocus(savedProfile.currentFocus || "");
       setGoalPref(data?.goalPreference || "morning");
+      // Allow re-initialisation from fresh server data on next modal open
+      initialisedRef.current = false;
       toast({ title: "Profile saved", description: "Your AI debrief will now personalise to you." });
     },
     onError: () => {

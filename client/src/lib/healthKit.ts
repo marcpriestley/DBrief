@@ -187,15 +187,15 @@ async function queryRawMetric(dataType: DataType, dateStr: string): Promise<numb
     let endDate: string;
 
     if (dataType === "sleep" || dataType === "sleep-quality") {
-      // Sleep samples span midnight (e.g. 11 PM → 7 AM). Using UTC midnight as the
-      // query boundary misses them for UTC+ users because sample.startDate falls
-      // before the window. Use "previous local noon → today local noon" instead —
-      // this guarantees the previous night's sleep is always inside the window.
-      const todayLocalNoon = new Date(`${dateStr}T12:00:00`); // no Z → local time
-      const prevLocalNoon  = new Date(todayLocalNoon);
-      prevLocalNoon.setDate(prevLocalNoon.getDate() - 1);
-      startDate = prevLocalNoon.toISOString();
-      endDate   = todayLocalNoon.toISOString();
+      // Sleep samples span midnight and can start/end at irregular times.
+      // Use a wide 40-hour window anchored to local noon to ensure no session
+      // is missed regardless of timezone or nap timing.
+      // e.g. for dateStr = "2024-01-15": window = Jan 14 04:00 local → Jan 15 20:00 local
+      const todayLocal = new Date(`${dateStr}T20:00:00`); // no Z → local time
+      const prevLocal  = new Date(`${dateStr}T04:00:00`);
+      prevLocal.setDate(prevLocal.getDate() - 1);
+      startDate = prevLocal.toISOString();
+      endDate   = todayLocal.toISOString();
     } else {
       // For all other metrics, a UTC-day window is accurate enough
       startDate = `${dateStr}T00:00:00.000Z`;

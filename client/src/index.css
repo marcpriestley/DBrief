@@ -52,11 +52,12 @@
    Prevents the white "rubber-band" flash when over-scrolling on iOS.
    --background is already a full hsl() value, so we use var() not hsl(var()).
    overscroll-behavior: none stops iOS bounce from revealing a gap. */
-html {
+html,
+body {
   background-color: var(--background);
   min-height: 100dvh;
-  height: 100%;
   overscroll-behavior: none;
+  -webkit-overflow-scrolling: auto;
 }
 
 @layer base {
