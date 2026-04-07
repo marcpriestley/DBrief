@@ -1241,7 +1241,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
           </div>
         </div>
 
-        <div ref={chatContainerRef} className="px-5 py-4 space-y-3 flex-1 overflow-y-auto min-h-0">
+        <div ref={chatContainerRef} className="px-5 py-4 space-y-3 flex-1 overflow-y-auto min-h-0 overscroll-y-contain">
           {debrief.messages.length === 0 && realtimeMessages.length === 0 && !isStreaming && !realtimeVoice.isActive && (
             <p className="text-sm text-muted-foreground text-center py-4">
               Your session, your opening. What's on your mind?
