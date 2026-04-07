@@ -118,10 +118,14 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
   });
 
   const handleEditKeyDown = (e: React.KeyboardEvent, templateId: number) => {
-    if (e.key === "Enter" && editTitle.trim()) {
-      updateTemplateMutation.mutate({ id: templateId, title: editTitle.trim() });
+    if (e.key === "Enter") {
+      e.preventDefault();
+      (e.target as HTMLElement).blur(); // save is handled by onBlur
     }
-    if (e.key === "Escape") setEditingId(null);
+    if (e.key === "Escape") {
+      setEditTitle(""); // clear so onBlur sees nothing to save
+      setEditingId(null);
+    }
   };
 
   const handleAddGoal = () => {
