@@ -585,6 +585,9 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     if (!text.trim() || !debrief || isStreaming) return;
 
     setUserInput("");
+    // Scroll the page to top so the debrief conversation is in view (not Goals or other sections)
+    // Small delay lets iOS keyboard dismissal settle before we move the scroll position
+    setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 80);
     setIsStreaming(true);
     setStreamingContent("");
     ttsFirstSentenceRef.current = 0;
@@ -1159,7 +1162,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     <Card
       ref={debriefCardRef}
       className="border border-border/50 shadow-sm bg-card flex flex-col"
-      style={{ maxHeight: 'calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 10rem)' }}
+      style={{ maxHeight: 'calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 15rem)' }}
     >
       <CardContent className="p-0 flex flex-col flex-1 overflow-hidden">
         <div className="px-5 py-3 border-b border-border/50 flex items-center justify-between flex-shrink-0">
