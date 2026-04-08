@@ -201,33 +201,75 @@ async function queryRawMetric(dataType: DataType, dateStr: string): Promise<numb
       endDate   = `${dateStr}T23:59:59.999Z`;
     }
 
-    // For sleep, HealthKit stores categorical samples — queryAggregated may return
-    // nothing or an empty array for categorical types. Try three approaches in order:
-    // 1. queryAggregated with bucket:"day"
-    // 2. queryAggregated without a bucket (plugin may return total directly)
-    // 3. Health.query() — raw sample list; sum durations of asleep samples
-    if (dataType === "sleep" || dataType === "sleep-quality") {
+    // ── Sleep Quality ──────────────────────────────────────────────────────────
+    // HealthKit has no native "sleep-quality" quantity type. We query the raw
+    // HKCategoryTypeIdentifierSleepAnalysis samples (same source as Sleep Duration)
+    // and compute efficiency = asleep-minutes / total-in-bed-minutes × 100.
+    if (dataType === "sleep-quality") {
+      try {
+        const result = await (Health as any).query({ dataType: "sleep", startDate, endDate });
+        const samples: any[] = result?.data ?? result?.values ?? [];
+        if (samples.length === 0) return null;
+
+        // Apple HealthKit sleep stage identifiers — numeric OR string depending on plugin version
+        const ASLEEP = new Set([1, 3, 4, 5,
+          "asleep", "ASLEEP", "asleepCore", "asleepDeep", "asleepREM",
+          "SLEEPING", "sleeping", "core", "deep", "rem"]);
+        const INBED  = new Set([0, "inBed", "IN_BED", "InBed", "in_bed"]);
+        // value 2 / "awake" is excluded from both
+
+        let asleepMin = 0;
+        let inBedMin  = 0;
+
+        for (const s of samples) {
+          const dur = Math.max(0,
+            (new Date(s.endDate ?? s.end).getTime() -
+             new Date(s.startDate ?? s.start).getTime()) / 60000
+          );
+          const val = s.value ?? s.stage ?? s.category ?? s.type;
+          if (ASLEEP.has(val)) asleepMin += dur;
+          else if (INBED.has(val)) inBedMin += dur;
+          // awake / unknown: not counted as either
+        }
+
+        const totalBed = asleepMin + inBedMin;
+
+        if (asleepMin > 0 && totalBed > 0) {
+          // Sleep efficiency: asleep ÷ (asleep + in-bed) × 100
+          return Math.round((asleepMin / totalBed) * 100);
+        }
+
+        // No stage info returned — fall back to duration proxy (all samples treated as sleep)
+        const allMin = samples.reduce((s: number, smp: any) =>
+          s + Math.max(0, (new Date(smp.endDate ?? smp.end).getTime() -
+                           new Date(smp.startDate ?? smp.start).getTime()) / 60000), 0);
+        if (allMin > 0) {
+          // hours ÷ 8 × 100, capped at 100
+          return Math.min(100, Math.round((allMin / 480) * 100));
+        }
+      } catch (_) { /* fall through to null */ }
+
+      return null;
+    }
+
+    // ── Sleep Duration ──────────────────────────────────────────────────────────
+    // HealthKit stores categorical samples — queryAggregated may return nothing.
+    // Try three approaches in order:
+    if (dataType === "sleep") {
       // Attempt 1: standard aggregated daily bucket
       try {
         const { aggregatedData } = await (Health as any).queryAggregated({
-          dataType,
-          startDate,
-          endDate,
-          bucket: "day",
+          dataType, startDate, endDate, bucket: "day",
         });
-        if (aggregatedData && aggregatedData.length > 0) {
+        if (aggregatedData?.length > 0) {
           const total = aggregatedData.reduce((s: number, d: any) => s + (d.value ?? 0), 0);
           if (total > 0) return total;
         }
       } catch (_) { /* fall through */ }
 
-      // Attempt 2: aggregated without bucket (some plugin versions work this way)
+      // Attempt 2: aggregated without bucket
       try {
-        const result = await (Health as any).queryAggregated({
-          dataType,
-          startDate,
-          endDate,
-        });
+        const result = await (Health as any).queryAggregated({ dataType, startDate, endDate });
         const data = result?.aggregatedData ?? result?.data ?? [];
         if (data.length > 0) {
           const total = data.reduce((s: number, d: any) => s + (d.value ?? 0), 0);
@@ -235,22 +277,37 @@ async function queryRawMetric(dataType: DataType, dateStr: string): Promise<numb
         }
       } catch (_) { /* fall through */ }
 
-      // Attempt 3: raw sample query — sum durations (in minutes) of sleep samples
+      // Attempt 3: raw samples — count only "asleep" stages for accuracy
       try {
-        const result = await (Health as any).query({
-          dataType,
-          startDate,
-          endDate,
-        });
-        const samples = result?.data ?? result?.values ?? [];
+        const result = await (Health as any).query({ dataType, startDate, endDate });
+        const samples: any[] = result?.data ?? result?.values ?? [];
         if (samples.length > 0) {
-          // Each sample has startDate + endDate; convert duration to minutes
-          const totalMinutes = samples.reduce((sum: number, s: any) => {
-            const sStart = new Date(s.startDate ?? s.start).getTime();
-            const sEnd   = new Date(s.endDate ?? s.end).getTime();
-            return sum + Math.max(0, (sEnd - sStart) / 60000);
-          }, 0);
-          if (totalMinutes > 0) return totalMinutes;
+          const ASLEEP = new Set([1, 3, 4, 5,
+            "asleep", "ASLEEP", "asleepCore", "asleepDeep", "asleepREM",
+            "SLEEPING", "sleeping", "core", "deep", "rem"]);
+
+          let asleepMin = 0;
+          let hasStageInfo = false;
+
+          for (const s of samples) {
+            const val = s.value ?? s.stage ?? s.category ?? s.type;
+            if (val !== undefined && val !== null) hasStageInfo = true;
+            const dur = Math.max(0,
+              (new Date(s.endDate ?? s.end).getTime() -
+               new Date(s.startDate ?? s.start).getTime()) / 60000
+            );
+            if (ASLEEP.has(val)) asleepMin += dur;
+            else if (!hasStageInfo) asleepMin += dur; // no stage info → count all
+          }
+
+          // If we have stage info but no asleep samples, fall back to summing all
+          if (asleepMin === 0 && !hasStageInfo) {
+            asleepMin = samples.reduce((s: number, smp: any) =>
+              s + Math.max(0, (new Date(smp.endDate ?? smp.end).getTime() -
+                               new Date(smp.startDate ?? smp.start).getTime()) / 60000), 0);
+          }
+
+          if (asleepMin > 0) return asleepMin;
         }
       } catch (_) { /* fall through */ }
 
