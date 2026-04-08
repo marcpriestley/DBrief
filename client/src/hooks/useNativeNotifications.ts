@@ -85,6 +85,14 @@ export function consumePendingMoodOpen(): boolean {
 function handleNotificationUrl(url?: string) {
   if (!url) return;
   if (url.includes("mood=checkin")) {
+    // Write ?mood=checkin into the browser URL so AppLayout's checkMoodParam()
+    // catches it on mount — this survives timing races where the event fires
+    // before or during component mounting (cold-start, background resume, etc.)
+    if (typeof history !== "undefined") {
+      history.replaceState(null, "", "/?mood=checkin");
+      // Trigger a popstate so any already-mounted AppLayout also re-checks the URL
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    }
     dispatchOpenMood();
   }
 }
