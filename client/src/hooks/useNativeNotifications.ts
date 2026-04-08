@@ -88,10 +88,12 @@ function handleNotificationUrl(url?: string) {
     // Write ?mood=checkin into the browser URL so AppLayout's checkMoodParam()
     // catches it on mount — this survives timing races where the event fires
     // before or during component mounting (cold-start, background resume, etc.)
+    // NOTE: do NOT dispatch a synthetic popstate event here — wouter listens for
+    // popstate and would treat the URL change as navigation, potentially unmounting
+    // components and disrupting in-flight queries.  dispatchOpenMood() handles the
+    // "app already open" path via the dbrief:open-mood custom event instead.
     if (typeof history !== "undefined") {
       history.replaceState(null, "", "/?mood=checkin");
-      // Trigger a popstate so any already-mounted AppLayout also re-checks the URL
-      window.dispatchEvent(new PopStateEvent("popstate"));
     }
     dispatchOpenMood();
   }

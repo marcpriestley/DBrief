@@ -140,18 +140,26 @@ export function ProfileQuestionsSettings() {
       return res.json();
     },
     onSuccess: (data) => {
-      // Cache the server-confirmed values so the next modal open reads them
-      queryClient.setQueryData(["/api/user/profile"], data);
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      // Keep local state in sync — do NOT reset initialisedRef so the background
-      // refetch (if any) cannot overwrite what the user just saved
       const savedProfile = data?.userProfile || {};
+      const savedGoalPref = data?.goalPreference || "morning";
+      // Write the GET-shaped value into the cache (no `success` field) so the
+      // next modal open reads exactly what the server persisted.
+      queryClient.setQueryData(["/api/user/profile"], {
+        userProfile: savedProfile,
+        goalPreference: savedGoalPref,
+      });
+      // Invalidate to force a fresh server fetch when the settings next open,
+      // and also keep /api/auth/me in sync (userProfile lives on the user row).
+      queryClient.invalidateQueries({ queryKey: ["/api/user/profile"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      // Update local form state immediately so the UI reflects the saved values
+      // while the background refetch is in flight.
       setAnswers(savedProfile);
       setDateOfBirth(savedProfile.dateOfBirth || "");
       setOccupation(savedProfile.occupation || "");
       setLocation(savedProfile.location || "");
       setCurrentFocus(savedProfile.currentFocus || "");
-      setGoalPref(data?.goalPreference || "morning");
+      setGoalPref(savedGoalPref);
       toast({ title: "Profile saved", description: "Your AI debrief will now personalise to you." });
     },
     onError: () => {

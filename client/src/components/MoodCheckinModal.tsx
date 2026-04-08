@@ -112,19 +112,12 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
 
   useEffect(() => {
     if (open) {
-      // Use position:fixed to lock body scroll without suppressing iOS touch events
-      const prevPos = document.body.style.position;
-      const prevTop = document.body.style.top;
-      const prevWidth = document.body.style.width;
-      const scrollY = window.scrollY;
-      document.body.style.position = "fixed";
-      document.body.style.top = `-${scrollY}px`;
-      document.body.style.width = "100%";
+      // Prevent background scroll by hiding overflow on the root element.
+      // This avoids the visible "jump to top" that position:fixed causes on iOS.
+      const prev = document.documentElement.style.overflow;
+      document.documentElement.style.overflow = "hidden";
       return () => {
-        document.body.style.position = prevPos;
-        document.body.style.top = prevTop;
-        document.body.style.width = prevWidth;
-        window.scrollTo(0, scrollY);
+        document.documentElement.style.overflow = prev;
       };
     }
   }, [open]);

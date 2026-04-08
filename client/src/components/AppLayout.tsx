@@ -108,7 +108,12 @@ function AppLayoutInner({ children }: AppLayoutProps) {
   const todayStr = new Date().toISOString().split("T")[0];
   const { data: todayMoods = [] } = useQuery<any[]>({
     queryKey: ["/api/mood-checkins", todayStr],
-    queryFn: () => fetch(`/api/mood-checkins/${todayStr}`, { credentials: "include" }).then(r => r.json()),
+    queryFn: async () => {
+      const r = await fetch(`/api/mood-checkins/${todayStr}`, { credentials: "include" });
+      if (!r.ok) return [];
+      const data = await r.json();
+      return Array.isArray(data) ? data : [];
+    },
     refetchInterval: 60000,
   });
   const currentPeriod = getCurrentPeriod();
