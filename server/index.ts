@@ -10,6 +10,18 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+// Force no-cache on HTML so WKWebView (Capacitor) always fetches the latest JS bundle.
+// Must be registered before session middleware and routes so headers are set before
+// any other handler can short-circuit the response (e.g. static file serving).
+app.use((req, res, next) => {
+  if (!req.path.startsWith("/api") && !req.path.match(/\.(js|css|png|jpg|jpeg|svg|woff|woff2|ico|webp)$/)) {
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+  }
+  next();
+});
+
 app.use(sessionMiddleware);
 
 app.use((req, res, next) => {
@@ -51,16 +63,6 @@ app.use((req, res, next) => {
 
     res.status(status).json({ message });
     throw err;
-  });
-
-  // Force no-cache on HTML so WKWebView (Capacitor) always fetches the latest JS bundle
-  app.use((req, res, next) => {
-    if (!req.path.startsWith("/api") && !req.path.match(/\.(js|css|png|jpg|svg|woff|woff2|ico)$/)) {
-      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-      res.setHeader("Pragma", "no-cache");
-      res.setHeader("Expires", "0");
-    }
-    next();
   });
 
   // importantly only setup vite in development and after
