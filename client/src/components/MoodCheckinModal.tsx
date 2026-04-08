@@ -42,90 +42,42 @@ function getTimeOfDayLabel(): string {
 }
 
 function MoodSlider({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  const trackRef = useRef<HTMLDivElement>(null);
-  const isDragging = useRef(false);
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
   const lastHapticVal = useRef<number | null>(null);
-
-  const pct = value;
   const moodColor = getMoodColor(value);
 
-  const emitWithHaptic = (newVal: number) => {
-    onChangeRef.current(newVal);
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newVal = Number(e.target.value);
+    onChange(newVal);
     if (lastHapticVal.current === null || Math.abs(newVal - lastHapticVal.current) >= 5) {
       haptic("light");
       lastHapticVal.current = newVal;
     }
   };
 
-  useEffect(() => {
-    const el = trackRef.current;
-    if (!el) return;
-
-    const getVal = (clientX: number) => {
-      const rect = el.getBoundingClientRect();
-      return Math.round(Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100)));
-    };
-
-    const onTouchStart = (e: TouchEvent) => {
-      e.preventDefault();
-      isDragging.current = true;
-      lastHapticVal.current = null;
-      if (e.touches[0]) emitWithHaptic(getVal(e.touches[0].clientX));
-
-      const onTouchMove = (ev: TouchEvent) => {
-        ev.preventDefault();
-        if (ev.touches[0]) emitWithHaptic(getVal(ev.touches[0].clientX));
-      };
-      const onTouchEnd = () => {
-        isDragging.current = false;
-        document.removeEventListener("touchmove", onTouchMove);
-        document.removeEventListener("touchend", onTouchEnd);
-        document.removeEventListener("touchcancel", onTouchEnd);
-      };
-      document.addEventListener("touchmove", onTouchMove, { passive: false });
-      document.addEventListener("touchend", onTouchEnd);
-      document.addEventListener("touchcancel", onTouchEnd);
-    };
-
-    const onMouseDown = (e: MouseEvent) => {
-      e.preventDefault();
-      isDragging.current = true;
-      lastHapticVal.current = null;
-      emitWithHaptic(getVal(e.clientX));
-      const onMouseMove = (ev: MouseEvent) => {
-        if (isDragging.current) emitWithHaptic(getVal(ev.clientX));
-      };
-      const onMouseUp = () => {
-        isDragging.current = false;
-        document.removeEventListener("mousemove", onMouseMove);
-        document.removeEventListener("mouseup", onMouseUp);
-      };
-      document.addEventListener("mousemove", onMouseMove);
-      document.addEventListener("mouseup", onMouseUp);
-    };
-
-    el.addEventListener("touchstart", onTouchStart, { passive: false });
-    el.addEventListener("mousedown", onMouseDown);
-
-    return () => {
-      el.removeEventListener("touchstart", onTouchStart);
-      el.removeEventListener("mousedown", onMouseDown);
-    };
-  }, []);
-
   return (
-    <div
-      ref={trackRef}
-      className="relative w-full flex items-center cursor-pointer select-none"
-      style={{ touchAction: "none", userSelect: "none", height: 48 } as React.CSSProperties}
-    >
-      <div className="absolute inset-x-0 h-2 rounded-full bg-border" />
-      <div className="absolute h-2 rounded-full" style={{ width: `${pct}%`, backgroundColor: moodColor }} />
+    <div className="relative w-full" style={{ height: 48, touchAction: "pan-x" } as React.CSSProperties}>
+      {/* Track background */}
+      <div className="absolute top-1/2 -translate-y-1/2 inset-x-0 h-2 rounded-full bg-border" />
+      {/* Filled portion */}
       <div
-        className="absolute w-7 h-7 rounded-full shadow-md border-2 border-white"
-        style={{ left: `calc(${pct}% - 14px)`, backgroundColor: moodColor }}
+        className="absolute top-1/2 -translate-y-1/2 left-0 h-2 rounded-full pointer-events-none"
+        style={{ width: `${value}%`, backgroundColor: moodColor }}
+      />
+      {/* Native range input — transparent overlay for cross-platform reliability */}
+      <input
+        type="range"
+        min={0}
+        max={100}
+        step={1}
+        value={value}
+        onChange={handleChange}
+        className="absolute inset-0 w-full opacity-0 cursor-pointer"
+        style={{ height: "100%", touchAction: "pan-x" } as React.CSSProperties}
+      />
+      {/* Custom thumb */}
+      <div
+        className="absolute top-1/2 -translate-y-1/2 w-7 h-7 rounded-full shadow-md border-2 border-white pointer-events-none"
+        style={{ left: `calc(${value}% - 14px)`, backgroundColor: moodColor }}
       />
     </div>
   );
@@ -160,9 +112,20 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
 
   useEffect(() => {
     if (open) {
-      const prev = document.body.style.overflow;
-      document.body.style.overflow = "hidden";
-      return () => { document.body.style.overflow = prev; };
+      // Use position:fixed to lock body scroll without suppressing iOS touch events
+      const prevPos = document.body.style.position;
+      const prevTop = document.body.style.top;
+      const prevWidth = document.body.style.width;
+      const scrollY = window.scrollY;
+      document.body.style.position = "fixed";
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.width = "100%";
+      return () => {
+        document.body.style.position = prevPos;
+        document.body.style.top = prevTop;
+        document.body.style.width = prevWidth;
+        window.scrollTo(0, scrollY);
+      };
     }
   }, [open]);
 

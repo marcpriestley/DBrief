@@ -145,15 +145,6 @@ export function registerRealtimeVoiceWS(httpServer: HttpServer) {
         },
       }));
 
-      // Trigger the AI to open with a greeting
-      openAiWs.send(JSON.stringify({
-        type: "response.create",
-        response: {
-          modalities: ["text", "audio"],
-          instructions: "Open the debrief now — 1-2 sentences only. Read the telemetry, set the tone, ask ONE sharp question.",
-        },
-      }));
-
       sessionReady = true;
       clientWs.send(JSON.stringify({ type: "session.ready" }));
       log("[Realtime] Session connected for user " + userId);
@@ -270,6 +261,15 @@ export function registerRealtimeVoiceWS(httpServer: HttpServer) {
         } else if (msg.type === "interrupt") {
           // Client requesting AI to stop — send cancel
           openAiWs.send(JSON.stringify({ type: "response.cancel" }));
+        } else if (msg.type === "prompt.engineer") {
+          // User wants the AI to open first with a brief greeting
+          openAiWs.send(JSON.stringify({
+            type: "response.create",
+            response: {
+              modalities: ["text", "audio"],
+              instructions: "Open the debrief now — 1-2 sentences only. Read the telemetry, set the tone, ask ONE sharp question.",
+            },
+          }));
         }
       } catch {}
     });

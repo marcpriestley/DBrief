@@ -59,6 +59,24 @@ body,
   background-color: var(--background);
 }
 
+/* Explicit dark-mode fallback so iOS Safari's overscroll bounce always shows
+   the dark background — not white — when the .dark class is active on <html>. */
+html.dark,
+html.dark body,
+html.dark #root {
+  background-color: hsl(0, 0%, 8%);
+}
+
+/* Prevent the main viewport from rubber-band bouncing in iOS Safari.
+   This stops both the white-band flash and the scroll-vibration glitch
+   that occurs when nested scroll containers chain momentum to the body. */
+html {
+  overscroll-behavior-y: none;
+}
+body {
+  overscroll-behavior-y: none;
+}
+
 @layer base {
   * {
     @apply border-border;

@@ -1444,7 +1444,15 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                   </div>
                 )}
                 {realtimeVoice.status === "ready" && (
-                  <span className="text-xs text-muted-foreground">Live — speak when you're ready</span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs text-muted-foreground">Live — speak when ready</span>
+                    <button
+                      onClick={() => realtimeVoice.promptEngineer?.()}
+                      className="text-[11px] font-medium text-primary bg-primary/10 hover:bg-primary/20 px-2 py-0.5 rounded-md transition-colors"
+                    >
+                      Prompt engineer
+                    </button>
+                  </div>
                 )}
               </div>
               <button

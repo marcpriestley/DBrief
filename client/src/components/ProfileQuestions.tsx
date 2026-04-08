@@ -107,6 +107,7 @@ export function ProfileQuestionsSettings() {
 
   const { data: profileData } = useQuery<{ userProfile: Record<string, string>; goalPreference: string }>({
     queryKey: ["/api/user/profile"],
+    staleTime: 5 * 60 * 1000,
   });
 
   const [answers, setAnswers] = useState<Record<string, string>>({});

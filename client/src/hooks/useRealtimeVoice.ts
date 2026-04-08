@@ -292,5 +292,11 @@ export function useRealtimeVoice({
 
   const isActive = status !== "idle" && status !== "error";
 
-  return { status, isActive, connect, disconnect };
+  const promptEngineer = useCallback(() => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "prompt.engineer" }));
+    }
+  }, []);
+
+  return { status, isActive, connect, disconnect, promptEngineer };
 }
