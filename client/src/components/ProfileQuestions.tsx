@@ -117,11 +117,16 @@ export function ProfileQuestionsSettings() {
   const [location, setLocation] = useState("");
   const [currentFocus, setCurrentFocus] = useState("");
   const [showDriverQuestions, setShowDriverQuestions] = useState(false);
-  const initialisedRef = useRef(false);
+  // Track whether the user has made edits since the last server sync so we
+  // don't overwrite in-progress changes when a background refetch completes.
+  const isDirtyRef = useRef(false);
 
   useEffect(() => {
-    if (!profileData || initialisedRef.current) return;
-    initialisedRef.current = true;
+    // Always sync from server data when it arrives, unless the user is
+    // actively editing (isDirtyRef). This ensures the modal repopulates
+    // correctly on every open, even if the Dialog exit animation kept the
+    // component mounted from the previous session.
+    if (!profileData || isDirtyRef.current) return;
     const profile = profileData.userProfile || {};
     setAnswers(profile);
     setGoalPref(profileData.goalPreference || "morning");
@@ -160,6 +165,8 @@ export function ProfileQuestionsSettings() {
       setLocation(savedProfile.location || "");
       setCurrentFocus(savedProfile.currentFocus || "");
       setGoalPref(savedGoalPref);
+      // Allow future profileData changes (background refetch) to re-populate the form
+      isDirtyRef.current = false;
       toast({ title: "Profile saved", description: "Your AI debrief will now personalise to you." });
     },
     onError: () => {
@@ -195,7 +202,7 @@ export function ProfileQuestionsSettings() {
             id="dateOfBirth"
             type="date"
             value={dateOfBirth}
-            onChange={(e) => setDateOfBirth(e.target.value)}
+            onChange={(e) => { isDirtyRef.current = true; setDateOfBirth(e.target.value); }}
             className="h-9"
             max={new Date().toISOString().split("T")[0]}
           />
@@ -211,7 +218,7 @@ export function ProfileQuestionsSettings() {
           <Input
             id="occupation"
             value={occupation}
-            onChange={(e) => setOccupation(e.target.value)}
+            onChange={(e) => { isDirtyRef.current = true; setOccupation(e.target.value); }}
             placeholder="e.g. Software engineer, student, athlete…"
             className="h-9"
             maxLength={60}
@@ -223,7 +230,7 @@ export function ProfileQuestionsSettings() {
           <Input
             id="location"
             value={location}
-            onChange={(e) => setLocation(e.target.value)}
+            onChange={(e) => { isDirtyRef.current = true; setLocation(e.target.value); }}
             placeholder="e.g. London, UK"
             className="h-9"
             maxLength={60}
@@ -235,7 +242,7 @@ export function ProfileQuestionsSettings() {
           <Textarea
             id="currentFocus"
             value={currentFocus}
-            onChange={(e) => setCurrentFocus(e.target.value)}
+            onChange={(e) => { isDirtyRef.current = true; setCurrentFocus(e.target.value); }}
             placeholder="e.g. Training for a half marathon, launching a side project, improving my sleep…"
             className="text-sm resize-none"
             rows={2}
@@ -255,7 +262,7 @@ export function ProfileQuestionsSettings() {
           ].map((opt) => (
             <button
               key={opt.key}
-              onClick={() => setGoalPref(opt.key)}
+              onClick={() => { isDirtyRef.current = true; setGoalPref(opt.key); }}
               className={`p-3 rounded-lg border-2 text-left transition-all ${
                 goalPref === opt.key
                   ? "border-primary bg-primary/5"
@@ -289,7 +296,7 @@ export function ProfileQuestionsSettings() {
           <div className="mt-2">
             <ProfileQuestions
               initialAnswers={answers}
-              onComplete={setAnswers}
+              onComplete={(updated) => { isDirtyRef.current = true; setAnswers(updated); }}
               compact
             />
           </div>

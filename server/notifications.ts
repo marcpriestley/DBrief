@@ -129,11 +129,15 @@ async function dispatchToSubscriptions(
   // If this user has any native APNs token, send only via APNs.
   // Sending both APNs and web push to the same person causes duplicate notifications
   // on iOS (app + Safari both fire), so we prefer the native path.
-  const apnsTokens = subscriptions.map(s => s.apnsToken).filter(Boolean) as string[];
+  // Deduplicate tokens — multiple DB rows with the same APNs token would otherwise
+  // each trigger a separate notification on the same device.
+  const seenTokens = new Set<string>();
+  const apnsTokens = subscriptions
+    .map(s => s.apnsToken)
+    .filter((t): t is string => !!t && !seenTokens.has(t) && (seenTokens.add(t), true));
   if (apnsTokens.length > 0) {
-    for (const token of apnsTokens) {
-      await sendApnsNotification(token, payload);
-    }
+    // Only send to the MOST RECENTLY registered token (last in array = newest registration)
+    await sendApnsNotification(apnsTokens[apnsTokens.length - 1], payload);
     return;
   }
 
@@ -288,7 +292,11 @@ export async function sendHabitReminders() {
       if (!isWithinDeliveryWindow(reminderHour, reminderMinute, currentHour, currentMinute)) continue;
 
       const key = `habit-${habit.id}-${userDateStr}`;
+      // In-memory fast-path first (avoids DB round-trip in common case)
       if (lastHabitReminderSent.get(key)) continue;
+      // DB-backed dedup so server restarts don't trigger duplicate sends
+      const alreadySentInDb = await storage.getServerConfig(key);
+      if (alreadySentInDb) { lastHabitReminderSent.set(key, userDateStr); continue; }
 
       const anchor = habit.anchorHabit ? ` After ${habit.anchorHabit}, it's time to` : " Time to";
       const payload: PushNotificationPayload = {
@@ -301,6 +309,8 @@ export async function sendHabitReminders() {
 
       console.log(`[Habit Reminders] Sending reminder for "${habit.name}" to user ${habit.userId}`);
       await dispatchToSubscriptions(habit.subscriptions, payload);
+      // Persist dedup to DB — prevents re-send after server restarts
+      await storage.setServerConfig(key, '1');
       lastHabitReminderSent.set(key, userDateStr);
     } catch (error) {
       console.error(`[Habit Reminders] Error for habit ${habit.id}:`, error);

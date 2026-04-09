@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { haptic } from "@/lib/haptics";
 import { motion, AnimatePresence } from "framer-motion";
@@ -42,20 +42,53 @@ function getTimeOfDayLabel(): string {
 }
 
 function MoodSlider({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const isDragging = useRef(false);
   const lastHapticVal = useRef<number | null>(null);
   const moodColor = getMoodColor(value);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newVal = Number(e.target.value);
+  const computeValue = useCallback((clientX: number): number => {
+    if (!trackRef.current) return value;
+    const rect = trackRef.current.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    return Math.round(pct * 100);
+  }, [value]);
+
+  const emitValue = useCallback((clientX: number) => {
+    const newVal = computeValue(clientX);
     onChange(newVal);
     if (lastHapticVal.current === null || Math.abs(newVal - lastHapticVal.current) >= 5) {
       haptic("light");
       lastHapticVal.current = newVal;
     }
-  };
+  }, [computeValue, onChange]);
+
+  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    isDragging.current = true;
+    (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+    emitValue(e.clientX);
+  }, [emitValue]);
+
+  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDragging.current) return;
+    emitValue(e.clientX);
+  }, [emitValue]);
+
+  const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    isDragging.current = false;
+    emitValue(e.clientX);
+  }, [emitValue]);
 
   return (
-    <div className="relative w-full" style={{ height: 48, touchAction: "pan-x" } as React.CSSProperties}>
+    <div
+      ref={trackRef}
+      className="relative w-full select-none"
+      style={{ height: 48, touchAction: "none", cursor: "pointer" }}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+    >
       {/* Track background */}
       <div className="absolute top-1/2 -translate-y-1/2 inset-x-0 h-2 rounded-full bg-border" />
       {/* Filled portion */}
@@ -63,18 +96,7 @@ function MoodSlider({ value, onChange }: { value: number; onChange: (v: number) 
         className="absolute top-1/2 -translate-y-1/2 left-0 h-2 rounded-full pointer-events-none"
         style={{ width: `${value}%`, backgroundColor: moodColor }}
       />
-      {/* Native range input — transparent overlay for cross-platform reliability */}
-      <input
-        type="range"
-        min={0}
-        max={100}
-        step={1}
-        value={value}
-        onChange={handleChange}
-        className="absolute inset-0 w-full opacity-0 cursor-pointer"
-        style={{ height: "100%", touchAction: "pan-x" } as React.CSSProperties}
-      />
-      {/* Custom thumb */}
+      {/* Thumb */}
       <div
         className="absolute top-1/2 -translate-y-1/2 w-7 h-7 rounded-full shadow-md border-2 border-white pointer-events-none"
         style={{ left: `calc(${value}% - 14px)`, backgroundColor: moodColor }}

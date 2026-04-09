@@ -206,49 +206,67 @@ async function queryRawMetric(dataType: DataType, dateStr: string): Promise<numb
     // HKCategoryTypeIdentifierSleepAnalysis samples (same source as Sleep Duration)
     // and compute efficiency = asleep-minutes / total-in-bed-minutes × 100.
     if (dataType === "sleep-quality") {
+      // Approach 1: stage-aware efficiency from raw samples
+      // asleepMin / (asleepMin + inBedMin) × 100
       try {
         const result = await (Health as any).query({ dataType: "sleep", startDate, endDate });
         const samples: any[] = result?.data ?? result?.values ?? [];
-        if (samples.length === 0) return null;
 
-        // Apple HealthKit sleep stage identifiers — numeric OR string depending on plugin version
-        const ASLEEP = new Set([1, 3, 4, 5,
-          "asleep", "ASLEEP", "asleepCore", "asleepDeep", "asleepREM",
-          "SLEEPING", "sleeping", "core", "deep", "rem"]);
-        const INBED  = new Set([0, "inBed", "IN_BED", "InBed", "in_bed"]);
-        // value 2 / "awake" is excluded from both
+        if (samples.length > 0) {
+          const ASLEEP = new Set([1, 3, 4, 5,
+            "asleep", "ASLEEP", "asleepCore", "asleepDeep", "asleepREM",
+            "SLEEPING", "sleeping", "core", "deep", "rem"]);
+          const INBED  = new Set([0, "inBed", "IN_BED", "InBed", "in_bed"]);
 
-        let asleepMin = 0;
-        let inBedMin  = 0;
+          let asleepMin = 0;
+          let inBedMin  = 0;
 
-        for (const s of samples) {
-          const dur = Math.max(0,
-            (new Date(s.endDate ?? s.end).getTime() -
-             new Date(s.startDate ?? s.start).getTime()) / 60000
-          );
-          const val = s.value ?? s.stage ?? s.category ?? s.type;
-          if (ASLEEP.has(val)) asleepMin += dur;
-          else if (INBED.has(val)) inBedMin += dur;
-          // awake / unknown: not counted as either
+          for (const s of samples) {
+            const dur = Math.max(0,
+              (new Date(s.endDate ?? s.end).getTime() -
+               new Date(s.startDate ?? s.start).getTime()) / 60000
+            );
+            const val = s.value ?? s.stage ?? s.category ?? s.type;
+            if (ASLEEP.has(val)) asleepMin += dur;
+            else if (INBED.has(val)) inBedMin += dur;
+          }
+
+          const totalBed = asleepMin + inBedMin;
+          if (asleepMin > 0 && totalBed > 0) {
+            return Math.round((asleepMin / totalBed) * 100);
+          }
+
+          // Stages not identified — use total duration as proxy
+          const allMin = samples.reduce((s: number, smp: any) =>
+            s + Math.max(0, (new Date(smp.endDate ?? smp.end).getTime() -
+                             new Date(smp.startDate ?? smp.start).getTime()) / 60000), 0);
+          if (allMin > 0) return Math.min(100, Math.round((allMin / 480) * 100));
         }
+      } catch (e) {
+        console.warn("[HealthKit] sleep-quality raw-sample query failed:", e);
+      }
 
-        const totalBed = asleepMin + inBedMin;
-
-        if (asleepMin > 0 && totalBed > 0) {
-          // Sleep efficiency: asleep ÷ (asleep + in-bed) × 100
-          return Math.round((asleepMin / totalBed) * 100);
+      // Approach 2: fall back to aggregated sleep duration and compute quality
+      // from it (efficiency proxy: totalHours / 8 * 100).
+      try {
+        const r1 = await (Health as any).queryAggregated({ dataType: "sleep", startDate, endDate, bucket: "day" });
+        const agg1 = r1?.aggregatedData ?? r1?.data ?? [];
+        if (agg1.length > 0) {
+          const totalMin = agg1.reduce((s: number, d: any) => s + (d.value ?? 0), 0);
+          if (totalMin > 0) return Math.min(100, Math.round((totalMin / 480) * 100));
         }
+      } catch (_) {}
 
-        // No stage info returned — fall back to duration proxy (all samples treated as sleep)
-        const allMin = samples.reduce((s: number, smp: any) =>
-          s + Math.max(0, (new Date(smp.endDate ?? smp.end).getTime() -
-                           new Date(smp.startDate ?? smp.start).getTime()) / 60000), 0);
-        if (allMin > 0) {
-          // hours ÷ 8 × 100, capped at 100
-          return Math.min(100, Math.round((allMin / 480) * 100));
+      try {
+        const r2 = await (Health as any).queryAggregated({ dataType: "sleep", startDate, endDate });
+        const agg2 = r2?.aggregatedData ?? r2?.data ?? [];
+        if (agg2.length > 0) {
+          const totalMin = agg2.reduce((s: number, d: any) => s + (d.value ?? 0), 0);
+          if (totalMin > 0) return Math.min(100, Math.round((totalMin / 480) * 100));
         }
-      } catch (_) { /* fall through to null */ }
+      } catch (_) {}
 
+      console.warn("[HealthKit] sleep-quality: all approaches returned null");
       return null;
     }
 
