@@ -106,7 +106,7 @@ function AppLayoutInner({ children }: AppLayoutProps) {
   const { data: streak } = useQuery<any>({ queryKey: ["/api/streak"] });
 
   const todayStr = new Date().toISOString().split("T")[0];
-  const { data: todayMoods = [] } = useQuery<any[]>({
+  const { data: todayMoods = [], isLoading: moodsLoading } = useQuery<any[]>({
     queryKey: ["/api/mood-checkins", todayStr],
     queryFn: async () => {
       const r = await fetch(`/api/mood-checkins/${todayStr}`, { credentials: "include" });
@@ -119,6 +119,22 @@ function AppLayoutInner({ children }: AppLayoutProps) {
   const currentPeriod = getCurrentPeriod();
   const hasMoodForPeriod = todayMoods.some((m: any) => m.label === currentPeriod);
   const showMoodPulse = !hasMoodForPeriod;
+
+  // Auto-open mood modal once per period per session if no mood has been logged yet.
+  // Only fires after the query has settled, during reasonable hours (6am–11pm),
+  // and only once per period (tracked in sessionStorage so it survives HMR but
+  // resets when the user fully closes and relaunches the app).
+  useEffect(() => {
+    if (moodsLoading) return;
+    if (hasMoodForPeriod || isMoodOpen) return;
+    const hour = new Date().getHours();
+    if (hour < 6 || hour >= 23) return; // skip late-night
+    const key = `mood_auto_${todayStr}_${currentPeriod}`;
+    if (sessionStorage.getItem(key)) return;
+    sessionStorage.setItem(key, "1"); // mark immediately so re-renders don't re-fire
+    const t = setTimeout(() => setIsMoodOpen(true), 5000);
+    return () => clearTimeout(t);
+  }, [moodsLoading, hasMoodForPeriod, currentPeriod]);
 
   // Auto-sync Apple Health on launch (native iOS, already authorized)
   useEffect(() => {
