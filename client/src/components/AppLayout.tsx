@@ -136,6 +136,20 @@ function AppLayoutInner({ children }: AppLayoutProps) {
     return () => clearTimeout(t);
   }, [moodsLoading, hasMoodForPeriod, currentPeriod]);
 
+  // Silently keep the server's timezone record up-to-date on every app launch.
+  // The notification scheduler needs a valid timezone to send mood/daily reminders.
+  useEffect(() => {
+    if (sessionStorage.getItem("tz_synced")) return;
+    sessionStorage.setItem("tz_synced", "1");
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    fetch("/api/user/timezone", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ timezone: tz }),
+    }).catch(() => {}); // fire-and-forget
+  }, []);
+
   // Auto-sync Apple Health on launch (native iOS, already authorized)
   useEffect(() => {
     if (!isNativeIOS() || !getHealthAuthState()) return;

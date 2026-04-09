@@ -994,23 +994,28 @@ export class DatabaseStorage implements IStorage {
   // ─── Habit methods ─────────────────────────────────────────────────────────
 
   async getHabits(userId: number): Promise<Habit[]> {
-    const SMILE_HABIT = "do something to make someone smile";
+    const SMILE_HABIT = "make someone smile";
 
-    // Seed "Make my bed" for users who have never had any habit (existing accounts pre-Habit Lab)
+    // Seed defaults for users who have never had any habit (existing accounts pre-Habit Lab)
     const allEver = await db.select().from(habits).where(eq(habits.userId, userId));
     if (allEver.length === 0) {
       await db.insert(habits).values([
-        { userId, name: "Do something to make someone smile", emoji: "😊", category: "daily", anchorHabit: null, reminderEnabled: false },
+        { userId, name: "Make someone smile", emoji: "😊", category: "daily", anchorHabit: null, reminderEnabled: false },
         { userId, name: "Make my bed", emoji: "🛏️", category: "morning", anchorHabit: "I wake up", reminderEnabled: false },
       ]);
     } else {
-      // Back-seed the smile habit for existing users who don't have it yet
-      // (including those who may have archived it — we only skip if active copy exists)
-      const hasSmile = allEver.some(h => h.name.toLowerCase() === SMILE_HABIT && !h.isArchived);
-      if (!hasSmile) {
+      // Back-seed/rename the smile habit for all existing users
+      const smileOld = allEver.find(h => h.name.toLowerCase() === "do something to make someone smile");
+      const smileNew = allEver.find(h => h.name.toLowerCase() === SMILE_HABIT);
+
+      if (smileOld && !smileNew) {
+        // Rename the old habit to the new shorter name
+        await db.update(habits).set({ name: "Make someone smile" }).where(eq(habits.id, smileOld.id));
+      } else if (!smileOld && !smileNew) {
+        // No smile habit at all — create it
         await db.insert(habits).values({
           userId,
-          name: "Do something to make someone smile",
+          name: "Make someone smile",
           emoji: "😊",
           category: "daily",
           anchorHabit: null,
@@ -1023,7 +1028,7 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(habits.userId, userId), eq(habits.isArchived, false)))
       .orderBy(habits.createdAt);
 
-    // Always pin "Do something to make someone smile" first
+    // Always pin "Make someone smile" first
     const smileIdx = active.findIndex(h => h.name.toLowerCase() === SMILE_HABIT);
     if (smileIdx > 0) {
       const [smile] = active.splice(smileIdx, 1);

@@ -346,7 +346,7 @@ function WeekDots({ days }: { days: boolean[] }) {
 
 // ─── Habit card ──────────────────────────────────────────────────────────────
 
-const PROTECTED_HABIT = "do something to make someone smile";
+const PROTECTED_HABIT = "make someone smile";
 
 function HabitCard({
   habit,

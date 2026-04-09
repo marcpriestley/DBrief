@@ -54,7 +54,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Seed default daily goal and habits
       await storage.createGoalTemplate({ userId: user.id, title: "Make my bed", recurring: true, isActive: true, sortOrder: 0 });
-      await storage.createHabit({ userId: user.id, name: "Do something to make someone smile", emoji: "😊", category: "daily", anchorHabit: null, reminderEnabled: false });
+      await storage.createHabit({ userId: user.id, name: "Make someone smile", emoji: "😊", category: "daily", anchorHabit: null, reminderEnabled: false });
       await storage.createHabit({ userId: user.id, name: "Make my bed", emoji: "🛏️", category: "morning", anchorHabit: "I wake up", reminderEnabled: false });
       
       (req.session as any).userId = user.id;
@@ -119,7 +119,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         user = await storage.createUser({ username: email, password: randomPw });
         await storage.createStreak({ userId: user.id, currentStreak: 0, longestStreak: 0, lastEntryDate: null });
         await storage.createGoalTemplate({ userId: user.id, title: "Make my bed", recurring: true, isActive: true, sortOrder: 0 });
-        await storage.createHabit({ userId: user.id, name: "Do something to make someone smile", emoji: "😊", category: "daily", anchorHabit: null, reminderEnabled: false });
+        await storage.createHabit({ userId: user.id, name: "Make someone smile", emoji: "😊", category: "daily", anchorHabit: null, reminderEnabled: false });
         await storage.createHabit({ userId: user.id, name: "Make my bed", emoji: "🛏️", category: "morning", anchorHabit: "I wake up", reminderEnabled: false });
       }
 
@@ -217,6 +217,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true, userProfile: updated.userProfile || {}, goalPreference: updated.goalPreference || "morning" });
     } catch (error) {
       res.status(500).json({ message: "Failed to update profile" });
+    }
+  });
+
+  // Lightweight endpoint for clients to keep their timezone in sync on each app launch.
+  // Used by the front-end on startup so the notification scheduler always has a valid tz.
+  app.post("/api/user/timezone", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { timezone } = req.body;
+      if (!timezone || typeof timezone !== "string") return res.status(400).json({ message: "Invalid timezone" });
+      await storage.updateUserSettings(userId, { timezone });
+      res.json({ ok: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update timezone" });
     }
   });
 
@@ -1469,7 +1483,7 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
     try {
       const allHabits = await storage.getHabits(userId);
       const target = allHabits.find(h => h.id === id);
-      if (target && target.name.toLowerCase() === "do something to make someone smile") {
+      if (target && target.name.toLowerCase() === "make someone smile") {
         return res.status(403).json({ message: "This foundational habit cannot be removed." });
       }
       await storage.archiveHabit(id, userId);

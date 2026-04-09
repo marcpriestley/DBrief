@@ -80,14 +80,20 @@ export default function PerformancePatterns() {
             {generateMutation.isPending ? "Scanning…" : "Scan"}
           </button>
         </div>
-        {generateMutation.isPending && (
+        {generateMutation.isPending ? (
           <div className="flex items-center gap-2 mt-3 px-1">
             <div className="flex gap-0.5">
               {[0, 100, 200, 300].map(d => (
                 <span key={d} className="w-0.5 h-3 bg-primary/50 rounded-full animate-pulse" style={{ animationDelay: `${d}ms` }} />
               ))}
             </div>
-            <p className="text-xs text-muted-foreground">Scanning {'>'}30 days of telemetry…</p>
+            <p className="text-xs text-muted-foreground">Scanning telemetry for patterns…</p>
+          </div>
+        ) : (
+          <div className="mt-3 px-1 py-2 rounded-lg bg-muted/40 border border-border/40">
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              <span className="font-medium text-foreground">Needs at least 30 days of data.</span> Keep logging scores, debriefs, and habits daily — your engineer will start spotting correlations once there's enough telemetry to work with.
+            </p>
           </div>
         )}
       </div>
