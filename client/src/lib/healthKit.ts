@@ -213,22 +213,45 @@ async function queryRawMetric(dataType: DataType, dateStr: string): Promise<numb
         const samples: any[] = result?.data ?? result?.values ?? [];
 
         if (samples.length > 0) {
-          const ASLEEP = new Set([1, 3, 4, 5,
-            "asleep", "ASLEEP", "asleepCore", "asleepDeep", "asleepREM",
-            "SLEEPING", "sleeping", "core", "deep", "rem"]);
-          const INBED  = new Set([0, "inBed", "IN_BED", "InBed", "in_bed"]);
+          // Numeric HK enum: 0=InBed, 1=Asleep(legacy), 2=Awake, 3=Core, 4=Deep, 5=REM
+          const ASLEEP_INT = new Set([1, 3, 4, 5]);
+          const INBED_INT  = new Set([0]);
+          const AWAKE_INT  = new Set([2]);
 
           let asleepMin = 0;
           let inBedMin  = 0;
+          let hasRecognizedStage = false;
 
           for (const s of samples) {
             const dur = Math.max(0,
               (new Date(s.endDate ?? s.end).getTime() -
                new Date(s.startDate ?? s.start).getTime()) / 60000
             );
-            const val = s.value ?? s.stage ?? s.category ?? s.type;
-            if (ASLEEP.has(val)) asleepMin += dur;
-            else if (INBED.has(val)) inBedMin += dur;
+            const raw = s.value ?? s.stage ?? s.category ?? s.type;
+            // Normalise string stages to lowercase for case-insensitive matching
+            const valStr = (raw != null && typeof raw !== "number")
+              ? String(raw).toLowerCase().replace(/[^a-z]/g, "")
+              : null;
+            const valNum = typeof raw === "number" ? raw : null;
+
+            const isAsleep =
+              (valNum !== null && ASLEEP_INT.has(valNum)) ||
+              (valStr !== null && (
+                valStr === "asleep" || valStr === "sleeping" ||
+                valStr === "asleepcore" || valStr === "core" ||
+                valStr === "asleepdeep" || valStr === "deep" ||
+                valStr === "asleeprem"  || valStr === "rem"
+              ));
+            const isInBed =
+              (valNum !== null && INBED_INT.has(valNum)) ||
+              (valStr !== null && (valStr === "inbed" || valStr === "inbed"));
+            const isAwake =
+              (valNum !== null && AWAKE_INT.has(valNum)) ||
+              (valStr !== null && valStr === "awake");
+
+            if (isAsleep) { asleepMin += dur; hasRecognizedStage = true; }
+            else if (isInBed)  { inBedMin  += dur; hasRecognizedStage = true; }
+            else if (isAwake)  { hasRecognizedStage = true; /* skip awake time */ }
           }
 
           const totalBed = asleepMin + inBedMin;
@@ -236,11 +259,13 @@ async function queryRawMetric(dataType: DataType, dateStr: string): Promise<numb
             return Math.round((asleepMin / totalBed) * 100);
           }
 
-          // Stages not identified — use total duration as proxy
-          const allMin = samples.reduce((s: number, smp: any) =>
-            s + Math.max(0, (new Date(smp.endDate ?? smp.end).getTime() -
-                             new Date(smp.startDate ?? smp.start).getTime()) / 60000), 0);
-          if (allMin > 0) return Math.min(100, Math.round((allMin / 480) * 100));
+          // No recognised stages at all — use total sample span as a rough proxy
+          if (!hasRecognizedStage) {
+            const allMin = samples.reduce((s: number, smp: any) =>
+              s + Math.max(0, (new Date(smp.endDate ?? smp.end).getTime() -
+                               new Date(smp.startDate ?? smp.start).getTime()) / 60000), 0);
+            if (allMin > 0) return Math.min(100, Math.round((allMin / 480) * 100));
+          }
         }
       } catch (e) {
         console.warn("[HealthKit] sleep-quality raw-sample query failed:", e);
@@ -300,25 +325,36 @@ async function queryRawMetric(dataType: DataType, dateStr: string): Promise<numb
         const result = await (Health as any).query({ dataType, startDate, endDate });
         const samples: any[] = result?.data ?? result?.values ?? [];
         if (samples.length > 0) {
-          const ASLEEP = new Set([1, 3, 4, 5,
-            "asleep", "ASLEEP", "asleepCore", "asleepDeep", "asleepREM",
-            "SLEEPING", "sleeping", "core", "deep", "rem"]);
+          // Numeric HK enum: 0=InBed, 1=Asleep(legacy), 2=Awake, 3=Core, 4=Deep, 5=REM
+          const ASLEEP_INT = new Set([1, 3, 4, 5]);
 
           let asleepMin = 0;
           let hasStageInfo = false;
 
           for (const s of samples) {
-            const val = s.value ?? s.stage ?? s.category ?? s.type;
-            if (val !== undefined && val !== null) hasStageInfo = true;
+            const raw = s.value ?? s.stage ?? s.category ?? s.type;
+            if (raw !== undefined && raw !== null) hasStageInfo = true;
             const dur = Math.max(0,
               (new Date(s.endDate ?? s.end).getTime() -
                new Date(s.startDate ?? s.start).getTime()) / 60000
             );
-            if (ASLEEP.has(val)) asleepMin += dur;
-            else if (!hasStageInfo) asleepMin += dur; // no stage info → count all
+            const valNum = typeof raw === "number" ? raw : null;
+            const valStr = (raw != null && typeof raw !== "number")
+              ? String(raw).toLowerCase().replace(/[^a-z]/g, "")
+              : null;
+
+            const isAsleep =
+              (valNum !== null && ASLEEP_INT.has(valNum)) ||
+              (valStr !== null && (
+                valStr === "asleep" || valStr === "sleeping" ||
+                valStr === "asleepcore" || valStr === "core" ||
+                valStr === "asleepdeep" || valStr === "deep" ||
+                valStr === "asleeprem"  || valStr === "rem"
+              ));
+            if (isAsleep) asleepMin += dur;
           }
 
-          // If we have stage info but no asleep samples, fall back to summing all
+          // No recognised asleep stages — sum all samples as fallback
           if (asleepMin === 0 && !hasStageInfo) {
             asleepMin = samples.reduce((s: number, smp: any) =>
               s + Math.max(0, (new Date(smp.endDate ?? smp.end).getTime() -
