@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, Plus, X, Trash2, Edit2, PartyPopper } from "lucide-react";
@@ -357,61 +358,54 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {showCelebration && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.5 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.5 }}
-            className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none"
-          >
-            <div className="relative">
-              {confettiColors.map((color, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 1, x: 0, y: 0, scale: 1 }}
-                  animate={{
-                    opacity: 0,
-                    x: Math.cos((i / confettiColors.length) * Math.PI * 2) * 150,
-                    y: Math.sin((i / confettiColors.length) * Math.PI * 2) * 150 - 50,
-                    scale: 0.5,
-                    rotate: Math.random() * 360,
-                  }}
-                  transition={{ duration: 1.5, delay: i * 0.05 }}
-                  className="absolute w-3 h-3 rounded-full"
-                  style={{ backgroundColor: color, left: "50%", top: "50%" }}
-                />
-              ))}
-              {confettiColors.map((color, i) => (
-                <motion.div
-                  key={`s-${i}`}
-                  initial={{ opacity: 1, x: 0, y: 0, scale: 1 }}
-                  animate={{
-                    opacity: 0,
-                    x: Math.cos(((i + 0.5) / confettiColors.length) * Math.PI * 2) * 100,
-                    y: Math.sin(((i + 0.5) / confettiColors.length) * Math.PI * 2) * 100 - 30,
-                    scale: 0.3,
-                    rotate: Math.random() * 720,
-                  }}
-                  transition={{ duration: 1.2, delay: i * 0.08 }}
-                  className="absolute w-2 h-4"
-                  style={{ backgroundColor: color, left: "50%", top: "50%", borderRadius: "1px" }}
-                />
-              ))}
+      {showCelebration && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center pointer-events-none">
+          <div className="relative">
+            {confettiColors.map((color, i) => (
               <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: [0, 1.3, 1] }}
-                transition={{ duration: 0.5 }}
-                className="bg-card shadow-xl rounded-2xl p-6 text-center border border-border"
-              >
-                <PartyPopper className="h-12 w-12 text-primary mx-auto mb-2" />
-                <p className="text-lg font-bold text-foreground">All Goals Complete!</p>
-                <p className="text-sm text-muted-foreground mt-1">Session complete. Outstanding execution.</p>
-              </motion.div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+                key={i}
+                initial={{ opacity: 1, x: 0, y: 0, scale: 1 }}
+                animate={{
+                  opacity: 0,
+                  x: Math.cos((i / confettiColors.length) * Math.PI * 2) * 150,
+                  y: Math.sin((i / confettiColors.length) * Math.PI * 2) * 150 - 50,
+                  scale: 0.5,
+                  rotate: Math.random() * 360,
+                }}
+                transition={{ duration: 1.5, delay: i * 0.05 }}
+                className="absolute w-3 h-3 rounded-full"
+                style={{ backgroundColor: color, left: "50%", top: "50%" }}
+              />
+            ))}
+            {confettiColors.map((color, i) => (
+              <motion.div
+                key={`s-${i}`}
+                initial={{ opacity: 1, x: 0, y: 0, scale: 1 }}
+                animate={{
+                  opacity: 0,
+                  x: Math.cos(((i + 0.5) / confettiColors.length) * Math.PI * 2) * 100,
+                  y: Math.sin(((i + 0.5) / confettiColors.length) * Math.PI * 2) * 100 - 30,
+                  scale: 0.3,
+                  rotate: Math.random() * 720,
+                }}
+                transition={{ duration: 1.2, delay: i * 0.08 }}
+                className="absolute w-2 h-4"
+                style={{ backgroundColor: color, left: "50%", top: "50%", borderRadius: "1px" }}
+              />
+            ))}
+            <motion.div
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: [0, 1.3, 1], opacity: 1 }}
+              transition={{ duration: 0.5 }}
+              className="bg-card shadow-xl rounded-2xl p-6 text-center border border-border"
+            >
+              <PartyPopper className="h-12 w-12 text-primary mx-auto mb-2" />
+              <p className="text-lg font-bold text-foreground">All Goals Complete!</p>
+              <p className="text-sm text-muted-foreground mt-1">Session complete. Outstanding execution.</p>
+            </motion.div>
+          </div>
+        </div>
+      , document.body)}
     </div>
   );
 }
