@@ -29,7 +29,8 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
   const [placeholderValues, setPlaceholderValues] = useState<Record<number, string>>({});
   const [submittingPlaceholder, setSubmittingPlaceholder] = useState<number | null>(null);
   const [showCelebration, setShowCelebration] = useState(false);
-  const [prevCompletedCount, setPrevCompletedCount] = useState<number>(-1);
+  const [celebrationFading, setCelebrationFading] = useState(false);
+  const prevCompletedCountRef = useRef<number>(-1);
   const addInputRef = useRef<HTMLInputElement>(null);
 
   const { data: goals = [], isLoading } = useQuery<DailyGoal[]>({
@@ -51,12 +52,16 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
   const blankSlotsNeeded = Math.max(0, MIN_VISIBLE_SLOTS - totalGoals);
 
   useEffect(() => {
-    if (prevCompletedCount >= 0 && completedCount > prevCompletedCount && allGoalsComplete) {
+    const prev = prevCompletedCountRef.current;
+    prevCompletedCountRef.current = completedCount;
+    if (prev >= 0 && completedCount > prev && allGoalsComplete) {
+      setCelebrationFading(false);
       setShowCelebration(true);
       triggerCelebrationHaptic();
-      setTimeout(() => setShowCelebration(false), 3000);
+      // Start fade-out at 2.6s, unmount at 3s
+      setTimeout(() => setCelebrationFading(true), 2600);
+      setTimeout(() => { setShowCelebration(false); setCelebrationFading(false); }, 3000);
     }
-    setPrevCompletedCount(completedCount);
   }, [completedCount, allGoalsComplete]);
 
   useEffect(() => {
@@ -359,50 +364,49 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
       </AnimatePresence>
 
       {showCelebration && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center pointer-events-none">
-          <div className="relative">
-            {confettiColors.map((color, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 1, x: 0, y: 0, scale: 1 }}
-                animate={{
-                  opacity: 0,
-                  x: Math.cos((i / confettiColors.length) * Math.PI * 2) * 150,
-                  y: Math.sin((i / confettiColors.length) * Math.PI * 2) * 150 - 50,
-                  scale: 0.5,
-                  rotate: Math.random() * 360,
-                }}
-                transition={{ duration: 1.5, delay: i * 0.05 }}
-                className="absolute w-3 h-3 rounded-full"
-                style={{ backgroundColor: color, left: "50%", top: "50%" }}
-              />
-            ))}
-            {confettiColors.map((color, i) => (
-              <motion.div
-                key={`s-${i}`}
-                initial={{ opacity: 1, x: 0, y: 0, scale: 1 }}
-                animate={{
-                  opacity: 0,
-                  x: Math.cos(((i + 0.5) / confettiColors.length) * Math.PI * 2) * 100,
-                  y: Math.sin(((i + 0.5) / confettiColors.length) * Math.PI * 2) * 100 - 30,
-                  scale: 0.3,
-                  rotate: Math.random() * 720,
-                }}
-                transition={{ duration: 1.2, delay: i * 0.08 }}
-                className="absolute w-2 h-4"
-                style={{ backgroundColor: color, left: "50%", top: "50%", borderRadius: "1px" }}
-              />
-            ))}
-            <motion.div
-              initial={{ scale: 0, opacity: 0 }}
-              animate={{ scale: [0, 1.3, 1], opacity: 1 }}
-              transition={{ duration: 0.5 }}
-              className="bg-card shadow-xl rounded-2xl p-6 text-center border border-border"
-            >
-              <PartyPopper className="h-12 w-12 text-primary mx-auto mb-2" />
-              <p className="text-lg font-bold text-foreground">All Goals Complete!</p>
-              <p className="text-sm text-muted-foreground mt-1">Session complete. Outstanding execution.</p>
-            </motion.div>
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center pointer-events-none"
+          style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
+        >
+          <div
+            className={celebrationFading ? "celebration-fade-out" : "celebration-pop"}
+            style={{
+              backgroundColor: 'var(--card)',
+              border: '1px solid var(--border)',
+              borderRadius: '1rem',
+              padding: '2rem 2.5rem',
+              textAlign: 'center',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+              maxWidth: '280px',
+              width: '90%',
+            }}
+          >
+            <div style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>🏁</div>
+            <p style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--foreground)', margin: 0 }}>
+              All Goals Complete!
+            </p>
+            <p style={{ fontSize: '0.875rem', color: 'var(--muted-foreground)', marginTop: '0.25rem' }}>
+              Session complete. Outstanding execution.
+            </p>
+            <div style={{
+              marginTop: '1rem',
+              display: 'flex',
+              justifyContent: 'center',
+              gap: '0.5rem',
+            }}>
+              {confettiColors.map((color, i) => (
+                <div
+                  key={i}
+                  style={{
+                    width: '8px',
+                    height: '8px',
+                    borderRadius: '50%',
+                    backgroundColor: color,
+                    animation: `celebrationPop 0.4s ${i * 0.06}s cubic-bezier(0.34,1.56,0.64,1) both`,
+                  }}
+                />
+              ))}
+            </div>
           </div>
         </div>
       , document.body)}

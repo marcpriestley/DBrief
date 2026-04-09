@@ -10,6 +10,19 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+// Stable identifier for this server deployment — changes every time the server starts
+// (i.e. on every Replit deploy). In development, we use "dev" so constant HMR restarts
+// never trigger client reloads. The client compares this against its cached value and
+// forces a hard navigation reload when the value has changed, busting WKWebView's disk cache.
+const BUILD_ID = process.env.NODE_ENV === "production"
+  ? `${Date.now()}`
+  : "dev";
+
+app.get("/api/version", (_req, res) => {
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  res.json({ version: BUILD_ID });
+});
+
 // Force no-cache on HTML so WKWebView (Capacitor) always fetches the latest JS bundle.
 // Must be registered before session middleware and routes so headers are set before
 // any other handler can short-circuit the response (e.g. static file serving).

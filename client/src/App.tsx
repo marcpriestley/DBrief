@@ -86,6 +86,25 @@ function App() {
     }
   }, []);
 
+  // Version-check: detect when WKWebView has served a stale cached HTML page and
+  // force a hard navigation reload to pick up the latest JS bundle.
+  // In development the server returns "dev" — always matches, never reloads.
+  useEffect(() => {
+    fetch("/api/version", { cache: "no-store" })
+      .then(r => r.json())
+      .then(({ version }: { version: string }) => {
+        const stored = localStorage.getItem("build-version");
+        localStorage.setItem("build-version", version);
+        // Only reload if we've seen a previous version AND it differs
+        if (stored && stored !== "dev" && stored !== version) {
+          // Navigate to the same URL — WKWebView treats this as a fresh load
+          // and fetches from the network instead of the disk cache.
+          window.location.href = window.location.href;
+        }
+      })
+      .catch(() => { /* network unavailable — skip silently */ });
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
