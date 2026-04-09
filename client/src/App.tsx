@@ -74,13 +74,15 @@ function AuthenticatedRouter() {
 }
 
 function App() {
-  // Apply dark mode class on startup from localStorage
+  // Apply dark mode class on startup from localStorage.
+  // Default is DARK — only switch to light if the user explicitly saved "light".
+  // This must match the inline <script> in index.html that runs before React.
   useEffect(() => {
     const saved = localStorage.getItem("dbrief_theme");
-    if (saved === "dark") {
-      document.documentElement.classList.add("dark");
-    } else {
+    if (saved === "light") {
       document.documentElement.classList.remove("dark");
+    } else {
+      document.documentElement.classList.add("dark");
     }
   }, []);
 

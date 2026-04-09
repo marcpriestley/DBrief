@@ -43,17 +43,20 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
   const completedCount = goals.filter(g => g.completed).length;
   const totalGoals = goals.length;
   const displayTotal = Math.max(MIN_VISIBLE_SLOTS, totalGoals);
+  // allComplete drives the UI attention ring (requires MIN_VISIBLE_SLOTS for meaningful indicator)
   const allComplete = totalGoals >= MIN_VISIBLE_SLOTS && completedCount === totalGoals;
+  // allGoalsComplete drives the celebration — fires for any number of goals ≥ 1
+  const allGoalsComplete = totalGoals > 0 && completedCount === totalGoals;
   const blankSlotsNeeded = Math.max(0, MIN_VISIBLE_SLOTS - totalGoals);
 
   useEffect(() => {
-    if (prevCompletedCount >= 0 && completedCount > prevCompletedCount && allComplete && totalGoals >= 3) {
+    if (prevCompletedCount >= 0 && completedCount > prevCompletedCount && allGoalsComplete) {
       setShowCelebration(true);
       triggerCelebrationHaptic();
       setTimeout(() => setShowCelebration(false), 3000);
     }
     setPrevCompletedCount(completedCount);
-  }, [completedCount, allComplete, totalGoals]);
+  }, [completedCount, allGoalsComplete]);
 
   useEffect(() => {
     if (showAddInput && addInputRef.current) {

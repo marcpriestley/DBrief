@@ -205,7 +205,10 @@ function AppLayoutInner({ children }: AppLayoutProps) {
           opacity: 0.15,
         }}
       />
-      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-xl border-b border-border/60" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+      <header
+        className="sticky top-0 z-50 backdrop-blur-xl border-b border-border/60"
+        style={{ paddingTop: 'env(safe-area-inset-top)', backgroundColor: 'var(--background)' }}
+      >
         <div className="max-w-2xl mx-auto px-4">
           <div className="flex justify-between items-center h-14">
             <Link href="/">

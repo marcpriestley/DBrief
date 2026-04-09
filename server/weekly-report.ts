@@ -250,10 +250,13 @@ Respond with valid JSON array only (no markdown, no explanation outside the JSON
       response_format: { type: "json_object" },
     });
 
-    const raw = completion.choices[0]?.message?.content?.trim() || "[]";
-    // The model might return { patterns: [...] } or just [...]
+    const raw = completion.choices[0]?.message?.content?.trim() || "{}";
     const parsed = JSON.parse(raw);
-    const arr = Array.isArray(parsed) ? parsed : (parsed.patterns || parsed.correlations || []);
+    // response_format:json_object forces an object wrapper — find the first array value,
+    // regardless of the key name the model chose (patterns / correlations / results / data …)
+    const arr: any[] = Array.isArray(parsed)
+      ? parsed
+      : (Object.values(parsed).find(v => Array.isArray(v)) as any[] | undefined) ?? [];
 
     patterns = arr.slice(0, 3).map((p: any) => ({
       userId,

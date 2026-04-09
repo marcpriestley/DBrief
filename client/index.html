@@ -1,6 +1,17 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
+    <!-- Apply theme class synchronously before ANYTHING else renders.
+         Without this, WKWebView shows a white flash (from :root light-mode vars)
+         before React mounts and the ThemeProvider adds the .dark class. -->
+    <script>
+      try {
+        var t = localStorage.getItem('dbrief_theme');
+        document.documentElement.classList.add(t === 'light' ? 'light' : 'dark');
+      } catch (e) {
+        document.documentElement.classList.add('dark');
+      }
+    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <title>DBrief - Daily Journaling App</title>
