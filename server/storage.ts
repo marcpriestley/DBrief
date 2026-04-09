@@ -994,21 +994,43 @@ export class DatabaseStorage implements IStorage {
   // ─── Habit methods ─────────────────────────────────────────────────────────
 
   async getHabits(userId: number): Promise<Habit[]> {
+    const SMILE_HABIT = "do something to make someone smile";
+
     // Seed "Make my bed" for users who have never had any habit (existing accounts pre-Habit Lab)
-    const allEver = await db.select({ id: habits.id }).from(habits).where(eq(habits.userId, userId));
+    const allEver = await db.select().from(habits).where(eq(habits.userId, userId));
     if (allEver.length === 0) {
-      await db.insert(habits).values({
-        userId,
-        name: "Make my bed",
-        emoji: "🛏️",
-        category: "morning",
-        anchorHabit: "I wake up",
-        reminderEnabled: false,
-      });
+      await db.insert(habits).values([
+        { userId, name: "Do something to make someone smile", emoji: "😊", category: "daily", anchorHabit: null, reminderEnabled: false },
+        { userId, name: "Make my bed", emoji: "🛏️", category: "morning", anchorHabit: "I wake up", reminderEnabled: false },
+      ]);
+    } else {
+      // Back-seed the smile habit for existing users who don't have it yet
+      // (including those who may have archived it — we only skip if active copy exists)
+      const hasSmile = allEver.some(h => h.name.toLowerCase() === SMILE_HABIT && !h.isArchived);
+      if (!hasSmile) {
+        await db.insert(habits).values({
+          userId,
+          name: "Do something to make someone smile",
+          emoji: "😊",
+          category: "daily",
+          anchorHabit: null,
+          reminderEnabled: false,
+        });
+      }
     }
-    return await db.select().from(habits)
+
+    const active = await db.select().from(habits)
       .where(and(eq(habits.userId, userId), eq(habits.isArchived, false)))
       .orderBy(habits.createdAt);
+
+    // Always pin "Do something to make someone smile" first
+    const smileIdx = active.findIndex(h => h.name.toLowerCase() === SMILE_HABIT);
+    if (smileIdx > 0) {
+      const [smile] = active.splice(smileIdx, 1);
+      active.unshift(smile);
+    }
+
+    return active;
   }
 
   async createHabit(habit: InsertHabit): Promise<Habit> {

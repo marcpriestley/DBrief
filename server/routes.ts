@@ -52,8 +52,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Initialize streak
       await storage.createStreak({ userId: user.id, currentStreak: 0, longestStreak: 0, lastEntryDate: null });
 
-      // Seed default daily goal and habit
+      // Seed default daily goal and habits
       await storage.createGoalTemplate({ userId: user.id, title: "Make my bed", recurring: true, isActive: true, sortOrder: 0 });
+      await storage.createHabit({ userId: user.id, name: "Do something to make someone smile", emoji: "😊", category: "daily", anchorHabit: null, reminderEnabled: false });
       await storage.createHabit({ userId: user.id, name: "Make my bed", emoji: "🛏️", category: "morning", anchorHabit: "I wake up", reminderEnabled: false });
       
       (req.session as any).userId = user.id;
@@ -118,6 +119,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         user = await storage.createUser({ username: email, password: randomPw });
         await storage.createStreak({ userId: user.id, currentStreak: 0, longestStreak: 0, lastEntryDate: null });
         await storage.createGoalTemplate({ userId: user.id, title: "Make my bed", recurring: true, isActive: true, sortOrder: 0 });
+        await storage.createHabit({ userId: user.id, name: "Do something to make someone smile", emoji: "😊", category: "daily", anchorHabit: null, reminderEnabled: false });
         await storage.createHabit({ userId: user.id, name: "Make my bed", emoji: "🛏️", category: "morning", anchorHabit: "I wake up", reminderEnabled: false });
       }
 
@@ -1465,6 +1467,11 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
     if (!userId) return res.status(401).json({ message: "Not authenticated" });
     const id = parseInt(req.params.id);
     try {
+      const allHabits = await storage.getHabits(userId);
+      const target = allHabits.find(h => h.id === id);
+      if (target && target.name.toLowerCase() === "do something to make someone smile") {
+        return res.status(403).json({ message: "This foundational habit cannot be removed." });
+      }
       await storage.archiveHabit(id, userId);
       res.json({ success: true });
     } catch (error) {

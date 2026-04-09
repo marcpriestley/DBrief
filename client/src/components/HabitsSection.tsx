@@ -346,6 +346,8 @@ function WeekDots({ days }: { days: boolean[] }) {
 
 // ─── Habit card ──────────────────────────────────────────────────────────────
 
+const PROTECTED_HABIT = "do something to make someone smile";
+
 function HabitCard({
   habit,
   onToggle,
@@ -358,6 +360,7 @@ function HabitCard({
   onDelete: (id: number) => void;
 }) {
   const [showMenu, setShowMenu] = useState(false);
+  const isProtected = habit.name.toLowerCase() === PROTECTED_HABIT;
   const total = habit.totalCompletions || 0;
   const { next: milestone, label: milestoneLabel } = getMilestone(total);
   const progress = Math.min(100, (total / milestone) * 100);
@@ -464,12 +467,14 @@ function HabitCard({
               >
                 <Settings2 className="h-3.5 w-3.5" /> Edit
               </button>
-              <button
-                onClick={() => { onDelete(habit.id); setShowMenu(false); }}
-                className="flex-1 flex items-center justify-center gap-1.5 text-xs text-red-500 bg-red-500/10 rounded-lg py-2"
-              >
-                <Trash2 className="h-3.5 w-3.5" /> Remove
-              </button>
+              {!isProtected && (
+                <button
+                  onClick={() => { onDelete(habit.id); setShowMenu(false); }}
+                  className="flex-1 flex items-center justify-center gap-1.5 text-xs text-red-500 bg-red-500/10 rounded-lg py-2"
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> Remove
+                </button>
+              )}
             </div>
           </motion.div>
         )}
