@@ -8,6 +8,7 @@ export interface PushNotificationPayload {
   url?: string;
   tag?: string;
   category?: string;
+  type?: string;
 }
 
 const APNS_HOST_SANDBOX = "https://api.sandbox.push.apple.com";
@@ -179,7 +180,8 @@ export async function sendApnsNotification(
       badge: 0,
       ...(payload.category ? { category: payload.category } : {}),
     },
-    ...(payload.url ? { url: payload.url } : {}),
+    ...(payload.url  ? { url:  payload.url  } : {}),
+    ...(payload.type ? { type: payload.type } : {}),
   });
 
   return new Promise((resolve) => {

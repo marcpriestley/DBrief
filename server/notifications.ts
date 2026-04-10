@@ -250,6 +250,7 @@ export async function sendMoodCheckinReminders() {
           url:   '/dashboard?mood=checkin',
           tag:   `mood-${checkinTime.label}-${user.id}`,
           category: 'MOOD_CHECKIN',
+          type:     'MOOD_CHECKIN',
         };
 
         console.log(`[Mood Reminders] Sending ${checkinTime.label} check-in to user ${user.id}`);

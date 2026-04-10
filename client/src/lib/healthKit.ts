@@ -202,77 +202,33 @@ async function queryRawMetric(dataType: DataType, dateStr: string): Promise<numb
     }
 
     // ── Sleep Quality ──────────────────────────────────────────────────────────
-    // HealthKit has no native "sleep-quality" quantity type. We query the raw
-    // HKCategoryTypeIdentifierSleepAnalysis samples (same source as Sleep Duration)
-    // and compute efficiency = asleep-minutes / total-in-bed-minutes × 100.
+    // The Swift plugin implements querySleepQuality() which computes
+    // asleepMinutes / inBedMinutes × 100 natively and returns it via
+    // queryAggregated({ dataType: "sleep-quality" }). Use that as the primary
+    // path; fall back to computing quality from sleep-duration data if it fails.
     if (dataType === "sleep-quality") {
-      // Approach 1: stage-aware efficiency from raw samples
-      // asleepMin / (asleepMin + inBedMin) × 100
+      // Approach 1 (best): plugin computes efficiency natively per day
       try {
-        const result = await (Health as any).query({ dataType: "sleep", startDate, endDate });
-        const samples: any[] = result?.data ?? result?.values ?? [];
-
-        if (samples.length > 0) {
-          // Numeric HK enum: 0=InBed, 1=Asleep(legacy), 2=Awake, 3=Core, 4=Deep, 5=REM
-          const ASLEEP_INT = new Set([1, 3, 4, 5]);
-          const INBED_INT  = new Set([0]);
-          const AWAKE_INT  = new Set([2]);
-
-          let asleepMin = 0;
-          let inBedMin  = 0;
-          let hasRecognizedStage = false;
-
-          for (const s of samples) {
-            const dur = Math.max(0,
-              (new Date(s.endDate ?? s.end).getTime() -
-               new Date(s.startDate ?? s.start).getTime()) / 60000
-            );
-            const raw = s.value ?? s.stage ?? s.category ?? s.type;
-            // Normalise string stages to lowercase for case-insensitive matching
-            const valStr = (raw != null && typeof raw !== "number")
-              ? String(raw).toLowerCase().replace(/[^a-z]/g, "")
-              : null;
-            const valNum = typeof raw === "number" ? raw : null;
-
-            const isAsleep =
-              (valNum !== null && ASLEEP_INT.has(valNum)) ||
-              (valStr !== null && (
-                valStr === "asleep" || valStr === "sleeping" ||
-                valStr === "asleepcore" || valStr === "core" ||
-                valStr === "asleepdeep" || valStr === "deep" ||
-                valStr === "asleeprem"  || valStr === "rem"
-              ));
-            const isInBed =
-              (valNum !== null && INBED_INT.has(valNum)) ||
-              (valStr !== null && (valStr === "inbed" || valStr === "inbed"));
-            const isAwake =
-              (valNum !== null && AWAKE_INT.has(valNum)) ||
-              (valStr !== null && valStr === "awake");
-
-            if (isAsleep) { asleepMin += dur; hasRecognizedStage = true; }
-            else if (isInBed)  { inBedMin  += dur; hasRecognizedStage = true; }
-            else if (isAwake)  { hasRecognizedStage = true; /* skip awake time */ }
-          }
-
-          const totalBed = asleepMin + inBedMin;
-          if (asleepMin > 0 && totalBed > 0) {
-            return Math.round((asleepMin / totalBed) * 100);
-          }
-
-          // No recognised stages at all — use total sample span as a rough proxy
-          if (!hasRecognizedStage) {
-            const allMin = samples.reduce((s: number, smp: any) =>
-              s + Math.max(0, (new Date(smp.endDate ?? smp.end).getTime() -
-                               new Date(smp.startDate ?? smp.start).getTime()) / 60000), 0);
-            if (allMin > 0) return Math.min(100, Math.round((allMin / 480) * 100));
+        const r = await (Health as any).queryAggregated({ dataType: "sleep-quality", startDate, endDate, bucket: "day" });
+        const agg: any[] = r?.aggregatedData ?? r?.data ?? [];
+        if (agg.length > 0) {
+          // Each entry already contains an efficiency % (0–100).
+          // Take the entry whose startDate is closest to the requested date,
+          // or just sum/average — since the query window spans one night,
+          // there should normally be a single entry.
+          const best = agg.reduce((best: any, d: any) =>
+            (d.value ?? 0) > (best?.value ?? 0) ? d : best, agg[0]);
+          const eff = best?.value ?? 0;
+          if (eff > 0) {
+            console.log("[HealthKit] sleep-quality via native efficiency:", eff);
+            return Math.min(100, Math.round(eff));
           }
         }
       } catch (e) {
-        console.warn("[HealthKit] sleep-quality raw-sample query failed:", e);
+        console.warn("[HealthKit] sleep-quality native queryAggregated failed:", e);
       }
 
-      // Approach 2: fall back to aggregated sleep duration and compute quality
-      // from it (efficiency proxy: totalHours / 8 * 100).
+      // Approach 2: aggregate raw sleep-duration and use as proxy (hrs / 8 × 100)
       try {
         const r1 = await (Health as any).queryAggregated({ dataType: "sleep", startDate, endDate, bucket: "day" });
         const agg1 = r1?.aggregatedData ?? r1?.data ?? [];

@@ -117,9 +117,16 @@ export async function setupNotificationTapListener() {
   try {
     const { PushNotifications } = await import("@capacitor/push-notifications");
     await PushNotifications.addListener("notificationActionPerformed", (action) => {
-      const url = action.notification?.data?.url as string | undefined;
-      console.log("[APNs] Notification tapped, url:", url);
-      handleNotificationUrl(url);
+      const data: Record<string, any> = action.notification?.data ?? {};
+      const url  = (data.url  ?? data.URL)  as string | undefined;
+      const type = (data.type ?? data.TYPE ?? data.category) as string | undefined;
+      console.log("[APNs] Notification tapped, url:", url, "type:", type);
+      // Mood check-in: detect by type field (preferred) or URL fallback
+      if (type === "MOOD_CHECKIN" || url?.includes("mood=checkin")) {
+        dispatchOpenMood();
+      } else {
+        handleNotificationUrl(url);
+      }
     });
     // When app comes to foreground: clear notification centre AND reset badge
     clearBadge();
@@ -137,7 +144,14 @@ export async function setupNotificationTapListener() {
 // Also handle taps delivered via native bridge before React mounted
 if (typeof window !== "undefined") {
   window.addEventListener("apns-notification-tap", (e: any) => {
-    handleNotificationUrl(e.detail?.url);
+    const detail = e.detail ?? {};
+    const url  = (detail.url  ?? detail.URL)  as string | undefined;
+    const type = (detail.type ?? detail.TYPE ?? detail.category) as string | undefined;
+    if (type === "MOOD_CHECKIN" || url?.includes("mood=checkin")) {
+      dispatchOpenMood();
+    } else {
+      handleNotificationUrl(url);
+    }
   });
 }
 

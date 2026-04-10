@@ -665,9 +665,14 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         {healthSyncing ? "Connecting…" : healthSetupNeeded ? "Try connecting anyway" : "Connect Apple Health"}
                       </Button>
                       {!healthSetupNeeded && (
-                        <p className="text-[11px] text-muted-foreground leading-relaxed">
-                          Grant access so DBrief can read your health data and auto-fill your metrics.
-                        </p>
+                        <div className="space-y-1.5">
+                          <p className="text-[11px] text-muted-foreground leading-relaxed">
+                            Grant access so DBrief can read your health data and auto-fill your metrics.
+                          </p>
+                          <p className="text-[11px] text-amber-600 dark:text-amber-400 leading-relaxed">
+                            <strong>Sleep not showing?</strong> iOS Settings → Privacy & Security → Health → DBrief → turn on Sleep Analysis.
+                          </p>
+                        </div>
                       )}
                     </div>
                   )
