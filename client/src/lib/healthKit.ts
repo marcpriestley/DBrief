@@ -238,13 +238,27 @@ async function queryRawMetric(dataType: DataType, dateStr: string): Promise<numb
         }
       } catch (_) {}
 
-      // Last resort: sleep duration proxy (hours / 8 × 100)
+      // Last resort: sleep duration proxy via SPM plugin (no native plugin needed)
       try {
-        const r = await ExtendedHealth.querySleep({ startDate, endDate });
-        if (r.minutes > 0) return Math.min(100, Math.round((r.minutes / 480) * 100));
+        const r = await (Health as any).queryAggregated({ dataType: "sleep", startDate, endDate, bucket: "day" });
+        const data: any[] = r?.aggregatedData ?? r?.data ?? [];
+        if (data.length > 0) {
+          const total = data.reduce((s: number, d: any) => s + (d.value ?? 0), 0);
+          if (total > 0) return Math.min(100, Math.round((total / 480) * 100)); // treat as minutes → proxy %
+        }
       } catch (_) {}
 
-      console.warn("[HealthKit] sleep-quality: all approaches returned null");
+      // Final proxy: query with no bucket in case bucketless works
+      try {
+        const r = await (Health as any).queryAggregated({ dataType: "sleep", startDate, endDate });
+        const data: any[] = r?.aggregatedData ?? r?.data ?? [];
+        if (data.length > 0) {
+          const total = data.reduce((s: number, d: any) => s + (d.value ?? 0), 0);
+          if (total > 0) return Math.min(100, Math.round((total / 480) * 100));
+        }
+      } catch (_) {}
+
+      console.warn("[HealthKit] sleep-quality: all approaches returned null — ExtendedHealth.swift likely missing from Xcode project");
       return null;
     }
 
