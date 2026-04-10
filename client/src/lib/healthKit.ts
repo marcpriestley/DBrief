@@ -380,3 +380,44 @@ export async function syncHealthData(dateStr: string, enabledMetricNames: string
 
   return { synced: results.length, metrics: results };
 }
+
+/** Diagnostic: calls each sleep query path individually and returns a human-readable report.
+ *  Use the "Sleep Diagnostic" button in Settings to run this. No rebuild required. */
+export async function diagnoseSleepSync(): Promise<string> {
+  const dateStr = new Date().toISOString().split("T")[0];
+  const todayLocal = new Date(`${dateStr}T20:00:00`);
+  const prevLocal  = new Date(`${dateStr}T04:00:00`);
+  prevLocal.setDate(prevLocal.getDate() - 1);
+  const startDate = prevLocal.toISOString();
+  const endDate   = todayLocal.toISOString();
+
+  const lines: string[] = [`Window: ${startDate.slice(0,16)} → ${endDate.slice(0,16)}`];
+
+  // 1. ExtendedHealth
+  try {
+    const r = await ExtendedHealth.querySleepQuality({ startDate, endDate });
+    lines.push(`ExtendedHealth: efficiency=${r.efficiency}, mins=${r.minutes}`);
+  } catch (e: any) {
+    lines.push(`ExtendedHealth: ERROR — ${String(e?.message ?? e).slice(0,80)}`);
+  }
+
+  // 2. Health.queryAggregated sleep-quality
+  try {
+    const r = await (Health as any).queryAggregated({ dataType: "sleep-quality", startDate, endDate, bucket: "day" });
+    const agg: any[] = r?.aggregatedData ?? r?.data ?? [];
+    lines.push(`HealthSPM sleep-quality: ${agg.length} samples — ${JSON.stringify(agg.slice(0,2))}`);
+  } catch (e: any) {
+    lines.push(`HealthSPM sleep-quality: ERROR — ${String(e?.message ?? e).slice(0,80)}`);
+  }
+
+  // 3. Health.queryAggregated sleep
+  try {
+    const r = await (Health as any).queryAggregated({ dataType: "sleep", startDate, endDate, bucket: "day" });
+    const agg: any[] = r?.aggregatedData ?? r?.data ?? [];
+    lines.push(`HealthSPM sleep: ${agg.length} samples — ${JSON.stringify(agg.slice(0,2))}`);
+  } catch (e: any) {
+    lines.push(`HealthSPM sleep: ERROR — ${String(e?.message ?? e).slice(0,80)}`);
+  }
+
+  return lines.join("\n");
+}

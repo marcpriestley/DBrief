@@ -31,6 +31,7 @@ import {
   getHealthSyncableMetrics,
   checkHealthAvailable,
   getLastHealthError,
+  diagnoseSleepSync,
 } from "@/lib/healthKit";
 
 const APPLE_HEALTH_METRICS: {
@@ -345,6 +346,8 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [healthSyncing, setHealthSyncing] = useState(false);
   const [healthSyncResult, setHealthSyncResult] = useState<string | null>(null);
   const [healthSetupNeeded, setHealthSetupNeeded] = useState(false);
+  const [sleepDiagRunning, setSleepDiagRunning] = useState(false);
+  const [sleepDiagResult, setSleepDiagResult] = useState<string | null>(null);
   const [healthRawError, setHealthRawError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -527,6 +530,19 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     }
   };
 
+  const runSleepDiagnostic = async () => {
+    setSleepDiagRunning(true);
+    setSleepDiagResult(null);
+    try {
+      const report = await diagnoseSleepSync();
+      setSleepDiagResult(report);
+    } catch (e: any) {
+      setSleepDiagResult(`Failed: ${e?.message ?? e}`);
+    } finally {
+      setSleepDiagRunning(false);
+    }
+  };
+
   const existingMetricNames = new Set(userMetrics.filter(m => m.isActive !== false).map(m => m.name.toLowerCase()));
 
   const handleToggleHealthMetric = async (metric: typeof APPLE_HEALTH_METRICS[0]) => {
@@ -674,6 +690,22 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       </div>
                       {healthSyncResult && (
                         <p className="text-[10px] text-muted-foreground px-0.5">{healthSyncResult} · select metrics below to choose what syncs</p>
+                      )}
+                      {/* Sleep diagnostic — tap to see raw query output for debugging */}
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={runSleepDiagnostic}
+                          disabled={sleepDiagRunning}
+                          className="text-[10px] text-muted-foreground underline underline-offset-2 disabled:opacity-50"
+                        >
+                          {sleepDiagRunning ? "Running sleep diagnostic…" : "Sleep diagnostic"}
+                        </button>
+                        {sleepDiagResult && (
+                          <button onClick={() => setSleepDiagResult(null)} className="text-[10px] text-muted-foreground">✕</button>
+                        )}
+                      </div>
+                      {sleepDiagResult && (
+                        <pre className="text-[9px] text-muted-foreground bg-muted/50 rounded p-2 whitespace-pre-wrap break-all leading-relaxed">{sleepDiagResult}</pre>
                       )}
                     </div>
                   ) : (
