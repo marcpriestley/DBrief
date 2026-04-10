@@ -517,11 +517,17 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
   const existingMetricNames = new Set(userMetrics.filter(m => m.isActive !== false).map(m => m.name.toLowerCase()));
 
-  const handleToggleHealthMetric = (metric: typeof APPLE_HEALTH_METRICS[0]) => {
+  const handleToggleHealthMetric = async (metric: typeof APPLE_HEALTH_METRICS[0]) => {
     const existing = userMetrics.find(m => m.name.toLowerCase() === metric.name.toLowerCase());
     if (existing && existing.isActive !== false) {
       deleteMetricMutation.mutate(existing.id);
     } else {
+      // If enabling an auto-sync metric on iOS, request permissions immediately so
+      // iOS prompts for any permissions not yet granted (e.g. Sleep Analysis)
+      const canAutoSync = isNativeIOS() && getHealthSyncableMetrics().includes(metric.name);
+      if (canAutoSync) {
+        await requestHealthPermissions();
+      }
       addMetricMutation.mutate({ name: metric.name, color: metric.color, maxValue: metric.maxValue });
     }
   };
@@ -637,18 +643,6 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       {healthSyncResult && (
                         <p className="text-[10px] text-muted-foreground px-0.5">{healthSyncResult} · select metrics below to choose what syncs</p>
                       )}
-                      <Button
-                        variant="outline"
-                        className="w-full h-8 text-xs gap-1.5"
-                        onClick={handleConnectHealth}
-                        disabled={healthSyncing}
-                      >
-                        <Heart className="h-3.5 w-3.5" />
-                        Update health permissions
-                      </Button>
-                      <p className="text-[10px] text-muted-foreground leading-relaxed">
-                        Tap above if Sleep is missing — iOS will prompt for any permissions not yet granted.
-                      </p>
                     </div>
                   ) : (
                     <div className="space-y-2">
