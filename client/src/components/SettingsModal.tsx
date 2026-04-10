@@ -525,13 +525,33 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     if (existing && existing.isActive !== false) {
       deleteMetricMutation.mutate(existing.id);
     } else {
-      // If enabling an auto-sync metric on iOS, request permissions immediately so
-      // iOS prompts for any permissions not yet granted (e.g. Sleep Analysis)
+      // Request permissions first so iOS prompts for any not yet granted (e.g. Sleep Analysis)
       const canAutoSync = isNativeIOS() && getHealthSyncableMetrics().includes(metric.name);
       if (canAutoSync) {
         await requestHealthPermissions();
       }
-      addMetricMutation.mutate({ name: metric.name, color: metric.color, maxValue: metric.maxValue });
+      // Add the metric, then immediately sync so the value appears without needing a relaunch
+      await addMetricMutation.mutateAsync({ name: metric.name, color: metric.color, maxValue: metric.maxValue });
+      if (canAutoSync && getHealthAuthState()) {
+        setHealthSyncing(true);
+        try {
+          const today = new Date().toISOString().split("T")[0];
+          const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+          const [r1, r2] = await Promise.all([
+            syncHealthData(today, [metric.name]),
+            syncHealthData(yesterday, [metric.name]),
+          ]);
+          const total = r1.synced + r2.synced;
+          queryClient.invalidateQueries({ queryKey: ["/api/daily-scores"] });
+          if (total > 0) {
+            setHealthSyncResult(`Synced ${metric.name}`);
+          }
+        } catch {
+          // Non-fatal — metric is added, just no value yet
+        } finally {
+          setHealthSyncing(false);
+        }
+      }
     }
   };
 

@@ -55,16 +55,25 @@ public class ExtendedHealth: CAPPlugin, CAPBridgedPlugin {
             predicate: predicate,
             limit: HKObjectQueryNoLimit,
             sortDescriptors: nil
-        ) { [weak self] _, samples, error in
+        ) { _, samples, error in
             guard error == nil, let samples = samples as? [HKCategorySample] else {
                 call.resolve(["minutes": 0])
                 return
             }
             let asleepValues = Self.asleepCategoryValues()
-            let totalSeconds = samples
+            let inBedValue   = HKCategoryValueSleepAnalysis.inBed.rawValue
+            let asleepSeconds = samples
                 .filter { asleepValues.contains($0.value) }
                 .reduce(0.0) { $0 + $1.endDate.timeIntervalSince($1.startDate) }
-            call.resolve(["minutes": Int(totalSeconds / 60)])
+            // Fallback: iPhone-only tracking records only inBed samples (no separate asleep stages)
+            if asleepSeconds > 0 {
+                call.resolve(["minutes": Int(asleepSeconds / 60)])
+            } else {
+                let inBedSeconds = samples
+                    .filter { $0.value == inBedValue }
+                    .reduce(0.0) { $0 + $1.endDate.timeIntervalSince($1.startDate) }
+                call.resolve(["minutes": Int(inBedSeconds / 60)])
+            }
         }
         healthStore.execute(query)
     }
@@ -115,16 +124,21 @@ public class ExtendedHealth: CAPPlugin, CAPBridgedPlugin {
 
             let efficiency: Int
             if inBedSeconds > 0 && asleepSeconds > 0 {
-                // Standard sleep efficiency
+                // Standard sleep efficiency: time asleep ÷ time in bed
                 efficiency = min(100, Int((asleepSeconds / inBedSeconds) * 100))
             } else if asleepSeconds > 0 {
-                // No in-bed samples — use duration proxy: 8 h = 100 %
+                // No in-bed samples — proxy from duration: 8 h = 100 %
                 efficiency = min(100, Int((asleepSeconds / (8.0 * 3600.0)) * 100))
+            } else if inBedSeconds > 0 {
+                // iPhone-only tracking: only inBed samples, no separate asleep stages.
+                // Apply a standard 92 % efficiency assumption (WHO/AASM typical value).
+                efficiency = min(100, Int((inBedSeconds / (8.0 * 3600.0)) * 92))
             } else {
                 efficiency = 0
             }
 
-            call.resolve(["efficiency": efficiency, "minutes": asleepMinutes])
+            let reportMinutes = asleepMinutes > 0 ? asleepMinutes : Int(inBedSeconds / 60)
+            call.resolve(["efficiency": efficiency, "minutes": reportMinutes])
         }
         healthStore.execute(query)
     }
