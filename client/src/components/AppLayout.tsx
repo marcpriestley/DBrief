@@ -5,14 +5,13 @@ import { CalendarDays, TrendingUp, Settings, LogOut, Smile, ChevronLeft } from "
 import { Button } from "@/components/ui/button";
 import StreakDisplay from "@/components/StreakDisplay";
 import SettingsModal from "@/components/SettingsModal";
-import MoodCheckinModal from "@/components/MoodCheckinModal";
 import AppTour from "@/components/AppTour";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { haptic } from "@/lib/haptics";
 import { DateProvider, useDateContext } from "@/contexts/DateContext";
 import logoSrc from "@assets/9071F600-13EE-4563-BC00-D0D7AB8E3782_1_105_c_1775250530025.jpeg";
 import { isNativeIOS, getHealthAuthState, syncHealthData } from "@/lib/healthKit";
-import { consumePendingMoodOpen } from "@/hooks/useNativeNotifications";
+import { useMoodOpen } from "@/contexts/MoodContext";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -101,7 +100,7 @@ function getCurrentPeriod() {
 function AppLayoutInner({ children }: AppLayoutProps) {
   const [location] = useLocation();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isMoodOpen, setIsMoodOpen] = useState(false);
+  const { openMood } = useMoodOpen();
 
   const { data: streak } = useQuery<any>({ queryKey: ["/api/streak"] });
 
@@ -121,18 +120,15 @@ function AppLayoutInner({ children }: AppLayoutProps) {
   const showMoodPulse = !hasMoodForPeriod;
 
   // Auto-open mood modal once per period per session if no mood has been logged yet.
-  // Only fires after the query has settled, during reasonable hours (6am–11pm),
-  // and only once per period (tracked in sessionStorage so it survives HMR but
-  // resets when the user fully closes and relaunches the app).
   useEffect(() => {
     if (moodsLoading) return;
-    if (hasMoodForPeriod || isMoodOpen) return;
+    if (hasMoodForPeriod) return;
     const hour = new Date().getHours();
-    if (hour < 6 || hour >= 23) return; // skip late-night
+    if (hour < 6 || hour >= 23) return;
     const key = `mood_auto_${todayStr}_${currentPeriod}`;
     if (sessionStorage.getItem(key)) return;
-    sessionStorage.setItem(key, "1"); // mark immediately so re-renders don't re-fire
-    const t = setTimeout(() => setIsMoodOpen(true), 5000);
+    sessionStorage.setItem(key, "1");
+    const t = setTimeout(() => openMood(), 5000);
     return () => clearTimeout(t);
   }, [moodsLoading, hasMoodForPeriod, currentPeriod]);
 
@@ -177,39 +173,6 @@ function AppLayoutInner({ children }: AppLayoutProps) {
     return () => clearTimeout(t);
   }, []);
 
-  // Open mood modal from: (1) URL param set by web-push click, (2) custom event
-  // fired by in-app notification tap, or (3) native notification tap that arrived
-  // before AppLayout mounted (pendingMoodOpen flag consumed here).
-  useEffect(() => {
-    // Check URL for ?mood=checkin — works on initial mount AND after in-app navigation.
-    const checkMoodParam = () => {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get("mood") === "checkin") {
-        setIsMoodOpen(true);
-        window.history.replaceState({}, "", window.location.pathname);
-      }
-    };
-
-    checkMoodParam();
-
-    // Native notification tap that fired before this component mounted
-    if (consumePendingMoodOpen()) {
-      setIsMoodOpen(true);
-    }
-
-    const onOpenMood = () => setIsMoodOpen(true);
-    window.addEventListener("dbrief:open-mood", onOpenMood);
-
-    // Re-check URL when the browser navigates (covers: service-worker navigate()
-    // called while the app is already open on the same route — no remount occurs,
-    // but a popstate / hashchange is fired).
-    window.addEventListener("popstate", checkMoodParam);
-
-    return () => {
-      window.removeEventListener("dbrief:open-mood", onOpenMood);
-      window.removeEventListener("popstate", checkMoodParam);
-    };
-  }, []);
 
   const logoutMutation = useMutation({
     mutationFn: async () => { await apiRequest("POST", "/api/auth/logout"); },
@@ -272,7 +235,7 @@ function AppLayoutInner({ children }: AppLayoutProps) {
                   variant="ghost"
                   size="icon"
                   className={`h-8 w-8 transition-colors ${showMoodPulse ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
-                  onClick={() => { haptic("light"); setIsMoodOpen(true); }}
+                  onClick={() => { haptic("light"); openMood(); }}
                   title={`${currentPeriod.charAt(0).toUpperCase() + currentPeriod.slice(1)} mood check-in`}
                 >
                   <Smile className={`h-4 w-4 ${showMoodPulse ? "scale-110" : ""} transition-transform`} />
@@ -337,7 +300,6 @@ function AppLayoutInner({ children }: AppLayoutProps) {
       </main>
 
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
-      <MoodCheckinModal open={isMoodOpen} onClose={() => setIsMoodOpen(false)} />
       <AppTour />
     </div>
   );

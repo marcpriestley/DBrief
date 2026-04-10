@@ -1,7 +1,7 @@
 import { Switch, Route } from "wouter";
 import { queryClient, getQueryFn } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Dashboard from "@/pages/dashboard";
@@ -12,7 +12,9 @@ import OnboardingFlow from "@/components/OnboardingFlow";
 import NotFound from "@/pages/not-found";
 import PrivacyPolicy from "@/pages/privacy";
 import BirthdayCelebration from "@/components/BirthdayCelebration";
-import { registerNativePush, isNativePlatform, clearBadge, setupNotificationTapListener } from "@/hooks/useNativeNotifications";
+import MoodCheckinModal from "@/components/MoodCheckinModal";
+import { MoodProvider } from "@/contexts/MoodContext";
+import { registerNativePush, isNativePlatform, clearBadge, setupNotificationTapListener, consumePendingMoodOpen } from "@/hooks/useNativeNotifications";
 
 function AuthenticatedRouter() {
   const { data: user, isLoading } = useQuery<any>({
@@ -21,6 +23,32 @@ function AuthenticatedRouter() {
     retry: false,
     staleTime: 5 * 60 * 1000,
   });
+
+  // ── Mood modal — lives here so it survives all route changes ──────────────
+  const [isMoodOpen, setIsMoodOpen] = useState(false);
+
+  useEffect(() => {
+    // Check for ?mood=checkin in URL (web-push tap sets this)
+    const checkMoodParam = () => {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("mood") === "checkin") {
+        setIsMoodOpen(true);
+        window.history.replaceState({}, "", window.location.pathname);
+      }
+    };
+    checkMoodParam();
+
+    // Native notification tap that fired before this component mounted
+    if (consumePendingMoodOpen()) setIsMoodOpen(true);
+
+    const onOpenMood = () => setIsMoodOpen(true);
+    window.addEventListener("dbrief:open-mood", onOpenMood);
+    window.addEventListener("popstate", checkMoodParam);
+    return () => {
+      window.removeEventListener("dbrief:open-mood", onOpenMood);
+      window.removeEventListener("popstate", checkMoodParam);
+    };
+  }, []);
 
   useEffect(() => {
     if (!user || !isNativePlatform()) return;
@@ -60,7 +88,7 @@ function AuthenticatedRouter() {
   const dateOfBirth = user?.userProfile?.dateOfBirth ?? null;
 
   return (
-    <>
+    <MoodProvider value={{ openMood: () => setIsMoodOpen(true) }}>
       <Switch>
         <Route path="/" component={Dashboard} />
         <Route path="/dashboard" component={Dashboard} />
@@ -69,7 +97,8 @@ function AuthenticatedRouter() {
         <Route component={NotFound} />
       </Switch>
       <BirthdayCelebration displayName={user?.displayName} dateOfBirth={dateOfBirth} />
-    </>
+      <MoodCheckinModal open={isMoodOpen} onClose={() => setIsMoodOpen(false)} />
+    </MoodProvider>
   );
 }
 
