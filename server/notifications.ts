@@ -3,6 +3,7 @@ import cron from 'node-cron';
 import { storage } from './storage';
 import { sendApnsNotification } from './apns';
 import { generateWeeklyReport, getWeekBounds } from './weekly-report';
+import { habitNotificationBody, getIntervalSlots } from '../shared/habitUtils';
 
 // In-memory cache layer (fast-path, survives hot reloads). DB is the source of truth.
 const lastReminderSentDate = new Map<string, string>(); // key → dateStr (cache only)
@@ -288,29 +289,40 @@ export async function sendHabitReminders() {
       const [currentHourStr, currentMinuteStr] = userTimeStr.split(':');
       const currentHour   = parseInt(currentHourStr, 10);
       const currentMinute = parseInt(currentMinuteStr, 10);
-      const [reminderHour, reminderMinute] = habit.reminderTime.split(':').map(Number);
 
-      if (!isWithinDeliveryWindow(reminderHour, reminderMinute, currentHour, currentMinute)) continue;
+      // Determine which time slots should fire for this habit
+      const hasInterval = habit.reminderInterval && habit.reminderInterval > 0 && habit.reminderEndTime;
+      const slots: string[] = hasInterval
+        ? getIntervalSlots(habit.reminderTime, habit.reminderInterval!, habit.reminderEndTime!)
+        : [habit.reminderTime];
 
-      const key = `habit-${habit.id}-${userDateStr}`;
-      // In-memory fast-path first (avoids DB round-trip in common case)
+      // Find a slot that matches the current delivery window
+      const matchingSlot = slots.find(slot => {
+        const [h, m] = slot.split(':').map(Number);
+        return isWithinDeliveryWindow(h, m, currentHour, currentMinute);
+      });
+
+      if (!matchingSlot) continue;
+
+      // Dedup key includes the specific slot to allow multiple fires per day
+      const slotKey = matchingSlot.replace(':', '');
+      const key = `habit-${habit.id}-${userDateStr}-${slotKey}`;
+
       if (lastHabitReminderSent.get(key)) continue;
-      // DB-backed dedup so server restarts don't trigger duplicate sends
       const alreadySentInDb = await storage.getServerConfig(key);
       if (alreadySentInDb) { lastHabitReminderSent.set(key, userDateStr); continue; }
 
-      const anchor = habit.anchorHabit ? ` After ${habit.anchorHabit}, it's time to` : " Time to";
+      const body = habitNotificationBody(habit.anchorHabit, habit.name, habit.currentStreak ?? 0);
       const payload: PushNotificationPayload = {
         title: `${habit.emoji} Habit Check-in`,
-        body: `${anchor} ${habit.name.toLowerCase()}.${habit.currentStreak && habit.currentStreak > 0 ? ` Keep your ${habit.currentStreak}-day streak alive!` : ""}`,
+        body,
         icon: '/icon-192.png',
         url: '/',
-        tag: `habit-${habit.id}`,
+        tag: `habit-${habit.id}-${slotKey}`,
       };
 
-      console.log(`[Habit Reminders] Sending reminder for "${habit.name}" to user ${habit.userId}`);
+      console.log(`[Habit Reminders] Sending reminder for "${habit.name}" (slot ${matchingSlot}) to user ${habit.userId}`);
       await dispatchToSubscriptions(habit.subscriptions, payload);
-      // Persist dedup to DB — prevents re-send after server restarts
       await storage.setServerConfig(key, '1');
       lastHabitReminderSent.set(key, userDateStr);
     } catch (error) {

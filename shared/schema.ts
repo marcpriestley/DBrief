@@ -190,6 +190,8 @@ export const habits = pgTable("habits", {
   anchorHabit: text("anchor_habit"),
   reminderTime: text("reminder_time"),
   reminderEnabled: boolean("reminder_enabled").default(true),
+  reminderInterval: integer("reminder_interval"),
+  reminderEndTime: text("reminder_end_time"),
   currentStreak: integer("current_streak").default(0),
   longestStreak: integer("longest_streak").default(0),
   totalCompletions: integer("total_completions").default(0),

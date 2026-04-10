@@ -1,11 +1,12 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useDateContext } from "@/contexts/DateContext";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Flame, X, ChevronRight, ChevronLeft, Check, Settings2, Trash2, Bell, BellOff } from "lucide-react";
+import { Plus, Flame, X, ChevronRight, ChevronLeft, Check, Settings2, Trash2, Bell, BellOff, Repeat, Trophy } from "lucide-react";
 import type { Habit } from "@shared/schema";
 import { haptic } from "@/lib/haptics";
+import { normalizeAnchor, normalizeHabitName, stackingSentence, habitNotificationBody } from "@shared/habitUtils";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -66,6 +67,8 @@ type SetupState = {
   anchorHabit: string;
   reminderTime: string;
   reminderEnabled: boolean;
+  reminderInterval: number | null; // null = once, or minutes between reminders
+  reminderEndTime: string;         // end time for interval reminders
   frequency: string;
 };
 
@@ -77,6 +80,8 @@ const DEFAULT_SETUP: SetupState = {
   anchorHabit: "",
   reminderTime: "08:00",
   reminderEnabled: false,
+  reminderInterval: null,
+  reminderEndTime: "20:00",
   frequency: "daily",
 };
 
@@ -90,6 +95,7 @@ export default function HabitsSection() {
   const [editingHabit, setEditingHabit] = useState<HabitWithStatus | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [motivationFlash, setMotivationFlash] = useState<string | null>(null);
+  const [milestoneCelebration, setMilestoneCelebration] = useState<{ milestone: number; habitName: string } | null>(null);
 
   const { data: habits = [], isLoading } = useQuery<HabitWithStatus[]>({
     queryKey: ["/api/habits", selectedDate],
@@ -133,11 +139,25 @@ export default function HabitsSection() {
     },
   });
 
+  const MILESTONE_THRESHOLDS = [7, 21, 66, 100, 365];
+
   const handleToggle = useCallback((habit: HabitWithStatus) => {
-    // If completing (not yet done) and has a motivation, flash it briefly.
-    if (!habit.todayCompleted && habit.motivation) {
+    const isCompleting = !habit.todayCompleted;
+    if (isCompleting && habit.motivation) {
       setMotivationFlash(habit.motivation);
       setTimeout(() => setMotivationFlash(null), 2800);
+    }
+    // Check if completing this will cross a milestone
+    if (isCompleting) {
+      const prevTotal = habit.totalCompletions || 0;
+      const nextTotal = prevTotal + 1;
+      const crossed = MILESTONE_THRESHOLDS.find(m => prevTotal < m && nextTotal >= m);
+      if (crossed) {
+        setTimeout(() => {
+          setMilestoneCelebration({ milestone: crossed, habitName: habit.name });
+          haptic("success");
+        }, 600); // slight delay so toggle animation plays first
+      }
     }
     toggleMutation.mutate({ id: habit.id, date: selectedDate });
   }, [toggleMutation, selectedDate]);
@@ -145,7 +165,12 @@ export default function HabitsSection() {
   const handleCreate = useCallback(() => {
     if (!setup.name.trim()) return;
     const { categories, ...rest } = setup;
-    createMutation.mutate({ ...rest, category: categories.length > 0 ? categories.join(",") : "general" } as any);
+    createMutation.mutate({
+      ...rest,
+      category: categories.length > 0 ? categories.join(",") : "general",
+      reminderInterval: setup.reminderEnabled ? setup.reminderInterval : null,
+      reminderEndTime: setup.reminderEnabled && setup.reminderInterval ? setup.reminderEndTime : null,
+    } as any);
   }, [createMutation, setup]);
 
   const openSetup = () => {
@@ -189,6 +214,17 @@ export default function HabitsSection() {
             <span className="leading-snug flex-1">{motivationFlash}</span>
             <X className="h-4 w-4 opacity-50 flex-shrink-0" />
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Milestone celebration overlay */}
+      <AnimatePresence>
+        {milestoneCelebration && (
+          <MilestoneCelebration
+            milestone={milestoneCelebration.milestone}
+            habitName={milestoneCelebration.habitName}
+            onClose={() => setMilestoneCelebration(null)}
+          />
         )}
       </AnimatePresence>
 
@@ -403,7 +439,7 @@ function HabitCard({
             </span>
           </div>
           {habit.anchorHabit && (
-            <p className="text-xs text-muted-foreground truncate mt-0.5">After {habit.anchorHabit}</p>
+            <p className="text-xs text-muted-foreground truncate mt-0.5">After {normalizeAnchor(habit.anchorHabit)}</p>
           )}
           {/* 7-day completion dots */}
           <WeekDots days={habit.last7Days ?? []} />
@@ -429,15 +465,17 @@ function HabitCard({
           {streak > 0 ? (
             <>
               <div className="flex items-center gap-0.5">
-                <Flame className="h-3.5 w-3.5 text-orange-400" />
+                <Flame className={`h-3.5 w-3.5 ${streak >= 66 ? "text-yellow-400" : streak >= 21 ? "text-orange-500" : "text-orange-400"}`} />
                 <span className="text-sm font-bold text-foreground">{streak}</span>
               </div>
-              <span className="text-[10px] text-muted-foreground">day{streak !== 1 ? "s" : ""}</span>
+              <span className="text-[10px] text-muted-foreground">
+                {streak >= 66 ? "elite" : streak >= 21 ? "locked in" : streak >= 7 ? "on pace" : "day" + (streak !== 1 ? "s" : "")}
+              </span>
             </>
           ) : (
             <>
               <span className="text-lg leading-none">🌱</span>
-              <span className="text-[10px] text-primary font-medium">tap</span>
+              <span className="text-[10px] text-primary font-medium">start</span>
             </>
           )}
         </button>
@@ -569,7 +607,7 @@ function SetupModal({
             <div className="mt-3 bg-primary/10 rounded-xl px-3 py-2.5 border border-primary/20">
               <p className="text-xs text-muted-foreground mb-0.5">Your implementation intention:</p>
               <p className="text-xs font-medium text-foreground">
-                "After I <span className="text-primary">{setup.anchorHabit}</span>, I will <span className="text-primary">{setup.name || "…"}</span>"
+                "{stackingSentence(setup.anchorHabit, setup.name || "…")}"
               </p>
             </div>
           )}
@@ -778,11 +816,24 @@ function Step3({ setup, setSetup }: { setup: SetupState; setSetup: (s: SetupStat
   );
 }
 
+const INTERVAL_OPTIONS = [
+  { value: 30,  label: "Every 30 min" },
+  { value: 60,  label: "Every hour" },
+  { value: 90,  label: "Every 90 min" },
+  { value: 120, label: "Every 2 hours" },
+  { value: 180, label: "Every 3 hours" },
+  { value: 240, label: "Every 4 hours" },
+];
+
 function Step4({ setup, setSetup }: { setup: SetupState; setSetup: (s: SetupState) => void }) {
+  const previewBody = setup.anchorHabit
+    ? `After ${normalizeAnchor(setup.anchorHabit)}, time to ${normalizeHabitName(setup.name || "…")}.`
+    : `Time to ${normalizeHabitName(setup.name || "…")}.`;
+
   return (
     <div className="space-y-4">
       <p className="text-xs text-muted-foreground">
-        A daily push notification keeps the habit front of mind. We'll send it at your chosen time every day.
+        A push notification keeps the habit front of mind. Set a daily time — or use interval reminders for habits like drinking water.
       </p>
 
       <div className="flex items-center justify-between bg-muted/40 rounded-xl px-4 py-3 border border-border/50">
@@ -792,7 +843,7 @@ function Step4({ setup, setSetup }: { setup: SetupState; setSetup: (s: SetupStat
           ) : (
             <BellOff className="h-4 w-4 text-muted-foreground" />
           )}
-          <span className="text-sm font-medium text-foreground">Daily reminder</span>
+          <span className="text-sm font-medium text-foreground">Reminders</span>
         </div>
         <button
           onClick={() => setSetup({ ...setup, reminderEnabled: !setup.reminderEnabled })}
@@ -806,20 +857,71 @@ function Step4({ setup, setSetup }: { setup: SetupState; setSetup: (s: SetupStat
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="space-y-2"
+          className="space-y-4"
         >
-          <label className="text-xs text-muted-foreground block">Reminder time</label>
-          <input
-            type="time"
-            value={setup.reminderTime}
-            onChange={e => setSetup({ ...setup, reminderTime: e.target.value })}
-            className="w-full bg-muted/50 dark:bg-muted border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50"
-          />
-          {setup.anchorHabit && (
-            <p className="text-xs text-muted-foreground">
-              We'll remind you: "After {setup.anchorHabit}, it's time to {setup.name || "…"}"
-            </p>
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1.5">
+              {setup.reminderInterval ? "Start time" : "Reminder time"}
+            </label>
+            <input
+              type="time"
+              value={setup.reminderTime}
+              onChange={e => setSetup({ ...setup, reminderTime: e.target.value })}
+              className="w-full bg-muted/50 dark:bg-muted border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50"
+            />
+          </div>
+
+          {/* Interval toggle */}
+          <div className="flex items-center justify-between bg-muted/40 rounded-xl px-4 py-3 border border-border/50">
+            <div className="flex items-center gap-2.5">
+              <Repeat className={`h-4 w-4 ${setup.reminderInterval ? "text-primary" : "text-muted-foreground"}`} />
+              <span className="text-sm text-foreground">Repeat at intervals</span>
+            </div>
+            <button
+              onClick={() => setSetup({ ...setup, reminderInterval: setup.reminderInterval ? null : 60 })}
+              className={`relative w-11 h-6 rounded-full transition-colors ${setup.reminderInterval ? "bg-primary" : "bg-muted"}`}
+            >
+              <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${setup.reminderInterval ? "translate-x-5" : "translate-x-0"}`} />
+            </button>
+          </div>
+
+          {setup.reminderInterval && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="space-y-3"
+            >
+              <div>
+                <label className="text-xs text-muted-foreground block mb-2">Frequency</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {INTERVAL_OPTIONS.map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setSetup({ ...setup, reminderInterval: opt.value })}
+                      className={`text-xs px-3 py-2 rounded-xl border transition-all text-left ${
+                        setup.reminderInterval === opt.value
+                          ? "border-primary/60 bg-primary/15 text-primary font-medium"
+                          : "border-border/50 bg-muted/30 text-muted-foreground"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1.5">Stop reminders at</label>
+                <input
+                  type="time"
+                  value={setup.reminderEndTime}
+                  onChange={e => setSetup({ ...setup, reminderEndTime: e.target.value })}
+                  className="w-full bg-muted/50 dark:bg-muted border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50"
+                />
+              </div>
+            </motion.div>
           )}
+
+          <p className="text-xs text-muted-foreground/70 italic">Preview: "{previewBody}"</p>
         </motion.div>
       )}
     </div>
@@ -849,6 +951,8 @@ function EditModal({
   const [frequency, setFrequency] = useState((habit as any).frequency || "daily");
   const [reminderTime, setReminderTime] = useState(habit.reminderTime || "08:00");
   const [reminderEnabled, setReminderEnabled] = useState(habit.reminderEnabled ?? false);
+  const [reminderInterval, setReminderInterval] = useState<number | null>((habit as any).reminderInterval ?? null);
+  const [reminderEndTime, setReminderEndTime] = useState((habit as any).reminderEndTime || "20:00");
 
   return (
     <motion.div
@@ -978,7 +1082,7 @@ function EditModal({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               {reminderEnabled ? <Bell className="h-4 w-4 text-primary" /> : <BellOff className="h-4 w-4 text-muted-foreground" />}
-              <span className="text-sm font-medium text-foreground">Daily reminder</span>
+              <span className="text-sm font-medium text-foreground">Reminders</span>
             </div>
             <button
               onClick={() => setReminderEnabled(v => !v)}
@@ -989,12 +1093,61 @@ function EditModal({
           </div>
 
           {reminderEnabled && (
-            <input
-              type="time"
-              value={reminderTime}
-              onChange={e => setReminderTime(e.target.value)}
-              className="w-full bg-muted/50 dark:bg-muted border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50"
-            />
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1.5">
+                  {reminderInterval ? "Start time" : "Reminder time"}
+                </label>
+                <input
+                  type="time"
+                  value={reminderTime}
+                  onChange={e => setReminderTime(e.target.value)}
+                  className="w-full bg-muted/50 dark:bg-muted border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50"
+                />
+              </div>
+
+              <div className="flex items-center justify-between bg-muted/40 rounded-xl px-4 py-3 border border-border/50">
+                <div className="flex items-center gap-2.5">
+                  <Repeat className={`h-4 w-4 ${reminderInterval ? "text-primary" : "text-muted-foreground"}`} />
+                  <span className="text-sm text-foreground">Repeat at intervals</span>
+                </div>
+                <button
+                  onClick={() => setReminderInterval(v => v ? null : 60)}
+                  className={`relative w-11 h-6 rounded-full transition-colors ${reminderInterval ? "bg-primary" : "bg-muted"}`}
+                >
+                  <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${reminderInterval ? "translate-x-5" : "translate-x-0"}`} />
+                </button>
+              </div>
+
+              {reminderInterval && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    {INTERVAL_OPTIONS.map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setReminderInterval(opt.value)}
+                        className={`text-xs px-3 py-2 rounded-xl border transition-all text-left ${
+                          reminderInterval === opt.value
+                            ? "border-primary/60 bg-primary/15 text-primary font-medium"
+                            : "border-border/50 bg-muted/30 text-muted-foreground"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground block mb-1.5">Stop reminders at</label>
+                    <input
+                      type="time"
+                      value={reminderEndTime}
+                      onChange={e => setReminderEndTime(e.target.value)}
+                      className="w-full bg-muted/50 dark:bg-muted border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           <button
@@ -1002,6 +1155,8 @@ function EditModal({
               name, emoji, motivation,
               category: categories.length > 0 ? categories.join(",") : "general",
               frequency, anchorHabit, reminderTime, reminderEnabled,
+              reminderInterval: reminderEnabled ? reminderInterval : null,
+              reminderEndTime: reminderEnabled && reminderInterval ? reminderEndTime : null,
             } as any)}
             disabled={!name.trim() || isSaving}
             className="w-full py-3 bg-primary text-black text-sm font-semibold rounded-xl disabled:opacity-40"
@@ -1009,6 +1164,89 @@ function EditModal({
             {isSaving ? "Saving…" : "Save changes"}
           </button>
         </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+// ─── Milestone Celebration ────────────────────────────────────────────────────
+
+const MILESTONE_COPY: Record<number, { icon: string; title: string; subtitle: string; color: string }> = {
+  7:   { icon: "🏁", title: "Checkpoint unlocked",   subtitle: "7 days in. You're building something real.", color: "from-primary/20 to-primary/5" },
+  21:  { icon: "🔥", title: "Race pace achieved",    subtitle: "21 days. The habit is starting to wire in.", color: "from-orange-500/20 to-orange-500/5" },
+  66:  { icon: "🏆", title: "Habit formed",          subtitle: "66 days. Neuroscience says it's automatic now.", color: "from-yellow-500/20 to-yellow-500/5" },
+  100: { icon: "🥇", title: "Podium performance",   subtitle: "100 completions. Elite consistency.", color: "from-yellow-400/20 to-yellow-400/5" },
+  365: { icon: "🚀", title: "World championship",   subtitle: "365 days. A full season of excellence.", color: "from-purple-500/20 to-purple-500/5" },
+};
+
+function MilestoneCelebration({
+  milestone,
+  habitName,
+  onClose,
+}: {
+  milestone: number;
+  habitName: string;
+  onClose: () => void;
+}) {
+  const copy = MILESTONE_COPY[milestone] ?? {
+    icon: "⭐", title: `${milestone}-day milestone`, subtitle: "Outstanding consistency.", color: "from-primary/20 to-primary/5",
+  };
+
+  useEffect(() => {
+    const t = setTimeout(onClose, 5000);
+    return () => clearTimeout(t);
+  }, [onClose]);
+
+  return (
+    <motion.div
+      key="milestone-celebration"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-6"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ scale: 0.7, opacity: 0, y: 40 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.85, opacity: 0, y: 20 }}
+        transition={{ type: "spring", damping: 20, stiffness: 280 }}
+        onClick={e => e.stopPropagation()}
+        className={`bg-gradient-to-b ${copy.color} border border-primary/30 rounded-3xl p-8 text-center max-w-xs w-full shadow-2xl`}
+        style={{ background: "var(--card)" }}
+      >
+        <motion.div
+          animate={{ scale: [1, 1.15, 1] }}
+          transition={{ repeat: Infinity, duration: 1.6, ease: "easeInOut" }}
+          className="text-6xl mb-4 leading-none"
+        >
+          {copy.icon}
+        </motion.div>
+
+        <h2 className="text-xl font-bold text-foreground mb-1">{copy.title}</h2>
+        <p className="text-sm text-muted-foreground mb-2">{copy.subtitle}</p>
+        <p className="text-xs text-primary font-medium mb-6 truncate">{habitName}</p>
+
+        <div className="flex justify-center gap-1.5 mb-5">
+          {[..."⭐✨🔥💪🎯"].map((spark, i) => (
+            <motion.span
+              key={i}
+              initial={{ opacity: 0, y: 0 }}
+              animate={{ opacity: [0, 1, 0], y: -18 }}
+              transition={{ delay: i * 0.12, duration: 1, repeat: Infinity, repeatDelay: 1.5 }}
+              className="text-base leading-none"
+            >
+              {spark}
+            </motion.span>
+          ))}
+        </div>
+
+        <button
+          onClick={onClose}
+          className="w-full py-3 bg-primary text-black text-sm font-bold rounded-2xl"
+        >
+          Keep building →
+        </button>
       </motion.div>
     </motion.div>
   );
