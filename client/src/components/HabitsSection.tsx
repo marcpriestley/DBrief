@@ -53,6 +53,7 @@ function getMilestone(total: number): { next: number; label: string } {
 
 const FREQUENCY_OPTIONS = [
   { value: "daily", label: "Every day" },
+  { value: "multiple_daily", label: "Multiple times a day" },
   { value: "weekdays", label: "Weekdays" },
   { value: "weekends", label: "Weekends" },
   { value: "alternate", label: "Every other day" },
@@ -718,7 +719,23 @@ function Step1({ setup, setSetup }: { setup: SetupState; setSetup: (s: SetupStat
           {FREQUENCY_OPTIONS.map(f => (
             <button
               key={f.value}
-              onClick={() => setSetup({ ...setup, frequency: f.value })}
+              onClick={() => {
+                const isMultiple = f.value === "multiple_daily";
+                setSetup({
+                  ...setup,
+                  frequency: f.value,
+                  // Auto-enable interval reminders for "multiple times a day"
+                  ...(isMultiple && {
+                    reminderEnabled: true,
+                    reminderInterval: setup.reminderInterval ?? 120,
+                    reminderEndTime: setup.reminderEndTime || "20:00",
+                  }),
+                  // Clear interval if switching away from multiple_daily
+                  ...(!isMultiple && setup.frequency === "multiple_daily" && {
+                    reminderInterval: null,
+                  }),
+                });
+              }}
               className={`text-xs px-2.5 py-1 rounded-lg border transition-all ${
                 setup.frequency === f.value
                   ? "border-primary/60 bg-primary/15 text-primary font-medium"
@@ -729,6 +746,9 @@ function Step1({ setup, setSetup }: { setup: SetupState; setSetup: (s: SetupStat
             </button>
           ))}
         </div>
+        {setup.frequency === "multiple_daily" && (
+          <p className="text-[11px] text-primary mt-1.5">Interval reminders will be set up in the next steps.</p>
+        )}
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -101,7 +101,11 @@ export default function ProfileQuestions({
   );
 }
 
-export function ProfileQuestionsSettings() {
+export type ProfileQuestionsSettingsHandle = {
+  save: () => void;
+};
+
+export const ProfileQuestionsSettings = forwardRef<ProfileQuestionsSettingsHandle>(function ProfileQuestionsSettings(_props, ref) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -118,8 +122,6 @@ export function ProfileQuestionsSettings() {
   const [location, setLocation] = useState("");
   const [currentFocus, setCurrentFocus] = useState("");
   const [showDriverQuestions, setShowDriverQuestions] = useState(false);
-  // Only hydrate from server data once per mount. After the user starts editing,
-  // we keep their in-progress values until they save or the component unmounts.
   const hasHydrated = useRef(false);
 
   useEffect(() => {
@@ -170,10 +172,6 @@ export function ProfileQuestionsSettings() {
     },
   });
 
-  if (!profileData) {
-    return <div className="py-4 text-center text-xs text-muted-foreground">Loading profile...</div>;
-  }
-
   const buildFullProfile = () => ({
     ...answers,
     ...(dateOfBirth ? { dateOfBirth } : {}),
@@ -181,6 +179,19 @@ export function ProfileQuestionsSettings() {
     ...(location.trim() ? { location: location.trim() } : {}),
     ...(currentFocus.trim() ? { currentFocus: currentFocus.trim() } : {}),
   });
+
+  // Expose save() so the parent settings modal can call it from the main Save button
+  useImperativeHandle(ref, () => ({
+    save: () => {
+      if (profileData) {
+        saveMutation.mutate({ userProfile: buildFullProfile(), goalPreference: goalPref });
+      }
+    },
+  }));
+
+  if (!profileData) {
+    return <div className="py-4 text-center text-xs text-muted-foreground">Loading profile...</div>;
+  }
 
   return (
     <div className="space-y-5">
@@ -309,4 +320,4 @@ export function ProfileQuestionsSettings() {
       </Button>
     </div>
   );
-}
+});

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { registerNativePush, isNativePlatform, openAppSettings } from "@/hooks/useNativeNotifications";
 import {
@@ -21,7 +21,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { haptic } from "@/lib/haptics";
 import type { UserMetric } from "@shared/schema";
-import { ProfileQuestionsSettings } from "./ProfileQuestions";
+import { ProfileQuestionsSettings, type ProfileQuestionsSettingsHandle } from "./ProfileQuestions";
 import { resetTour } from "@/lib/tour";
 import {
   isNativeIOS,
@@ -318,6 +318,7 @@ interface UserSettings {
 export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const profileRef = useRef<ProfileQuestionsSettingsHandle>(null);
 
   const { data: settings, isLoading } = useQuery<UserSettings>({
     queryKey: ["/api/user/settings"],
@@ -404,6 +405,8 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const handleSave = () => {
     const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     updateSettingsMutation.mutate({ notificationsEnabled, moodRemindersEnabled, reminderTime, reminderTime2, timezone: userTimezone, displayName });
+    // Also save profile section so users don't need to click a separate button
+    profileRef.current?.save();
   };
 
   const handleToggleNotifications = async (enabled: boolean) => {
@@ -574,7 +577,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 <div className="pt-1">
                   <p className="text-xs font-medium text-muted-foreground mb-2">Driver Profile</p>
                   <p className="text-[11px] text-muted-foreground mb-3">Your answers personalise how the AI engineer debriefs you.</p>
-                  <ProfileQuestionsSettings />
+                  <ProfileQuestionsSettings ref={profileRef} />
                 </div>
               </SettingsSection>
 
@@ -754,11 +757,6 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   <Map className="h-3.5 w-3.5 text-muted-foreground" />
                   Replay app tour
                 </button>
-                {isNativePlatform() && (
-                  <div className="pt-1">
-                    <ApnsCredentialsDialog />
-                  </div>
-                )}
               </SettingsSection>
             </>
           )}
