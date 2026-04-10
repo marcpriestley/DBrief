@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, Plus, X, Trash2, Edit2, PartyPopper } from "lucide-react";
+import { Check, Plus, X, Trash2, Edit2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { apiRequest } from "@/lib/queryClient";
@@ -16,6 +16,24 @@ interface GoalsSectionProps {
 
 const MIN_VISIBLE_SLOTS = 3;
 
+const GOAL_MESSAGES = [
+  { icon: "⚡", text: "Sector cleared." },
+  { icon: "🏎", text: "Clean execution." },
+  { icon: "🏁", text: "Point scored." },
+  { icon: "💨", text: "On pace." },
+  { icon: "🔥", text: "Locked in." },
+  { icon: "✅", text: "Gap closed." },
+  { icon: "🎯", text: "Direct hit." },
+  { icon: "⬆️", text: "Position gained." },
+];
+
+const ALL_COMPLETE_MESSAGES = [
+  { icon: "🏆", title: "All Goals Complete!", sub: "Session complete. Outstanding execution." },
+  { icon: "🏁", title: "Chequered Flag!", sub: "Full points haul. Race pace confirmed." },
+  { icon: "🥇", title: "Perfect Score!", sub: "P1 performance. Zero dropped objectives." },
+  { icon: "⚡", title: "Clean Sheet!", sub: "All sectors green. Maximum output delivered." },
+];
+
 function triggerHaptic() { haptic("medium"); }
 function triggerCelebrationHaptic() { haptic("success"); }
 
@@ -28,10 +46,17 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
   const editCancelledRef = useRef(false);
   const [placeholderValues, setPlaceholderValues] = useState<Record<number, string>>({});
   const [submittingPlaceholder, setSubmittingPlaceholder] = useState<number | null>(null);
-  const [showCelebration, setShowCelebration] = useState(false);
-  const [celebrationFading, setCelebrationFading] = useState(false);
-  const prevCompletedCountRef = useRef<number>(-1);
   const addInputRef = useRef<HTMLInputElement>(null);
+
+  // Per-goal reward toast
+  const [goalToast, setGoalToast] = useState<{ icon: string; text: string } | null>(null);
+  const goalToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // All-goals celebration
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [celebrationMsg, setCelebrationMsg] = useState(ALL_COMPLETE_MESSAGES[0]);
+  const prevCompletedCountRef = useRef<number>(-1);
+  const prevTotalRef = useRef<number>(0);
 
   const { data: goals = [], isLoading } = useQuery<DailyGoal[]>({
     queryKey: ["/api/daily-goals", selectedDate],
@@ -45,29 +70,45 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
   const completedCount = goals.filter(g => g.completed).length;
   const totalGoals = goals.length;
   const displayTotal = Math.max(MIN_VISIBLE_SLOTS, totalGoals);
-  // allComplete drives the UI attention ring (requires MIN_VISIBLE_SLOTS for meaningful indicator)
   const allComplete = totalGoals >= MIN_VISIBLE_SLOTS && completedCount === totalGoals;
-  // allGoalsComplete drives the celebration — fires for any number of goals ≥ 1
   const allGoalsComplete = totalGoals > 0 && completedCount === totalGoals;
   const blankSlotsNeeded = Math.max(0, MIN_VISIBLE_SLOTS - totalGoals);
 
+  // Fire per-goal reward when any single goal is newly completed
+  const showGoalReward = () => {
+    const msg = GOAL_MESSAGES[Math.floor(Math.random() * GOAL_MESSAGES.length)];
+    if (goalToastTimerRef.current) clearTimeout(goalToastTimerRef.current);
+    setGoalToast(msg);
+    goalToastTimerRef.current = setTimeout(() => setGoalToast(null), 1800);
+  };
+
+  // Fire all-complete celebration when everything is done
   useEffect(() => {
     const prev = prevCompletedCountRef.current;
+    const prevTotal = prevTotalRef.current;
     prevCompletedCountRef.current = completedCount;
-    if (prev >= 0 && completedCount > prev && allGoalsComplete) {
-      setCelebrationFading(false);
-      setShowCelebration(true);
-      triggerCelebrationHaptic();
-      // Start fade-out at 2.6s, unmount at 3s
-      setTimeout(() => setCelebrationFading(true), 2600);
-      setTimeout(() => { setShowCelebration(false); setCelebrationFading(false); }, 3000);
+    prevTotalRef.current = totalGoals;
+
+    if (prev >= 0 && completedCount > prev) {
+      // Always reward any individual completion
+      showGoalReward();
+      triggerHaptic();
+
+      // If all goals are now done, also show big celebration after a beat
+      if (allGoalsComplete && totalGoals > 0) {
+        const msg = ALL_COMPLETE_MESSAGES[Math.floor(Math.random() * ALL_COMPLETE_MESSAGES.length)];
+        setCelebrationMsg(msg);
+        setTimeout(() => {
+          triggerCelebrationHaptic();
+          setShowCelebration(true);
+          setTimeout(() => setShowCelebration(false), 3200);
+        }, 600);
+      }
     }
-  }, [completedCount, allGoalsComplete]);
+  }, [completedCount, allGoalsComplete, totalGoals]);
 
   useEffect(() => {
-    if (showAddInput && addInputRef.current) {
-      addInputRef.current.focus();
-    }
+    if (showAddInput && addInputRef.current) addInputRef.current.focus();
   }, [showAddInput]);
 
   const toggleMutation = useMutation({
@@ -76,7 +117,6 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
       return res.json();
     },
     onSuccess: () => {
-      triggerHaptic();
       queryClient.invalidateQueries({ queryKey: ["/api/daily-goals", selectedDate] });
     },
   });
@@ -92,23 +132,15 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
       setNewGoalTitle("");
       setShowAddInput(false);
       if (submittingPlaceholder !== null) {
-        setPlaceholderValues(prev => {
-          const next = { ...prev };
-          delete next[submittingPlaceholder];
-          return next;
-        });
+        setPlaceholderValues(prev => { const next = { ...prev }; delete next[submittingPlaceholder]; return next; });
       }
       setSubmittingPlaceholder(null);
     },
-    onError: () => {
-      setSubmittingPlaceholder(null);
-    },
+    onError: () => { setSubmittingPlaceholder(null); },
   });
 
   const deleteTemplateMutation = useMutation({
-    mutationFn: async (id: number) => {
-      await apiRequest("DELETE", `/api/goal-templates/${id}`);
-    },
+    mutationFn: async (id: number) => { await apiRequest("DELETE", `/api/goal-templates/${id}`); },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/goal-templates"] });
       queryClient.invalidateQueries({ queryKey: ["/api/daily-goals", selectedDate] });
@@ -128,14 +160,8 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
   });
 
   const handleEditKeyDown = (e: React.KeyboardEvent, templateId: number) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      (e.target as HTMLElement).blur(); // save is handled by onBlur
-    }
-    if (e.key === "Escape") {
-      editCancelledRef.current = true; // tell onBlur not to save
-      setEditingId(null);
-    }
+    if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLElement).blur(); }
+    if (e.key === "Escape") { editCancelledRef.current = true; setEditingId(null); }
   };
 
   const handleAddGoal = () => {
@@ -156,20 +182,11 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
   };
 
   const handlePlaceholderKeyDown = (e: React.KeyboardEvent, slotIndex: number) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      handlePlaceholderSubmit(slotIndex);
-    }
+    if (e.key === "Enter") { e.preventDefault(); handlePlaceholderSubmit(slotIndex); }
     if (e.key === "Escape") {
-      setPlaceholderValues(prev => {
-        const next = { ...prev };
-        delete next[slotIndex];
-        return next;
-      });
+      setPlaceholderValues(prev => { const next = { ...prev }; delete next[slotIndex]; return next; });
     }
   };
-
-  const confettiColors = ["#F59E0B", "#10B981", "#8B5CF6", "#EC4899", "#3B82F6", "#EF4444"];
 
   return (
     <div className="relative">
@@ -180,12 +197,7 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
             {completedCount}/{displayTotal}
           </span>
         </h3>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setShowAddInput(true)}
-          className="text-primary"
-        >
+        <Button variant="ghost" size="sm" onClick={() => setShowAddInput(true)} className="text-primary">
           <Plus className="h-4 w-4 mr-1" />
           Add
         </Button>
@@ -196,7 +208,7 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
           className="h-1 rounded-full bg-primary"
           initial={{ width: 0 }}
           animate={{ width: `${(completedCount / displayTotal) * 100}%` }}
-          transition={{ duration: 0.3 }}
+          transition={{ duration: 0.4, ease: "easeOut" }}
         />
       </div>
 
@@ -215,8 +227,9 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
                   : "bg-card border-border/60 hover:border-border"
               }`}
             >
-              <button
+              <motion.button
                 onClick={() => toggleMutation.mutate(goal.id)}
+                whileTap={{ scale: 0.85 }}
                 className={`flex-shrink-0 w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all touch-manipulation ${
                   goal.completed
                     ? "bg-primary border-primary"
@@ -226,15 +239,16 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
                 <AnimatePresence>
                   {goal.completed && (
                     <motion.div
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
+                      initial={{ scale: 0, rotate: -20 }}
+                      animate={{ scale: 1, rotate: 0 }}
                       exit={{ scale: 0 }}
+                      transition={{ type: "spring", stiffness: 400, damping: 20 }}
                     >
                       <Check className="h-3.5 w-3.5 text-white" />
                     </motion.div>
                   )}
                 </AnimatePresence>
-              </button>
+              </motion.button>
 
               {isEditing ? (
                 <Input
@@ -242,29 +256,18 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
                   onChange={(e) => setEditTitle(e.target.value)}
                   onKeyDown={(e) => handleEditKeyDown(e, goal.goalTemplateId)}
                   onBlur={() => {
-                    if (editCancelledRef.current) {
-                      editCancelledRef.current = false;
-                      return;
-                    }
+                    if (editCancelledRef.current) { editCancelledRef.current = false; return; }
                     const trimmed = editTitle.trim();
-                    if (trimmed) {
-                      updateTemplateMutation.mutate({ id: goal.goalTemplateId, title: trimmed });
-                    } else {
-                      setEditingId(null);
-                    }
+                    if (trimmed) updateTemplateMutation.mutate({ id: goal.goalTemplateId, title: trimmed });
+                    else setEditingId(null);
                   }}
                   className="flex-1 h-8 text-sm"
                   autoFocus
                 />
               ) : (
                 <span
-                  className={`flex-1 text-sm ${
-                    goal.completed ? "line-through text-muted-foreground" : "text-foreground"
-                  }`}
-                  onDoubleClick={() => {
-                    setEditingId(goal.goalTemplateId);
-                    setEditTitle(goal.title);
-                  }}
+                  className={`flex-1 text-sm ${goal.completed ? "line-through text-muted-foreground" : "text-foreground"}`}
+                  onDoubleClick={() => { setEditingId(goal.goalTemplateId); setEditTitle(goal.title); }}
                 >
                   {goal.title}
                 </span>
@@ -273,10 +276,7 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
               {!isEditing && (
                 <div className="flex items-center gap-1">
                   <button
-                    onClick={() => {
-                      setEditingId(goal.goalTemplateId);
-                      setEditTitle(goal.title);
-                    }}
+                    onClick={() => { setEditingId(goal.goalTemplateId); setEditTitle(goal.title); }}
                     className="p-1 text-muted-foreground/40 hover:text-foreground"
                   >
                     <Edit2 className="h-3 w-3" />
@@ -343,73 +343,126 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
               placeholder="Enter a new goal..."
               className="flex-1 h-9 text-sm"
             />
-            <Button
-              size="sm"
-              onClick={handleAddGoal}
-              disabled={!newGoalTitle.trim() || addTemplateMutation.isPending}
-              className="h-9"
-            >
-              Add
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => { setShowAddInput(false); setNewGoalTitle(""); }}
-              className="h-9 px-2"
-            >
+            <Button size="sm" onClick={handleAddGoal} disabled={!newGoalTitle.trim() || addTemplateMutation.isPending} className="h-9">Add</Button>
+            <Button variant="ghost" size="sm" onClick={() => { setShowAddInput(false); setNewGoalTitle(""); }} className="h-9 px-2">
               <X className="h-4 w-4" />
             </Button>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {showCelebration && createPortal(
-        <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center pointer-events-none"
-          style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
-        >
-          <div
-            className={celebrationFading ? "celebration-fade-out" : "celebration-pop"}
-            style={{
-              backgroundColor: 'var(--card)',
-              border: '1px solid var(--border)',
-              borderRadius: '1rem',
-              padding: '2rem 2.5rem',
-              textAlign: 'center',
-              boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
-              maxWidth: '280px',
-              width: '90%',
-            }}
-          >
-            <div style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>🏁</div>
-            <p style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--foreground)', margin: 0 }}>
-              All Goals Complete!
-            </p>
-            <p style={{ fontSize: '0.875rem', color: 'var(--muted-foreground)', marginTop: '0.25rem' }}>
-              Session complete. Outstanding execution.
-            </p>
-            <div style={{
-              marginTop: '1rem',
-              display: 'flex',
-              justifyContent: 'center',
-              gap: '0.5rem',
-            }}>
-              {confettiColors.map((color, i) => (
-                <div
-                  key={i}
-                  style={{
-                    width: '8px',
-                    height: '8px',
-                    borderRadius: '50%',
-                    backgroundColor: color,
-                    animation: `celebrationPop 0.4s ${i * 0.06}s cubic-bezier(0.34,1.56,0.64,1) both`,
-                  }}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
-      , document.body)}
+      {/* ── Per-goal toast reward ─────────────────────────────────────── */}
+      {createPortal(
+        <AnimatePresence>
+          {goalToast && (
+            <motion.div
+              key="goal-toast"
+              initial={{ opacity: 0, y: -24, scale: 0.92 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -16, scale: 0.95 }}
+              transition={{ duration: 0.22, ease: "easeOut" }}
+              style={{
+                position: "fixed",
+                top: "env(safe-area-inset-top, 20px)",
+                left: "50%",
+                transform: "translateX(-50%)",
+                zIndex: 9998,
+                pointerEvents: "none",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  backgroundColor: "var(--card)",
+                  border: "1px solid var(--primary)",
+                  borderRadius: "999px",
+                  padding: "8px 18px",
+                  boxShadow: "0 4px 20px rgba(0,0,0,0.35)",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                <span style={{ fontSize: "1.1rem" }}>{goalToast.icon}</span>
+                <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground)" }}>
+                  {goalToast.text}
+                </span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
+
+      {/* ── All-goals complete celebration ────────────────────────────── */}
+      {createPortal(
+        <AnimatePresence>
+          {showCelebration && (
+            <motion.div
+              key="all-celebration"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.25 }}
+              style={{
+                position: "fixed",
+                inset: 0,
+                zIndex: 9999,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: "rgba(0,0,0,0.5)",
+                pointerEvents: "none",
+              }}
+            >
+              <motion.div
+                initial={{ scale: 0.7, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.85, opacity: 0, y: -10 }}
+                transition={{ type: "spring", stiffness: 340, damping: 26 }}
+                style={{
+                  backgroundColor: "var(--card)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "1.25rem",
+                  padding: "2.25rem 2.5rem",
+                  textAlign: "center",
+                  boxShadow: "0 24px 64px rgba(0,0,0,0.45)",
+                  maxWidth: "290px",
+                  width: "90%",
+                }}
+              >
+                <motion.div
+                  animate={{ rotate: [0, -10, 10, -6, 6, 0] }}
+                  transition={{ duration: 0.6, delay: 0.1 }}
+                  style={{ fontSize: "3.25rem", marginBottom: "0.6rem" }}
+                >
+                  {celebrationMsg.icon}
+                </motion.div>
+                <p style={{ fontSize: "1.15rem", fontWeight: 700, color: "var(--foreground)", margin: 0 }}>
+                  {celebrationMsg.title}
+                </p>
+                <p style={{ fontSize: "0.85rem", color: "var(--muted-foreground)", marginTop: "0.35rem" }}>
+                  {celebrationMsg.sub}
+                </p>
+
+                {/* animated dots */}
+                <div style={{ display: "flex", justifyContent: "center", gap: "6px", marginTop: "1.25rem" }}>
+                  {["#F59E0B","#10B981","#8B5CF6","#EC4899","#3B82F6","#EF4444"].map((color, i) => (
+                    <motion.div
+                      key={i}
+                      initial={{ scale: 0, y: 0 }}
+                      animate={{ scale: [0, 1.3, 1], y: [0, -10, 0] }}
+                      transition={{ delay: 0.15 + i * 0.07, duration: 0.45, type: "spring" }}
+                      style={{ width: 9, height: 9, borderRadius: "50%", backgroundColor: color }}
+                    />
+                  ))}
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </div>
   );
 }
