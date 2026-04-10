@@ -211,22 +211,34 @@ async function queryRawMetric(dataType: DataType, dateStr: string): Promise<numb
 
     // ── Sleep Quality ──────────────────────────────────────────────────────────
     if (dataType === "sleep-quality") {
-      // Primary: ExtendedHealth plugin (compiled directly into app — always reliable)
+      // Primary: Health.querySleepQuality — a top-level method on the SPM plugin
+      // (the HealthPlugin is always discovered; ExtendedHealth has registration issues)
+      try {
+        const r = await (Health as any).querySleepQuality({ startDate, endDate });
+        if ((r?.efficiency ?? 0) > 0) {
+          console.log("[HealthKit] sleep-quality via Health.querySleepQuality:", r.efficiency);
+          return Math.min(100, Math.round(r.efficiency));
+        }
+        if ((r?.minutes ?? 0) > 0) {
+          return Math.min(100, Math.round((r.minutes / 480) * 100));
+        }
+      } catch (e) {
+        console.warn("[HealthKit] Health.querySleepQuality failed:", e);
+      }
+
+      // Fallback: ExtendedHealth plugin (works if AppDelegate NSStringFromClass fix is in binary)
       try {
         const r = await ExtendedHealth.querySleepQuality({ startDate, endDate });
         if (r.efficiency > 0) {
           console.log("[HealthKit] sleep-quality via ExtendedHealth:", r.efficiency);
           return Math.min(100, Math.round(r.efficiency));
         }
-        // If efficiency is 0 but we have minutes, compute proxy from duration
         if (r.minutes > 0) {
           return Math.min(100, Math.round((r.minutes / 480) * 100));
         }
-      } catch (e) {
-        console.warn("[HealthKit] ExtendedHealth.querySleepQuality failed:", e);
-      }
+      } catch (_) {}
 
-      // Fallback: SPM plugin aggregated (may work on some binary versions)
+      // Fallback: queryAggregated with sleep-quality (patched HealthPlugin path)
       try {
         const r = await (Health as any).queryAggregated({ dataType: "sleep-quality", startDate, endDate, bucket: "day" });
         const agg: any[] = r?.aggregatedData ?? r?.data ?? [];
@@ -238,19 +250,9 @@ async function queryRawMetric(dataType: DataType, dateStr: string): Promise<numb
         }
       } catch (_) {}
 
-      // Last resort: sleep duration proxy via SPM plugin (no native plugin needed)
+      // Last resort: sleep duration proxy
       try {
         const r = await (Health as any).queryAggregated({ dataType: "sleep", startDate, endDate, bucket: "day" });
-        const data: any[] = r?.aggregatedData ?? r?.data ?? [];
-        if (data.length > 0) {
-          const total = data.reduce((s: number, d: any) => s + (d.value ?? 0), 0);
-          if (total > 0) return Math.min(100, Math.round((total / 480) * 100)); // treat as minutes → proxy %
-        }
-      } catch (_) {}
-
-      // Final proxy: query with no bucket in case bucketless works
-      try {
-        const r = await (Health as any).queryAggregated({ dataType: "sleep", startDate, endDate });
         const data: any[] = r?.aggregatedData ?? r?.data ?? [];
         if (data.length > 0) {
           const total = data.reduce((s: number, d: any) => s + (d.value ?? 0), 0);
@@ -258,7 +260,7 @@ async function queryRawMetric(dataType: DataType, dateStr: string): Promise<numb
         }
       } catch (_) {}
 
-      console.warn("[HealthKit] sleep-quality: all approaches returned null — ExtendedHealth.swift likely missing from Xcode project");
+      console.warn("[HealthKit] sleep-quality: all approaches returned null");
       return null;
     }
 
@@ -393,7 +395,15 @@ export async function diagnoseSleepSync(): Promise<string> {
 
   const lines: string[] = [`Window: ${startDate.slice(0,16)} → ${endDate.slice(0,16)}`];
 
-  // 1. ExtendedHealth
+  // 1. Health.querySleepQuality (new direct method on HealthPlugin — primary path)
+  try {
+    const r = await (Health as any).querySleepQuality({ startDate, endDate });
+    lines.push(`Health.querySleepQuality: efficiency=${r?.efficiency}, mins=${r?.minutes}`);
+  } catch (e: any) {
+    lines.push(`Health.querySleepQuality: ERROR — ${String(e?.message ?? e).slice(0,80)}`);
+  }
+
+  // 2. ExtendedHealth (secondary — needs AppDelegate fix to register)
   try {
     const r = await ExtendedHealth.querySleepQuality({ startDate, endDate });
     lines.push(`ExtendedHealth: efficiency=${r.efficiency}, mins=${r.minutes}`);
@@ -401,7 +411,7 @@ export async function diagnoseSleepSync(): Promise<string> {
     lines.push(`ExtendedHealth: ERROR — ${String(e?.message ?? e).slice(0,80)}`);
   }
 
-  // 2. Health.queryAggregated sleep-quality
+  // 3. Health.queryAggregated sleep-quality (patched path)
   try {
     const r = await (Health as any).queryAggregated({ dataType: "sleep-quality", startDate, endDate, bucket: "day" });
     const agg: any[] = r?.aggregatedData ?? r?.data ?? [];
@@ -410,7 +420,7 @@ export async function diagnoseSleepSync(): Promise<string> {
     lines.push(`HealthSPM sleep-quality: ERROR — ${String(e?.message ?? e).slice(0,80)}`);
   }
 
-  // 3. Health.queryAggregated sleep
+  // 4. Health.queryAggregated sleep
   try {
     const r = await (Health as any).queryAggregated({ dataType: "sleep", startDate, endDate, bucket: "day" });
     const agg: any[] = r?.aggregatedData ?? r?.data ?? [];
