@@ -502,6 +502,11 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     setHealthSyncing(true);
     setHealthSyncResult(null);
     try {
+      // Always re-request permissions first — ensures Sleep Analysis (and any other new
+      // categories) is authorized even if the initial setup pre-dated this build.
+      if (isNativeIOS()) {
+        await requestHealthPermissions();
+      }
       const today = new Date().toISOString().split("T")[0];
       const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
       const enabledNames = userMetrics.filter(m => m.isActive).map(m => m.name);
@@ -510,7 +515,11 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       queryClient.invalidateQueries({ queryKey: ["/api/daily-scores"] });
       queryClient.invalidateQueries({ queryKey: ["/api/user-metrics"] });
       setHealthSyncResult(`Synced ${total} reading${total !== 1 ? "s" : ""}`);
-      toast({ title: "Sync complete", description: `Updated ${total} health reading${total !== 1 ? "s" : ""}.` });
+      if (total === 0) {
+        toast({ title: "Nothing synced", description: "No new health data found. Check that Apple Health permissions include Sleep Analysis: iPhone Settings → Privacy & Security → Health → DBrief.", variant: "destructive" });
+      } else {
+        toast({ title: "Sync complete", description: `Updated ${total} health reading${total !== 1 ? "s" : ""}.` });
+      }
     } catch {
       toast({ title: "Sync failed", description: "Could not read Apple Health data.", variant: "destructive" });
     } finally {

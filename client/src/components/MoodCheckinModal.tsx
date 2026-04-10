@@ -45,14 +45,18 @@ function MoodSlider({ value, onChange }: { value: number; onChange: (v: number) 
   const trackRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
   const lastHapticVal = useRef<number | null>(null);
+  // Keep a stable ref to the latest value so computeValue never rebuilds mid-drag
+  const valueRef = useRef(value);
+  useEffect(() => { valueRef.current = value; }, [value]);
   const moodColor = getMoodColor(value);
 
+  // Stable: no reactive deps — reads from the DOM and the ref, never from closure-captured value
   const computeValue = useCallback((clientX: number): number => {
-    if (!trackRef.current) return value;
+    if (!trackRef.current) return valueRef.current;
     const rect = trackRef.current.getBoundingClientRect();
     const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     return Math.round(pct * 100);
-  }, [value]);
+  }, []);
 
   const emitValue = useCallback((clientX: number) => {
     const newVal = computeValue(clientX);
