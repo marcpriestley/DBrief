@@ -59,6 +59,7 @@ const MILESTONES = [
 ];
 
 const SEEN_KEY = "dbrief_seen_milestones";
+const INCREMENT_DATE_KEY = "dbrief_streak_increment_date";
 
 function getSeenMilestones(): Set<number> {
   try {
@@ -74,6 +75,18 @@ function markMilestoneSeen(days: number) {
   const seen = getSeenMilestones();
   seen.add(days);
   localStorage.setItem(SEEN_KEY, JSON.stringify([...seen]));
+}
+
+function todayDateString(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function hasShownIncrementToday(): boolean {
+  return localStorage.getItem(INCREMENT_DATE_KEY) === todayDateString();
+}
+
+function markIncrementShownToday(): void {
+  localStorage.setItem(INCREMENT_DATE_KEY, todayDateString());
 }
 
 function getStreakMessage(days: number): string {
@@ -262,7 +275,8 @@ export default function StreakDisplay({ streak }: StreakDisplayProps) {
       if (newMilestone) {
         markMilestoneSeen(newMilestone.days);
         setActiveMilestone(newMilestone);
-      } else {
+      } else if (!hasShownIncrementToday()) {
+        markIncrementShownToday();
         setShowIncrement(true);
       }
     } else {
