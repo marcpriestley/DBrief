@@ -41,7 +41,15 @@ function AuthenticatedRouter() {
     // Native notification tap that fired before this component mounted
     if (consumePendingMoodOpen()) setIsMoodOpen(true);
 
-    const onOpenMood = () => setIsMoodOpen(true);
+    const onOpenMood = () => {
+      setIsMoodOpen(true);
+      // dispatchOpenMood writes /?mood=checkin to history — clean it up now
+      try {
+        if (window.location.search.includes("mood=checkin")) {
+          window.history.replaceState({}, "", window.location.pathname);
+        }
+      } catch {}
+    };
     window.addEventListener("dbrief:open-mood", onOpenMood);
     window.addEventListener("popstate", checkMoodParam);
     return () => {

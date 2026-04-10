@@ -63,19 +63,28 @@ if (typeof window !== "undefined") {
 // pick it up via consumePendingMoodOpen() inside its mount useEffect.
 let pendingMoodOpen = false;
 
-// Dispatch a custom event to open the mood check-in modal
+// Dispatch a custom event to open the mood check-in modal.
+// Uses THREE redundant signals so the intent survives any timing gap:
+//  1. In-memory flag (fast path, same session)
+//  2. sessionStorage (survives module reload / HMR)
+//  3. URL param written to history (caught by checkMoodParam on any mount)
 function dispatchOpenMood() {
   pendingMoodOpen = true;
+  try { sessionStorage.setItem("dbrief:mood-pending", "1"); } catch {}
+  try { history.replaceState(null, "", "/?mood=checkin"); } catch {}
   window.dispatchEvent(new CustomEvent("dbrief:open-mood"));
 }
 
 /**
- * Called by AppLayout on mount. Returns true (and clears the flag) if a
- * notification tap arrived before AppLayout's listener was registered.
+ * Called by AuthenticatedRouter on mount. Returns true (and clears all signals)
+ * if a notification tap arrived before the listener was registered.
  */
 export function consumePendingMoodOpen(): boolean {
-  if (pendingMoodOpen) {
+  let fromSession = false;
+  try { fromSession = sessionStorage.getItem("dbrief:mood-pending") === "1"; } catch {}
+  if (pendingMoodOpen || fromSession) {
     pendingMoodOpen = false;
+    try { sessionStorage.removeItem("dbrief:mood-pending"); } catch {}
     return true;
   }
   return false;
