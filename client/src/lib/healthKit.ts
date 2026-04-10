@@ -1,5 +1,13 @@
-import { Capacitor } from "@capacitor/core";
+import { Capacitor, registerPlugin } from "@capacitor/core";
 import { Health } from "capacitor-health";
+
+// Local Capacitor plugin compiled directly into the app target — bypasses SPM caching.
+// Handles sleep queries and extended permission checks that the SPM plugin may miss.
+interface ExtendedHealthInterface {
+  querySleep: (opts: { startDate: string; endDate: string }) => Promise<{ minutes: number }>;
+  querySleepQuality: (opts: { startDate: string; endDate: string }) => Promise<{ efficiency: number; minutes: number }>;
+}
+const ExtendedHealth = registerPlugin<ExtendedHealthInterface>("ExtendedHealth");
 
 export function isNativeIOS(): boolean {
   return Capacitor.isNativePlatform() && Capacitor.getPlatform() === "ios";
@@ -202,49 +210,38 @@ async function queryRawMetric(dataType: DataType, dateStr: string): Promise<numb
     }
 
     // ── Sleep Quality ──────────────────────────────────────────────────────────
-    // The Swift plugin implements querySleepQuality() which computes
-    // asleepMinutes / inBedMinutes × 100 natively and returns it via
-    // queryAggregated({ dataType: "sleep-quality" }). Use that as the primary
-    // path; fall back to computing quality from sleep-duration data if it fails.
     if (dataType === "sleep-quality") {
-      // Approach 1 (best): plugin computes efficiency natively per day
+      // Primary: ExtendedHealth plugin (compiled directly into app — always reliable)
+      try {
+        const r = await ExtendedHealth.querySleepQuality({ startDate, endDate });
+        if (r.efficiency > 0) {
+          console.log("[HealthKit] sleep-quality via ExtendedHealth:", r.efficiency);
+          return Math.min(100, Math.round(r.efficiency));
+        }
+        // If efficiency is 0 but we have minutes, compute proxy from duration
+        if (r.minutes > 0) {
+          return Math.min(100, Math.round((r.minutes / 480) * 100));
+        }
+      } catch (e) {
+        console.warn("[HealthKit] ExtendedHealth.querySleepQuality failed:", e);
+      }
+
+      // Fallback: SPM plugin aggregated (may work on some binary versions)
       try {
         const r = await (Health as any).queryAggregated({ dataType: "sleep-quality", startDate, endDate, bucket: "day" });
         const agg: any[] = r?.aggregatedData ?? r?.data ?? [];
         if (agg.length > 0) {
-          // Each entry already contains an efficiency % (0–100).
-          // Take the entry whose startDate is closest to the requested date,
-          // or just sum/average — since the query window spans one night,
-          // there should normally be a single entry.
           const best = agg.reduce((best: any, d: any) =>
             (d.value ?? 0) > (best?.value ?? 0) ? d : best, agg[0]);
           const eff = best?.value ?? 0;
-          if (eff > 0) {
-            console.log("[HealthKit] sleep-quality via native efficiency:", eff);
-            return Math.min(100, Math.round(eff));
-          }
-        }
-      } catch (e) {
-        console.warn("[HealthKit] sleep-quality native queryAggregated failed:", e);
-      }
-
-      // Approach 2: aggregate raw sleep-duration and use as proxy (hrs / 8 × 100)
-      try {
-        const r1 = await (Health as any).queryAggregated({ dataType: "sleep", startDate, endDate, bucket: "day" });
-        const agg1 = r1?.aggregatedData ?? r1?.data ?? [];
-        if (agg1.length > 0) {
-          const totalMin = agg1.reduce((s: number, d: any) => s + (d.value ?? 0), 0);
-          if (totalMin > 0) return Math.min(100, Math.round((totalMin / 480) * 100));
+          if (eff > 0) return Math.min(100, Math.round(eff));
         }
       } catch (_) {}
 
+      // Last resort: sleep duration proxy (hours / 8 × 100)
       try {
-        const r2 = await (Health as any).queryAggregated({ dataType: "sleep", startDate, endDate });
-        const agg2 = r2?.aggregatedData ?? r2?.data ?? [];
-        if (agg2.length > 0) {
-          const totalMin = agg2.reduce((s: number, d: any) => s + (d.value ?? 0), 0);
-          if (totalMin > 0) return Math.min(100, Math.round((totalMin / 480) * 100));
-        }
+        const r = await ExtendedHealth.querySleep({ startDate, endDate });
+        if (r.minutes > 0) return Math.min(100, Math.round((r.minutes / 480) * 100));
       } catch (_) {}
 
       console.warn("[HealthKit] sleep-quality: all approaches returned null");
@@ -252,10 +249,19 @@ async function queryRawMetric(dataType: DataType, dateStr: string): Promise<numb
     }
 
     // ── Sleep Duration ──────────────────────────────────────────────────────────
-    // HealthKit stores categorical samples — queryAggregated may return nothing.
-    // Try three approaches in order:
     if (dataType === "sleep") {
-      // Attempt 1: standard aggregated daily bucket
+      // Primary: ExtendedHealth plugin (compiled directly into app — always reliable)
+      try {
+        const r = await ExtendedHealth.querySleep({ startDate, endDate });
+        if (r.minutes > 0) {
+          console.log("[HealthKit] sleep via ExtendedHealth:", r.minutes, "min");
+          return r.minutes;
+        }
+      } catch (e) {
+        console.warn("[HealthKit] ExtendedHealth.querySleep failed:", e);
+      }
+
+      // Fallback: SPM plugin aggregated
       try {
         const { aggregatedData } = await (Health as any).queryAggregated({
           dataType, startDate, endDate, bucket: "day",
@@ -264,9 +270,8 @@ async function queryRawMetric(dataType: DataType, dateStr: string): Promise<numb
           const total = aggregatedData.reduce((s: number, d: any) => s + (d.value ?? 0), 0);
           if (total > 0) return total;
         }
-      } catch (_) { /* fall through */ }
+      } catch (_) {}
 
-      // Attempt 2: aggregated without bucket
       try {
         const result = await (Health as any).queryAggregated({ dataType, startDate, endDate });
         const data = result?.aggregatedData ?? result?.data ?? [];
@@ -274,52 +279,7 @@ async function queryRawMetric(dataType: DataType, dateStr: string): Promise<numb
           const total = data.reduce((s: number, d: any) => s + (d.value ?? 0), 0);
           if (total > 0) return total;
         }
-      } catch (_) { /* fall through */ }
-
-      // Attempt 3: raw samples — count only "asleep" stages for accuracy
-      try {
-        const result = await (Health as any).query({ dataType, startDate, endDate });
-        const samples: any[] = result?.data ?? result?.values ?? [];
-        if (samples.length > 0) {
-          // Numeric HK enum: 0=InBed, 1=Asleep(legacy), 2=Awake, 3=Core, 4=Deep, 5=REM
-          const ASLEEP_INT = new Set([1, 3, 4, 5]);
-
-          let asleepMin = 0;
-          let hasStageInfo = false;
-
-          for (const s of samples) {
-            const raw = s.value ?? s.stage ?? s.category ?? s.type;
-            if (raw !== undefined && raw !== null) hasStageInfo = true;
-            const dur = Math.max(0,
-              (new Date(s.endDate ?? s.end).getTime() -
-               new Date(s.startDate ?? s.start).getTime()) / 60000
-            );
-            const valNum = typeof raw === "number" ? raw : null;
-            const valStr = (raw != null && typeof raw !== "number")
-              ? String(raw).toLowerCase().replace(/[^a-z]/g, "")
-              : null;
-
-            const isAsleep =
-              (valNum !== null && ASLEEP_INT.has(valNum)) ||
-              (valStr !== null && (
-                valStr === "asleep" || valStr === "sleeping" ||
-                valStr === "asleepcore" || valStr === "core" ||
-                valStr === "asleepdeep" || valStr === "deep" ||
-                valStr === "asleeprem"  || valStr === "rem"
-              ));
-            if (isAsleep) asleepMin += dur;
-          }
-
-          // No recognised asleep stages — sum all samples as fallback
-          if (asleepMin === 0 && !hasStageInfo) {
-            asleepMin = samples.reduce((s: number, smp: any) =>
-              s + Math.max(0, (new Date(smp.endDate ?? smp.end).getTime() -
-                               new Date(smp.startDate ?? smp.start).getTime()) / 60000), 0);
-          }
-
-          if (asleepMin > 0) return asleepMin;
-        }
-      } catch (_) { /* fall through */ }
+      } catch (_) {}
 
       return null;
     }
