@@ -1,5 +1,5 @@
 diff --git a/node_modules/capacitor-health/ios/Sources/HealthPluginPlugin/HealthPlugin.swift b/node_modules/capacitor-health/ios/Sources/HealthPluginPlugin/HealthPlugin.swift
-index f4f1a9b..c726fc8 100644
+index f4f1a9b..fb0c398 100644
 --- a/node_modules/capacitor-health/ios/Sources/HealthPluginPlugin/HealthPlugin.swift
 +++ b/node_modules/capacitor-health/ios/Sources/HealthPluginPlugin/HealthPlugin.swift
 @@ -30,28 +30,25 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
@@ -200,9 +200,7 @@ index f4f1a9b..c726fc8 100644
 -        } else {
 +            return
 +        }
-         
--            guard let dataType = aggregateTypeToHKQuantityType(dataTypeString) else {
--                call.reject("Invalid data type")
++        
 +        if dataTypeString == "sleep" {
 +            self.querySleepAggregated(startDate: startDate, endDate: endDate) { result, error in
 +                if let error = error {
@@ -229,7 +227,9 @@ index f4f1a9b..c726fc8 100644
 +            call.reject("Invalid data type: \(dataTypeString)")
 +            return
 +        }
-+        
+         
+-            guard let dataType = aggregateTypeToHKQuantityType(dataTypeString) else {
+-                call.reject("Invalid data type")
 +        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
 +        
 +        guard let interval = calculateInterval(bucket: bucket) else {
@@ -276,15 +276,15 @@ index f4f1a9b..c726fc8 100644
 +            
 +            call.resolve(["aggregatedData": aggregatedSamples])
 +        }
-         
--            let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
++        
 +        healthStore.execute(query)
 +    }
      
+-            let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
++    // --- Sleep query ---
+     
 -            guard let interval = calculateInterval(bucket: bucket) else {
 -                call.reject("Invalid bucket")
-+    // --- Sleep query ---
-+    
 +    func querySleepAggregated(startDate: Date, endDate: Date, completion: @escaping ([[String: Any]]?, Error?) -> Void) {
 +        guard let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
 +            completion(nil, NSError(domain: "HealthKit", code: -1, userInfo: [NSLocalizedDescriptionKey: "Sleep type unavailable"]))
@@ -317,14 +317,14 @@ index f4f1a9b..c726fc8 100644
 +                let startOfDay = calendar.startOfDay(for: sample.startDate)
 +                let minutes = sample.endDate.timeIntervalSince(sample.startDate) / 60.0
 +                let isInBed = sample.value == HKCategoryValueSleepAnalysis.inBed.rawValue
-+                var isAsleep = false
++                // Always include legacy .asleep (used by Oura, Garmin, Whoop on any iOS version)
++                var isAsleep = sample.value == HKCategoryValueSleepAnalysis.asleep.rawValue
 +                if #available(iOS 16.0, *) {
-+                    isAsleep = sample.value == HKCategoryValueSleepAnalysis.asleepCore.rawValue ||
++                    isAsleep = isAsleep ||
++                               sample.value == HKCategoryValueSleepAnalysis.asleepCore.rawValue ||
 +                               sample.value == HKCategoryValueSleepAnalysis.asleepDeep.rawValue ||
 +                               sample.value == HKCategoryValueSleepAnalysis.asleepREM.rawValue ||
 +                               sample.value == HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue
-+                } else {
-+                    isAsleep = sample.value == HKCategoryValueSleepAnalysis.asleep.rawValue
                  }
 +                if isInBed { dailyInBedMinutes[startOfDay, default: 0.0] += minutes }
 +                if isAsleep { dailyAsleepMinutes[startOfDay, default: 0.0] += minutes }
@@ -391,14 +391,14 @@ index f4f1a9b..c726fc8 100644
 +                let startOfDay = calendar.startOfDay(for: sample.startDate)
 +                let minutes = sample.endDate.timeIntervalSince(sample.startDate) / 60.0
 +                let isInBed = sample.value == HKCategoryValueSleepAnalysis.inBed.rawValue
-+                var isAsleep = false
++                // Always include legacy .asleep (used by Oura, Garmin, Whoop on any iOS version)
++                var isAsleep = sample.value == HKCategoryValueSleepAnalysis.asleep.rawValue
 +                if #available(iOS 16.0, *) {
-+                    isAsleep = sample.value == HKCategoryValueSleepAnalysis.asleepCore.rawValue ||
++                    isAsleep = isAsleep ||
++                               sample.value == HKCategoryValueSleepAnalysis.asleepCore.rawValue ||
 +                               sample.value == HKCategoryValueSleepAnalysis.asleepDeep.rawValue ||
 +                               sample.value == HKCategoryValueSleepAnalysis.asleepREM.rawValue ||
 +                               sample.value == HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue
-+                } else {
-+                    isAsleep = sample.value == HKCategoryValueSleepAnalysis.asleep.rawValue
                  }
 +                if isInBed { dailyInBedMinutes[startOfDay, default: 0.0] += minutes }
 +                if isAsleep { dailyAsleepMinutes[startOfDay, default: 0.0] += minutes }

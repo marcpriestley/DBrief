@@ -145,15 +145,15 @@ public class ExtendedHealth: CAPPlugin, CAPBridgedPlugin {
 
     // MARK: - Helpers
     private static func asleepCategoryValues() -> Set<Int> {
+        // Always include the legacy .asleep value (rawValue 1) — third-party apps such as
+        // Oura, Garmin and Whoop write sleep stages using the deprecated enum even on iOS 16+.
+        var values: Set<Int> = [HKCategoryValueSleepAnalysis.asleep.rawValue]
         if #available(iOS 16.0, *) {
-            return [
-                HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue,
-                HKCategoryValueSleepAnalysis.asleepCore.rawValue,
-                HKCategoryValueSleepAnalysis.asleepDeep.rawValue,
-                HKCategoryValueSleepAnalysis.asleepREM.rawValue,
-            ]
-        } else {
-            return [HKCategoryValueSleepAnalysis.asleep.rawValue]
+            values.insert(HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue)
+            values.insert(HKCategoryValueSleepAnalysis.asleepCore.rawValue)
+            values.insert(HKCategoryValueSleepAnalysis.asleepDeep.rawValue)
+            values.insert(HKCategoryValueSleepAnalysis.asleepREM.rawValue)
         }
+        return values
     }
 }
