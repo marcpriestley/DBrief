@@ -1431,43 +1431,6 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
     }
   });
 
-  // Test notification endpoint (for debugging)
-  app.post("/api/push/test", async (req, res) => {
-    try {
-      const userId = getUserId(req);
-      const subscriptions = await storage.getPushSubscriptions(userId);
-
-      if (subscriptions.length === 0) {
-        return res.status(404).json({ message: "No push subscriptions found" });
-      }
-
-      const results = await Promise.all(
-        subscriptions.map(sub => 
-          sendPushNotification(
-            {
-              endpoint: sub.endpoint,
-              keys: { p256dh: sub.p256dh, auth: sub.auth }
-            },
-            {
-              title: '🧪 Test Notification',
-              body: 'This is a test notification from DBrief!',
-              url: '/'
-            }
-          )
-        )
-      );
-
-      const successCount = results.filter(Boolean).length;
-      res.json({ 
-        success: true, 
-        sent: successCount, 
-        total: subscriptions.length 
-      });
-    } catch (error) {
-      console.error("Test notification error:", error);
-      res.status(500).json({ message: "Failed to send test notification" });
-    }
-  });
 
   async function updateUserStreak(userId: number, entryDate: string) {
     try {

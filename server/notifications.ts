@@ -16,10 +16,10 @@ const MOOD_CHECKIN_TIMES = [
 ];
 
 // Notifications window: fire if current time is within this many minutes AFTER
-// the scheduled time. 30 min gives the server time to restart without missing slots.
+// the scheduled time. 60 min gives the server time to restart without missing slots.
 // DB-backed dedup prevents double-sends within the same window.
-const DELIVERY_WINDOW_MINUTES = 30;
-const MOOD_DELIVERY_WINDOW_MINUTES = 30;
+const DELIVERY_WINDOW_MINUTES = 60;
+const MOOD_DELIVERY_WINDOW_MINUTES = 60;
 
 // ─── VAPID / Web Push setup ────────────────────────────────────────────────
 

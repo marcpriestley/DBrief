@@ -184,6 +184,40 @@ function NotificationPermissionHelper() {
   return null;
 }
 
+function TestNotificationButton() {
+  const { toast } = useToast();
+  const [sending, setSending] = useState(false);
+
+  const handleSend = async () => {
+    setSending(true);
+    try {
+      const res = await fetch("/api/push/test", { method: "POST", credentials: "include" });
+      if (res.ok) {
+        toast({ title: "Test notification sent", description: "Check your notification tray." });
+      } else {
+        const data = await res.json();
+        toast({ title: "Could not send", description: data.message || "No device registered.", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Failed", description: "Network error.", variant: "destructive" });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      className="w-full h-8 text-xs border-dashed"
+      onClick={handleSend}
+      disabled={sending}
+    >
+      {sending ? "Sending…" : "Send test notification"}
+    </Button>
+  );
+}
+
 function PushRegistrationStatus() {
   const { data, refetch, isLoading } = useQuery<{ registered: boolean; hasApns: boolean }>({
     queryKey: ["/api/push/status"],
@@ -651,6 +685,10 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   </div>
                   <Switch checked={moodRemindersEnabled} onCheckedChange={(v) => { haptic("select"); setMoodRemindersEnabled(v); }} />
                 </div>
+
+                {notificationsEnabled && (
+                  <TestNotificationButton />
+                )}
               </SettingsSection>
 
               {/* ── Health ───────────────────────────────────── */}
