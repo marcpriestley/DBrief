@@ -136,6 +136,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Apple Sign-In — verifies the identity token from Sign In with Apple (native iOS)
+  app.post("/api/auth/apple", async (req, res) => {
+    try {
+      const { identityToken, user: appleUserId, email, givenName, familyName } = req.body;
+      if (!identityToken) return res.status(400).json({ message: "Missing identity token" });
+
+      // Decode JWT header to find key ID
+      const jwt = await import("jsonwebtoken");
+      const decoded = jwt.decode(identityToken, { complete: true }) as any;
+      if (!decoded?.header?.kid) return res.status(400).json({ message: "Invalid identity token format" });
+
+      // Fetch Apple's public keys
+      const appleKeysRes = await fetch("https://appleid.apple.com/auth/keys");
+      const { keys } = await appleKeysRes.json() as { keys: any[] };
+      const jwk = keys.find((k: any) => k.kid === decoded.header.kid);
+      if (!jwk) return res.status(401).json({ message: "Apple signing key not found" });
+
+      // Convert JWK to PEM using built-in crypto
+      const { createPublicKey } = await import("crypto");
+      const pubKey = createPublicKey({ key: jwk, format: "jwk" });
+      const pem = pubKey.export({ type: "spki", format: "pem" });
+
+      // Verify the token
+      const payload = jwt.verify(identityToken, pem, {
+        algorithms: ["RS256"],
+        issuer: "https://appleid.apple.com",
+        audience: "com.dbrief.app",
+      }) as any;
+
+      // Use a stable Apple user ID as the account key (email only comes on first sign-in)
+      const emailKey = `apple:${appleUserId}`;
+
+      let user = await storage.getUserByUsername(emailKey);
+      if (!user) {
+        // Try finding by email in case user signed in with email before
+        if (email) {
+          user = await storage.getUserByUsername(email.toLowerCase());
+        }
+        if (!user) {
+          const randomPw = await bcrypt.hash(Math.random().toString(36), 10);
+          user = await storage.createUser({ username: emailKey, password: randomPw });
+          const displayName = [givenName, familyName].filter(Boolean).join(" ") || undefined;
+          if (displayName) await storage.updateUserSettings(user.id, { displayName });
+          await storage.createStreak({ userId: user.id, currentStreak: 0, longestStreak: 0, lastEntryDate: null });
+          await storage.createGoalTemplate({ userId: user.id, title: "Make my bed", recurring: true, isActive: true, sortOrder: 0 });
+          await storage.createHabit({ userId: user.id, name: "Make someone smile", emoji: "😊", category: "daily", anchorHabit: null, reminderEnabled: false });
+          await storage.createHabit({ userId: user.id, name: "Make my bed", emoji: "🛏️", category: "morning", anchorHabit: "I wake up", reminderEnabled: false });
+        }
+      }
+
+      (req.session as any).userId = user.id;
+      res.json({
+        id: user.id,
+        username: user.username,
+        hasCompletedOnboarding: user.hasCompletedOnboarding ?? false,
+        journalPreference: user.journalPreference ?? "evening",
+      });
+    } catch (error: any) {
+      console.error("Apple auth error:", error);
+      res.status(401).json({ message: "Apple sign-in failed. Please try again." });
+    }
+  });
+
   app.get("/api/auth/me", async (req, res) => {
     try {
       const userId = (req.session as any)?.userId;

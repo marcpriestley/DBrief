@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Capacitor } from "@capacitor/core";
+import { Capacitor, registerPlugin } from "@capacitor/core";
 import { useLocation } from "wouter";
 import { useMutation } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,6 +10,17 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Eye, EyeOff, ArrowRight, Loader2 } from "lucide-react";
 import { SiApple, SiGoogle } from "react-icons/si";
+
+interface NativeAuthPlugin {
+  signInWithApple: () => Promise<{
+    identityToken: string;
+    user: string;
+    email?: string;
+    givenName?: string;
+    familyName?: string;
+  }>;
+}
+const NativeAuth = registerPlugin<NativeAuthPlugin>("HealthPlugin");
 
 declare global {
   interface Window {
@@ -129,34 +140,53 @@ export default function Welcome() {
     authMutation.mutate({ email, password, isLogin });
   };
 
+  const appleMutation = useMutation({
+    mutationFn: async (payload: { identityToken: string; user: string; email?: string; givenName?: string; familyName?: string }) => {
+      const res = await apiRequest("POST", "/api/auth/apple", payload);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/auth/me"], data);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Apple Sign-In failed", description: error.message || "Please try again.", variant: "destructive" });
+    },
+  });
+
   const handleGoogleLogin = () => {
     if (!googleClientId) {
-      toast({
-        title: "Google Sign-In not available",
-        description: "Please use email and password to sign in.",
-        variant: "destructive",
+      toast({ title: "Google Sign-In not available", description: "Please use email and password to sign in.", variant: "destructive" });
+      return;
+    }
+
+    if (isNative) {
+      // On native iOS, redirect the WebView to Google OAuth.
+      // Google signs the user in and redirects back to the app with #id_token=...
+      // which is detected in App.tsx and sent to /api/auth/google automatically.
+      const nonce = Math.random().toString(36).slice(2);
+      const params = new URLSearchParams({
+        client_id: googleClientId,
+        redirect_uri: "https://dbrief.replit.app",
+        response_type: "id_token",
+        scope: "openid email profile",
+        nonce,
       });
+      window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
       return;
     }
 
     if (!googleReady || !window.google?.accounts?.id) {
-      // Not ready yet — try to initialize on the spot
       if (window.google?.accounts?.id) {
         window.google.accounts.id.initialize({
           client_id: googleClientId,
-          callback: (response: { credential: string }) => {
-            googleMutation.mutate(response.credential);
-          },
+          callback: (response: { credential: string }) => { googleMutation.mutate(response.credential); },
           cancel_on_tap_outside: true,
         });
         window.google.accounts.id.prompt();
         setGoogleLoading(true);
         setTimeout(() => setGoogleLoading(false), 3000);
       } else {
-        toast({
-          title: "Google Sign-In not ready",
-          description: "Please check your internet connection and try again.",
-        });
+        toast({ title: "Google Sign-In not ready", description: "Please check your internet connection and try again." });
       }
       return;
     }
@@ -166,17 +196,18 @@ export default function Welcome() {
     setTimeout(() => setGoogleLoading(false), 3000);
   };
 
-  const handleAppleLogin = () => {
-    if (isNative) {
-      toast({
-        title: "Apple Sign-In coming soon",
-        description: "Use your email and password for now. Apple Sign-In will be added in the next update.",
-      });
-    } else {
-      toast({
-        title: "Apple Sign-In",
-        description: "Available in the native iOS app. Use email/password to sign in on web.",
-      });
+  const handleAppleLogin = async () => {
+    if (!isNative) {
+      toast({ title: "Apple Sign-In", description: "Available in the native iOS app. Use email/password to sign in on web." });
+      return;
+    }
+    try {
+      const result = await NativeAuth.signInWithApple();
+      appleMutation.mutate(result);
+    } catch (e: any) {
+      if (!e?.message?.includes("cancel") && !e?.message?.includes("Cancel")) {
+        toast({ title: "Apple Sign-In failed", description: e?.message || "Please try again.", variant: "destructive" });
+      }
     }
   };
 
@@ -290,14 +321,27 @@ export default function Welcome() {
             </div>
 
             {isNative ? (
-              <Button
-                variant="outline"
-                onClick={handleAppleLogin}
-                className="w-full h-9 text-xs"
-              >
-                <SiApple className="h-3.5 w-3.5 mr-1.5" />
-                Sign in with Apple
-              </Button>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  variant="outline"
+                  onClick={handleGoogleLogin}
+                  className="w-full h-9 text-xs"
+                >
+                  <SiGoogle className="h-3.5 w-3.5 mr-1.5" />
+                  Google
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleAppleLogin}
+                  disabled={appleMutation.isPending}
+                  className="w-full h-9 text-xs"
+                >
+                  {appleMutation.isPending
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    : <SiApple className="h-3.5 w-3.5 mr-1.5" />}
+                  {!appleMutation.isPending && "Apple"}
+                </Button>
+              </div>
             ) : (
               <div className="grid grid-cols-2 gap-2">
                 <Button

@@ -1,5 +1,5 @@
 import { Switch, Route } from "wouter";
-import { queryClient, getQueryFn } from "./lib/queryClient";
+import { queryClient, getQueryFn, apiRequest } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
@@ -23,6 +23,21 @@ function AuthenticatedRouter() {
     retry: false,
     staleTime: 5 * 60 * 1000,
   });
+
+  // Handle Google OAuth redirect callback — Google returns to the app with
+  // #id_token=... in the URL fragment after the user signs in.
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (!hash.includes("id_token=")) return;
+    const params = new URLSearchParams(hash.slice(1));
+    const idToken = params.get("id_token");
+    if (!idToken) return;
+    window.history.replaceState({}, "", window.location.pathname);
+    apiRequest("POST", "/api/auth/google", { credential: idToken })
+      .then(r => r.json())
+      .then(data => { queryClient.setQueryData(["/api/auth/me"], data); })
+      .catch(console.error);
+  }, []);
 
   // ── Mood modal — lives here so it survives all route changes ──────────────
   const [isMoodOpen, setIsMoodOpen] = useState(false);
