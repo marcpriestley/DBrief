@@ -700,7 +700,8 @@ export class DatabaseStorage implements IStorage {
 
   async getActiveAIInsights(userId: number): Promise<AIInsight[]> {
     return await db.select().from(aiInsights)
-      .where(and(eq(aiInsights.userId, userId), eq(aiInsights.isActive, true)));
+      .where(and(eq(aiInsights.userId, userId), eq(aiInsights.isActive, true)))
+      .orderBy(desc(aiInsights.createdAt));
   }
 
   async createAIInsight(insight: InsertAIInsight): Promise<AIInsight> {

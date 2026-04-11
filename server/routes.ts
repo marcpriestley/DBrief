@@ -882,6 +882,12 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
         return res.json({ insight: null, needsDataRichness: true, recentActiveDays });
       }
       
+      // Fetch previous insights before generating, so we can avoid repeating them
+      const previousInsights = await storage.getActiveAIInsights(userId);
+
+      // Deactivate all old insights — we'll show only the freshly generated one
+      await Promise.all(previousInsights.map(i => storage.deactivateAIInsight(i.id)));
+
       const entries = await storage.getJournalEntriesByUser(userId);
       const scores = await storage.getDailyScoresByUser(userId);
       
@@ -929,7 +935,21 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
         return `${weekdays[target.getDay()]} (${target.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })})`;
       };
 
-      const prompt = `You are an experienced performance analyst. Analyze the user's daily tracking data below. All scores are on a 0-100 scale.
+      // Focus area rotates on each refresh to ensure variety
+      const focusAreas = [
+        "cross-metric correlations (e.g., how sleep scores affect mood or goal completion)",
+        "patterns in journal sentiment and how they correlate with score changes",
+        "goal completion consistency and what days look different to high-performing days",
+        "recovery and energy patterns across the week",
+        "habit streak momentum and its relationship to overall scores",
+      ];
+      const focusArea = focusAreas[Math.floor(Math.random() * focusAreas.length)];
+
+      const prevInsightContext = previousInsights.length > 0
+        ? `\nPREVIOUS INSIGHTS (DO NOT REPEAT these — generate something fresh and different):\n${previousInsights.slice(0, 3).map(i => `- ${i.insight}`).join('\n')}\n`
+        : '';
+
+      const prompt = `You are an experienced performance analyst. Analyze the user's daily tracking data below. All scores are on a 0-100 scale.${prevInsightContext}
 
 IMPORTANT: Only scores that were explicitly logged by the user are included below. A missing score for a date means the user did not log it that day — do NOT assume it was zero or poor performance. Only analyse dates and metrics that have actual data.
 
@@ -953,16 +973,13 @@ ${Object.entries(goalsByDate).map(([date, g]) =>
 
 STREAK: ${streak?.currentStreak || 0} days (longest: ${streak?.longestStreak || 0})
 
-As a data analyst and wellbeing coach, provide ONE deep, actionable insight. Focus on:
-1. Cross-metric correlations (e.g., how sleep quality relates to mood, productivity, or goal completion)
-2. Patterns in journal sentiment that correlate with score fluctuations
-3. Goal completion trends and their relationship to overall wellbeing
-4. One specific, practical recommendation they can implement immediately
-5. Acknowledge their streak commitment warmly
+THIS REFRESH'S FOCUS: ${focusArea}
+
+As a data analyst and performance engineer, provide ONE deep, actionable insight focused on the area above. Keep it specific to their actual data — no generic advice. One specific, practical recommendation they can implement immediately.
 
 IMPORTANT DATE LANGUAGE: When referencing when something happened, always use conversational relative references like "yesterday", "last Tuesday", "on Friday" — NEVER use numerical date formats like "2026-03-20" or "March 20". Write as if speaking to someone naturally.
 
-Keep the insight specific to THEIR data. 2-4 sentences. Suggest 2-3 tags.
+Keep the insight specific to THEIR data. 2-4 sentences. Suggest 2-3 tags relevant to the focus area.
 
 Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag3"] }`;
 
