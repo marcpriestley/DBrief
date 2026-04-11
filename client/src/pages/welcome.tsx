@@ -160,18 +160,20 @@ export default function Welcome() {
     }
 
     if (isNative) {
-      // On native iOS, redirect the WebView to Google OAuth.
-      // Google signs the user in and redirects back to the app with #id_token=...
-      // which is detected in App.tsx and sent to /api/auth/google automatically.
-      const nonce = Math.random().toString(36).slice(2);
-      const params = new URLSearchParams({
-        client_id: googleClientId,
-        redirect_uri: "https://dbrief.replit.app",
-        response_type: "id_token",
-        scope: "openid email profile",
-        nonce,
-      });
-      window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
+      // On native iOS, use ASWebAuthenticationSession via the HealthPlugin.
+      // This avoids Google's WKWebView block and keeps the flow inside the app.
+      setGoogleLoading(true);
+      try {
+        const { registerPlugin } = await import("@capacitor/core");
+        const NativeAuth = registerPlugin<any>("HealthPlugin");
+        const result = await NativeAuth.googleSignIn({ clientId: googleClientId });
+        googleMutation.mutate(result.idToken);
+      } catch (err: any) {
+        setGoogleLoading(false);
+        if (!err?.message?.includes("cancel") && !err?.message?.includes("Cancel")) {
+          toast({ title: "Google Sign-In failed", description: err?.message || "Please try again.", variant: "destructive" });
+        }
+      }
       return;
     }
 
