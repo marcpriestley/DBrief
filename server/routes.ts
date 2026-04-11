@@ -107,8 +107,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const clientId = process.env.GOOGLE_CLIENT_ID;
       if (!clientId) return res.status(503).json({ message: "Google Sign-In is not configured on this server." });
 
+      // Accept tokens from both the web client and the native iOS OAuth client
+      const iosClientId = process.env.GOOGLE_IOS_CLIENT_ID;
+      const validAudiences = [clientId, ...(iosClientId ? [iosClientId] : [])];
       const googleClient = new OAuth2Client(clientId);
-      const ticket = await googleClient.verifyIdToken({ idToken: credential, audience: clientId });
+      const ticket = await googleClient.verifyIdToken({ idToken: credential, audience: validAudiences });
       const payload = ticket.getPayload();
       if (!payload?.email) return res.status(400).json({ message: "No email in Google token" });
 

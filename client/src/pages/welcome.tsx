@@ -153,7 +153,7 @@ export default function Welcome() {
     },
   });
 
-  const handleGoogleLogin = () => {
+  const handleGoogleLogin = async () => {
     if (!googleClientId) {
       toast({ title: "Google Sign-In not available", description: "Please use email and password to sign in.", variant: "destructive" });
       return;
