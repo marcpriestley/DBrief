@@ -13,6 +13,8 @@ import { sendPushNotification, getVapidPublicKey } from "./notifications";
 import { sendApnsNotification, sendSilentBadgeClear, isApnsConfigured, clearApnsCache } from "./apns";
 import bcrypt from "bcrypt";
 import { OAuth2Client } from "google-auth-library";
+import jwt from "jsonwebtoken";
+import { createPublicKey } from "crypto";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { registerChatRoutes } from "./replit_integrations/chat/routes";
 import { registerDebriefRoutes } from "./debrief-routes";
@@ -143,7 +145,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!identityToken) return res.status(400).json({ message: "Missing identity token" });
 
       // Decode JWT header to find key ID
-      const jwt = await import("jsonwebtoken");
       const decoded = jwt.decode(identityToken, { complete: true }) as any;
       if (!decoded?.header?.kid) return res.status(400).json({ message: "Invalid identity token format" });
 
@@ -154,7 +155,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!jwk) return res.status(401).json({ message: "Apple signing key not found" });
 
       // Convert JWK to PEM using built-in crypto
-      const { createPublicKey } = await import("crypto");
       const pubKey = createPublicKey({ key: jwk, format: "jwk" });
       const pem = pubKey.export({ type: "spki", format: "pem" });
 
