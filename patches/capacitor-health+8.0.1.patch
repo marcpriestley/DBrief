@@ -1,18 +1,19 @@
 diff --git a/node_modules/capacitor-health/ios/Sources/HealthPluginPlugin/HealthPlugin.swift b/node_modules/capacitor-health/ios/Sources/HealthPluginPlugin/HealthPlugin.swift
-index f4f1a9b..f4c0ef9 100644
+index f4f1a9b..f6d548c 100644
 --- a/node_modules/capacitor-health/ios/Sources/HealthPluginPlugin/HealthPlugin.swift
 +++ b/node_modules/capacitor-health/ios/Sources/HealthPluginPlugin/HealthPlugin.swift
-@@ -16,7 +16,8 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
+@@ -16,7 +16,9 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
          CAPPluginMethod(name: "requestHealthPermissions", returnType: CAPPluginReturnPromise),
          CAPPluginMethod(name: "openAppleHealthSettings", returnType: CAPPluginReturnPromise),
          CAPPluginMethod(name: "queryAggregated", returnType: CAPPluginReturnPromise),
 -        CAPPluginMethod(name: "queryWorkouts", returnType: CAPPluginReturnPromise)
 +        CAPPluginMethod(name: "queryWorkouts", returnType: CAPPluginReturnPromise),
 +        CAPPluginMethod(name: "querySleepQuality", returnType: CAPPluginReturnPromise),
++        CAPPluginMethod(name: "queryMindfulSession", returnType: CAPPluginReturnPromise),
      ]
      
      let healthStore = HKHealthStore()
-@@ -30,28 +31,25 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
+@@ -30,28 +32,25 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
          call.reject("not implemented")
      }
      
@@ -46,7 +47,7 @@ index f4f1a9b..f4c0ef9 100644
                  call.resolve(["permissions": result])
              }
          }
-@@ -68,53 +66,130 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
+@@ -68,53 +67,130 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
          }
      }
      
@@ -191,7 +192,7 @@ index f4f1a9b..f4c0ef9 100644
      
      @objc func queryAggregated(_ call: CAPPluginCall) {
          guard let startDateString = call.getString("startDate"),
-@@ -127,75 +202,256 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
+@@ -127,75 +203,284 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
              return
          }
          
@@ -307,12 +308,12 @@ index f4f1a9b..f4c0ef9 100644
 +        self.querySleepQuality(startDate: startDate, endDate: endDate) { result, error in
 +            if let error = error {
 +                call.reject(error.localizedDescription)
-+                return
-+            }
-+            guard let entries = result, !entries.isEmpty else {
-+                call.resolve(["efficiency": 0, "minutes": 0])
                  return
              }
++            guard let entries = result, !entries.isEmpty else {
++                call.resolve(["efficiency": 0, "minutes": 0])
++                return
++            }
 +            // Pick the entry with the highest efficiency value
 +            let best = entries.max(by: { ($0["value"] as? Double ?? 0) < ($1["value"] as? Double ?? 0) })!
 +            let efficiency = Int(best["value"] as? Double ?? 0)
@@ -333,12 +334,40 @@ index f4f1a9b..f4c0ef9 100644
 -                anchorDate: startDate,
 -                intervalComponents: interval
 -            )
-+    // --- Sleep query ---
-     
++    // --- Direct mindfulness plugin method (callable from JS as Health.queryMindfulSession) ---
+ 
 -            query.initialResultsHandler = { query, result, error in
 -                if let error = error {
 -                    call.reject("Error fetching aggregated data: \(error.localizedDescription)")
 -                    return
++    @objc func queryMindfulSession(_ call: CAPPluginCall) {
++        guard let startDateString = call.getString("startDate"),
++              let endDateString = call.getString("endDate"),
++              let startDate = isoDateFormatter.date(from: startDateString),
++              let endDate = isoDateFormatter.date(from: endDateString) else {
++            call.reject("Invalid date parameters")
++            return
++        }
++        guard let mindfulType = HKObjectType.categoryType(forIdentifier: .mindfulSession) else {
++            call.reject("Mindful session type unavailable")
++            return
++        }
++        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
++        let query = HKSampleQuery(sampleType: mindfulType, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, error in
++            guard let categorySamples = samples as? [HKCategorySample], error == nil else {
++                call.reject(error?.localizedDescription ?? "Mindfulness query failed")
++                return
++            }
++            let totalMinutes = categorySamples.reduce(0.0) { sum, sample in
++                sum + sample.endDate.timeIntervalSince(sample.startDate) / 60.0
++            }
++            call.resolve(["minutes": Int(totalMinutes)])
++        }
++        self.healthStore.execute(query)
++    }
++
++    // --- Sleep query ---
++    
 +    func querySleepAggregated(startDate: Date, endDate: Date, completion: @escaping ([[String: Any]]?, Error?) -> Void) {
 +        guard let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
 +            completion(nil, NSError(domain: "HealthKit", code: -1, userInfo: [NSLocalizedDescriptionKey: "Sleep type unavailable"]))
@@ -372,15 +401,10 @@ index f4f1a9b..f4c0ef9 100644
 +                if isInBed { dailyInBedMinutes[startOfDay, default: 0.0] += minutes }
 +                if isAsleep { dailyAsleepMinutes[startOfDay, default: 0.0] += minutes }
 +            }
-             
--                var aggregatedSamples: [[String: Any]] = []
++            
 +            // Prefer actual asleep stages; fall back to inBed time for iPhone-only tracking
 +            let dailyMinutes = dailyAsleepMinutes.isEmpty ? dailyInBedMinutes : dailyAsleepMinutes
-             
--                result?.enumerateStatistics(from: startDate, to: endDate) { statistics, stop in
--                    if let sum = statistics.sumQuantity() {
--                        let startDate = statistics.startDate.timeIntervalSince1970 * 1000
--                        let endDate = statistics.endDate.timeIntervalSince1970 * 1000
++            
 +            var dayComp = DateComponents()
 +            dayComp.day = 1
 +            let aggregated: [[String: Any]] = dailyMinutes.map { date, minutes in
@@ -391,6 +415,17 @@ index f4f1a9b..f4c0ef9 100644
 +                ]
 +            }
              
+-                var aggregatedSamples: [[String: Any]] = []
++            completion(aggregated, nil)
++        }
+         
+-                result?.enumerateStatistics(from: startDate, to: endDate) { statistics, stop in
+-                    if let sum = statistics.sumQuantity() {
+-                        let startDate = statistics.startDate.timeIntervalSince1970 * 1000
+-                        let endDate = statistics.endDate.timeIntervalSince1970 * 1000
++        healthStore.execute(query)
++    }
+     
 -                        var value: Double = -1.0
 -                        if(dataTypeString == "steps" && dataType.is(compatibleWith: HKUnit.count())) {
 -                            value = sum.doubleValue(for: HKUnit.count())
@@ -399,26 +434,20 @@ index f4f1a9b..f4c0ef9 100644
 -                        } else if(dataTypeString == "mindfulness" && dataType.is(compatibleWith: HKUnit.second())) {
 -                            value = sum.doubleValue(for: HKUnit.second())
 -                        }
-+            completion(aggregated, nil)
++    // --- Sleep Quality (efficiency) query ---
+ 
++    func querySleepQuality(startDate: Date, endDate: Date, completion: @escaping ([[String: Any]]?, Error?) -> Void) {
++        guard let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
++            completion(nil, NSError(domain: "HealthKit", code: -1, userInfo: [NSLocalizedDescriptionKey: "Sleep type unavailable"]))
++            return
 +        }
-         
-+        healthStore.execute(query)
-+    }
-     
+ 
 -                        aggregatedSamples.append([
 -                            "startDate": startDate,
 -                            "endDate": endDate,
 -                            "value": value
 -                        ])
 -                    }
-+    // --- Sleep Quality (efficiency) query ---
-+
-+    func querySleepQuality(startDate: Date, endDate: Date, completion: @escaping ([[String: Any]]?, Error?) -> Void) {
-+        guard let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
-+            completion(nil, NSError(domain: "HealthKit", code: -1, userInfo: [NSLocalizedDescriptionKey: "Sleep type unavailable"]))
-+            return
-+        }
-+
 +        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
 +        let query = HKSampleQuery(sampleType: sleepType, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, error in
 +            guard let categorySamples = samples as? [HKCategorySample], error == nil else {
@@ -489,7 +518,7 @@ index f4f1a9b..f4c0ef9 100644
      func queryMindfulnessAggregated(startDate: Date, endDate: Date, completion: @escaping ([[String: Any]]?, Error?) -> Void) {
          guard let mindfulType = HKObjectType.categoryType(forIdentifier: .mindfulSession) else {
              completion(nil, NSError(domain: "HealthKit", code: -1, userInfo: [NSLocalizedDescriptionKey: "MindfulSession type unavailable"]))
-@@ -209,31 +465,23 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
+@@ -209,31 +494,23 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
                  return
              }
              
@@ -528,7 +557,7 @@ index f4f1a9b..f4c0ef9 100644
              }
              
              completion(aggregatedSamples, nil)
-@@ -242,18 +490,15 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
+@@ -242,18 +519,15 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
          healthStore.execute(query)
      }
      
@@ -549,7 +578,7 @@ index f4f1a9b..f4c0ef9 100644
          let query = HKStatisticsQuery(
              quantityType: quantityType,
              quantitySamplePredicate: predicate,
-@@ -267,13 +512,8 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
+@@ -267,13 +541,8 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
          }
          
          healthStore.execute(query)
@@ -563,7 +592,7 @@ index f4f1a9b..f4c0ef9 100644
      func calculateInterval(bucket: String) -> DateComponents? {
          switch bucket {
          case "hour":
-@@ -293,9 +533,10 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
+@@ -293,9 +562,10 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
          return f
      }()
      
@@ -575,7 +604,7 @@ index f4f1a9b..f4c0ef9 100644
                let endDateString = call.getString("endDate"),
                let includeHeartRate = call.getBool("includeHeartRate"),
                let includeRoute = call.getBool("includeRoute"),
-@@ -306,12 +547,9 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
+@@ -306,12 +576,9 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
              return
          }
          
@@ -589,7 +618,7 @@ index f4f1a9b..f4c0ef9 100644
              if let error = error {
                  call.reject("Error querying workouts: \(error.localizedDescription)")
                  return
-@@ -326,7 +564,6 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
+@@ -326,7 +593,6 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
              var errors: [String: String] = [:]
              let dispatchGroup = DispatchGroup()
              
@@ -597,7 +626,7 @@ index f4f1a9b..f4c0ef9 100644
              for workout in workouts {
                  var workoutDict: [String: Any] = [
                      "startDate": workout.startDate,
-@@ -340,42 +577,33 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
+@@ -340,42 +606,33 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
                      "distance": workout.totalDistance?.doubleValue(for: .meter()) ?? 0
                  ]
                  
@@ -649,7 +678,7 @@ index f4f1a9b..f4c0ef9 100644
                  }
                  
                  dispatchGroup.notify(queue: .main) {
-@@ -383,8 +611,6 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
+@@ -383,8 +640,6 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
                      workoutDict["route"] = routeSamples
                      workoutList.append(workoutDict)
                  }
@@ -658,7 +687,7 @@ index f4f1a9b..f4c0ef9 100644
              }
              
              dispatchGroup.notify(queue: .main) {
-@@ -395,45 +621,34 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
+@@ -395,45 +650,34 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
          healthStore.execute(workoutQuery)
      }
      
@@ -712,7 +741,7 @@ index f4f1a9b..f4c0ef9 100644
              guard let routes = samples as? [HKWorkoutRoute], error == nil else {
                  completion([], error?.localizedDescription)
                  return
-@@ -442,7 +657,6 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
+@@ -442,7 +686,6 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
              var routeLocations: [[String: Any]] = []
              let routeDispatchGroup = DispatchGroup()
              
@@ -720,7 +749,7 @@ index f4f1a9b..f4c0ef9 100644
              for route in routes {
                  routeDispatchGroup.enter()
                  self.queryLocations(for: route) { locations in
-@@ -459,120 +673,51 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
+@@ -459,120 +702,51 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
          healthStore.execute(routeQuery)
      }
      

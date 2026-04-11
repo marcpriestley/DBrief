@@ -266,18 +266,28 @@ async function queryRawMetric(dataType: DataType, dateStr: string): Promise<numb
 
     // ── Sleep Duration ──────────────────────────────────────────────────────────
     if (dataType === "sleep") {
-      // Primary: ExtendedHealth plugin (compiled directly into app — always reliable)
+      // Primary: Health.querySleepQuality already in the binary — its "minutes" field
+      // gives us sleep duration without needing a separate native method.
+      try {
+        const r = await (Health as any).querySleepQuality({ startDate, endDate });
+        if ((r?.minutes ?? 0) > 0) {
+          console.log("[HealthKit] sleep duration via Health.querySleepQuality:", r.minutes, "min");
+          return r.minutes;
+        }
+      } catch (e) {
+        console.warn("[HealthKit] Health.querySleepQuality (duration) failed:", e);
+      }
+
+      // Fallback: ExtendedHealth plugin
       try {
         const r = await ExtendedHealth.querySleep({ startDate, endDate });
         if (r.minutes > 0) {
           console.log("[HealthKit] sleep via ExtendedHealth:", r.minutes, "min");
           return r.minutes;
         }
-      } catch (e) {
-        console.warn("[HealthKit] ExtendedHealth.querySleep failed:", e);
-      }
+      } catch (_) {}
 
-      // Fallback: SPM plugin aggregated
+      // Fallback: queryAggregated sleep
       try {
         const { aggregatedData } = await (Health as any).queryAggregated({
           dataType, startDate, endDate, bucket: "day",
@@ -288,11 +298,27 @@ async function queryRawMetric(dataType: DataType, dateStr: string): Promise<numb
         }
       } catch (_) {}
 
+      return null;
+    }
+
+    // ── Mindfulness ─────────────────────────────────────────────────────────────
+    if (dataType === "mindfulness") {
+      // Primary: Health.queryMindfulSession — top-level method added to HealthPlugin
       try {
-        const result = await (Health as any).queryAggregated({ dataType, startDate, endDate });
-        const data = result?.aggregatedData ?? result?.data ?? [];
-        if (data.length > 0) {
-          const total = data.reduce((s: number, d: any) => s + (d.value ?? 0), 0);
+        const r = await (Health as any).queryMindfulSession({ startDate, endDate });
+        if ((r?.minutes ?? 0) > 0) {
+          console.log("[HealthKit] mindfulness via Health.queryMindfulSession:", r.minutes, "min");
+          return r.minutes;
+        }
+      } catch (_) {}
+
+      // Fallback: queryAggregated mindfulness (works in patched local binary)
+      try {
+        const { aggregatedData } = await (Health as any).queryAggregated({
+          dataType: "mindfulness", startDate, endDate, bucket: "day",
+        });
+        if (aggregatedData?.length > 0) {
+          const total = aggregatedData.reduce((s: number, d: any) => s + (d.value ?? 0), 0);
           if (total > 0) return total;
         }
       } catch (_) {}
