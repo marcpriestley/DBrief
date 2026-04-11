@@ -3,20 +3,15 @@ import { useState, useCallback, useEffect, useRef } from "react";
 const TTS_STORAGE_KEY = "dbrief_tts_enabled";
 const TTS_VOICE_KEY = "dbrief_tts_voice";
 
-export type TTSVoice = "nova" | "shimmer" | "echo" | "onyx" | "fable" | "alloy";
+export type TTSVoice = "fable" | "onyx" | "echo" | "nova" | "shimmer" | "alloy";
 
 // No-op kept for import compatibility
 export function warmAudioCtx() {}
 
-// Convert ArrayBuffer → base64 data URL via FileReader (reliable in WKWebView).
-function arrayBufferToDataUrl(buffer: ArrayBuffer): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const blob = new Blob([buffer], { type: "audio/mpeg" });
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(blob);
-  });
+// Convert ArrayBuffer → object URL (synchronous, no FileReader delay).
+function arrayBufferToObjectUrl(buffer: ArrayBuffer): string {
+  const blob = new Blob([buffer], { type: "audio/mpeg" });
+  return URL.createObjectURL(blob);
 }
 
 // SpeechSynthesis fallback — works in Capacitor WKWebView on iOS 14+ and
@@ -38,7 +33,7 @@ export function useTTS() {
     try { return localStorage.getItem(TTS_STORAGE_KEY) !== "false"; } catch { return true; }
   });
   const [voice] = useState<TTSVoice>(() => {
-    try { return (localStorage.getItem(TTS_VOICE_KEY) as TTSVoice) || "nova"; } catch { return "nova"; }
+    try { return (localStorage.getItem(TTS_VOICE_KEY) as TTSVoice) || "fable"; } catch { return "fable"; }
   });
   const [speaking, setSpeaking] = useState(false);
 
@@ -105,30 +100,32 @@ export function useTTS() {
       const buffer = await res.arrayBuffer();
       if (ac.signal.aborted) return;
 
-      const dataUrl = await arrayBufferToDataUrl(buffer);
-      if (ac.signal.aborted) return;
+      // Synchronous — no FileReader async delay
+      const objectUrl = arrayBufferToObjectUrl(buffer);
+      if (ac.signal.aborted) { URL.revokeObjectURL(objectUrl); return; }
 
       const audio = new Audio();
       audioRef.current = audio;
 
-      audio.onended = () => {
+      const cleanup = () => {
+        URL.revokeObjectURL(objectUrl);
         if (audioRef.current === audio) audioRef.current = null;
-        onDone();
       };
+      audio.onended = () => { cleanup(); onDone(); };
       audio.onerror = () => {
-        audioRef.current = null;
+        cleanup();
         console.warn("[TTS] audio element error → SpeechSynthesis fallback");
         utteranceRef.current = speakViaSynthesis(text, onDone);
         if (!utteranceRef.current) onDone();
       };
 
-      audio.src = dataUrl;
+      audio.src = objectUrl;
       try {
         await audio.play();
         return; // success — onended will fire onDone
       } catch (playErr: any) {
         console.warn("[TTS] play() rejected:", playErr?.name, "→ SpeechSynthesis fallback");
-        audio.src = "";
+        cleanup();
         audioRef.current = null;
       }
     } catch (err: any) {

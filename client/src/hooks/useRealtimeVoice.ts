@@ -132,7 +132,9 @@ export function useRealtimeVoice({
       processorRef.current = processor;
 
       processor.onaudioprocess = (e) => {
-        if (ws.readyState !== WebSocket.OPEN || isAiSpeakingRef.current) return;
+        if (ws.readyState !== WebSocket.OPEN) return;
+        // Always send mic audio — even while AI is speaking — so OpenAI's server VAD
+        // can detect barge-in and automatically cancel the current response.
         const float32 = e.inputBuffer.getChannelData(0);
         const int16 = new Int16Array(float32.length);
         for (let i = 0; i < float32.length; i++) {
@@ -298,5 +300,15 @@ export function useRealtimeVoice({
     }
   }, []);
 
-  return { status, isActive, connect, disconnect, promptEngineer };
+  // Explicit barge-in: cancel AI audio locally and tell OpenAI to stop the response
+  const interrupt = useCallback(() => {
+    cancelAudio();
+    isAiSpeakingRef.current = false;
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "interrupt" }));
+    }
+    setStatus("ready");
+  }, [cancelAudio]);
+
+  return { status, isActive, connect, disconnect, promptEngineer, interrupt };
 }

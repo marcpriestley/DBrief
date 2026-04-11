@@ -63,7 +63,7 @@ export function registerRealtimeVoiceWS(httpServer: HttpServer) {
         user.displayName,
       );
       // Voice mode addendum — keep responses short since they're spoken
-      systemPrompt += `\n\nVOICE MODE: This is a live voice conversation. Keep all responses to 1-3 sentences maximum — spoken words, not written. Never use lists, bullet points, or formatting. Speak naturally and conversationally.`;
+      systemPrompt += `\n\nVOICE MODE: This is a live voice conversation. Keep all responses to 1-2 sentences maximum — spoken words, not written. Never use lists, bullet points, or formatting. Speak naturally and conversationally. Keep the engineering edge — a short sharp observation or question lands harder than a long one.`;
     } catch (err) {
       clientWs.send(JSON.stringify({ type: "error", message: "Failed to build context" }));
       clientWs.close();
@@ -130,7 +130,7 @@ export function registerRealtimeVoiceWS(httpServer: HttpServer) {
         session: {
           modalities: ["text", "audio"],
           instructions: systemPrompt,
-          voice: "alloy",
+          voice: "fable",
           input_audio_format: "pcm16",
           output_audio_format: "pcm16",
           input_audio_transcription: { model: "whisper-1" },

@@ -1311,9 +1311,15 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
 
           {/* AI responding indicator for realtime mode */}
           {realtimeVoice.status === "ai_speaking" && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
               <Waves className="h-3 w-3 animate-pulse text-primary" />
               <span>Engineer speaking…</span>
+              <button
+                onClick={() => realtimeVoice.interrupt?.()}
+                className="ml-1 px-2 py-0.5 rounded-full bg-muted hover:bg-destructive/20 text-muted-foreground hover:text-destructive border border-border text-xs transition-colors"
+              >
+                Interrupt
+              </button>
             </div>
           )}
           {realtimeVoice.status === "user_speaking" && (
@@ -1431,6 +1437,12 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                       ))}
                     </div>
                     <span className="text-xs text-muted-foreground">Engineer speaking…</span>
+                    <button
+                      onClick={() => realtimeVoice.interrupt?.()}
+                      className="ml-1 px-2 py-0.5 rounded-full bg-background hover:bg-destructive/20 text-muted-foreground hover:text-destructive border border-border text-xs transition-colors"
+                    >
+                      Interrupt
+                    </button>
                   </div>
                 )}
                 {realtimeVoice.status === "user_speaking" && (

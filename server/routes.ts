@@ -836,27 +836,25 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
   app.post("/api/tts", async (req, res) => {
     try {
       getUserId(req);
-      const { text, voice = "nova" } = req.body;
+      const { text, voice = "fable" } = req.body;
       if (!text || typeof text !== "string") return res.status(400).json({ message: "text required" });
-      // Use the gpt-audio model via chat completions — supported by Replit AI integrations.
-      // This produces more natural, human-sounding speech than tts-1.
       const truncated = text.slice(0, 4096);
-      const response = await openai.chat.completions.create({
-        model: "gpt-audio",
-        modalities: ["text", "audio"],
-        audio: { voice: voice as any, format: "mp3" },
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a text-to-speech reader. Speak naturally, clearly, and with appropriate pacing. Read the user's message exactly as written — do not add, omit, or change any words.",
-          },
-          { role: "user", content: truncated },
-        ],
-      } as any);
-      const audioData: string = (response.choices[0]?.message as any)?.audio?.data ?? "";
-      if (!audioData) throw new Error("No audio data returned");
-      const buffer = Buffer.from(audioData, "base64");
+      // Use tts-1 via the direct OpenAI key — much faster than gpt-audio
+      const directKey = process.env.OPENAI_API_KEY || process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+      const mp3Res = await fetch("https://api.openai.com/v1/audio/speech", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${directKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ model: "tts-1", voice, input: truncated }),
+      });
+      if (!mp3Res.ok) {
+        const errText = await mp3Res.text();
+        throw new Error(`TTS API error ${mp3Res.status}: ${errText.slice(0, 200)}`);
+      }
+      const arrayBuf = await mp3Res.arrayBuffer();
+      const buffer = Buffer.from(arrayBuf);
       res.set("Content-Type", "audio/mpeg");
       res.set("Content-Length", String(buffer.length));
       res.set("Cache-Control", "no-store");
