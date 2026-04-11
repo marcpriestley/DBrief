@@ -161,12 +161,15 @@ export default function Welcome() {
 
     if (isNative) {
       // On native iOS, use ASWebAuthenticationSession via the HealthPlugin.
-      // This avoids Google's WKWebView block and keeps the flow inside the app.
+      // Uses the iOS OAuth client ID (separate from the web client ID) which
+      // accepts the com.googleusercontent.apps.* custom URL scheme callback.
+      const iosClientId = import.meta.env.VITE_GOOGLE_IOS_CLIENT_ID as string | undefined;
+      const nativeClientId = iosClientId || googleClientId;
       setGoogleLoading(true);
       try {
         const { registerPlugin } = await import("@capacitor/core");
         const NativeAuth = registerPlugin<any>("HealthPlugin");
-        const result = await NativeAuth.googleSignIn({ clientId: googleClientId });
+        const result = await NativeAuth.googleSignIn({ clientId: nativeClientId });
         googleMutation.mutate(result.idToken);
       } catch (err: any) {
         setGoogleLoading(false);
