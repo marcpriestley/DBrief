@@ -15,8 +15,10 @@ import BirthdayCelebration from "@/components/BirthdayCelebration";
 import MoodCheckinModal from "@/components/MoodCheckinModal";
 import { MoodProvider } from "@/contexts/MoodContext";
 import { registerNativePush, isNativePlatform, clearBadge, setupNotificationTapListener, consumePendingMoodOpen } from "@/hooks/useNativeNotifications";
+import { useToast } from "@/hooks/use-toast";
 
 function AuthenticatedRouter() {
+  const { toast } = useToast();
   const { data: user, isLoading } = useQuery<any>({
     queryKey: ["/api/auth/me"],
     queryFn: getQueryFn({ on401: "returnNull" }),
@@ -65,10 +67,23 @@ function AuthenticatedRouter() {
         }
       } catch {}
     };
+    const onForegroundNotification = (e: any) => {
+      const { title, body, type, url } = e.detail ?? {};
+      // If it's a mood check-in, open the modal directly
+      if (type === "MOOD_CHECKIN" || url?.includes("mood=checkin")) {
+        setIsMoodOpen(true);
+      } else {
+        // Show an in-app toast for all other notifications
+        toast({ title: title || "DBrief", description: body });
+      }
+    };
+
     window.addEventListener("dbrief:open-mood", onOpenMood);
+    window.addEventListener("dbrief:notification", onForegroundNotification);
     window.addEventListener("popstate", checkMoodParam);
     return () => {
       window.removeEventListener("dbrief:open-mood", onOpenMood);
+      window.removeEventListener("dbrief:notification", onForegroundNotification);
       window.removeEventListener("popstate", checkMoodParam);
     };
   }, []);

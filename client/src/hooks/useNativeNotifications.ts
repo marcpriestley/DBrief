@@ -125,6 +125,20 @@ export async function setupNotificationTapListener() {
   tapListenerSetup = true;
   try {
     const { PushNotifications } = await import("@capacitor/push-notifications");
+
+    // Show notification as a system banner even when app is in foreground.
+    // Capacitor requires this listener to exist for iOS to present the alert.
+    await PushNotifications.addListener("pushNotificationReceived", (notification) => {
+      const data: Record<string, any> = notification.data ?? {};
+      const type = (data.type ?? data.TYPE ?? data.category) as string | undefined;
+      const url  = (data.url  ?? data.URL)  as string | undefined;
+      console.log("[APNs] Foreground notification received:", notification.title, "type:", type);
+      // Fire a browser-level custom event so UI components can react (e.g. toast)
+      window.dispatchEvent(new CustomEvent("dbrief:notification", {
+        detail: { title: notification.title, body: notification.body, type, url }
+      }));
+    });
+
     await PushNotifications.addListener("notificationActionPerformed", (action) => {
       const data: Record<string, any> = action.notification?.data ?? {};
       const url  = (data.url  ?? data.URL)  as string | undefined;
