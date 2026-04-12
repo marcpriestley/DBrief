@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { haptic } from "@/lib/haptics";
 import { motion, AnimatePresence } from "framer-motion";
 import { Smile, Frown, Meh, Heart, X } from "lucide-react";
@@ -111,12 +111,39 @@ function MoodSlider({ value, onChange }: { value: number; onChange: (v: number) 
 
 export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProps) {
   const [moodValue, setMoodValue] = useState(50);
+  const seededRef = useRef(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const mood = getMoodEmoji(moodValue);
   const MoodIcon = mood.icon;
   const timeOfDay = getTimeOfDayLabel();
+
+  // Fetch today's check-ins so we can pre-seed the slider with the last value
+  // logged for this session (morning / afternoon / evening).
+  const todayStr = new Date().toLocaleDateString("en-CA");
+  const { data: todayCheckins } = useQuery<Array<{ value: number; label: string }>>({
+    queryKey: ["/api/mood-checkins", todayStr],
+    queryFn: async () => {
+      const res = await fetch(`/api/mood-checkins/${todayStr}`, { credentials: "include" });
+      return res.json();
+    },
+    enabled: open,
+    staleTime: 0,
+  });
+
+  // When the modal opens (or once data arrives), seed the slider from the
+  // most recent check-in for this session — only on initial open, not mid-drag.
+  useEffect(() => {
+    if (!open) { seededRef.current = false; return; }
+    if (seededRef.current || !todayCheckins) return;
+    // Find the most recent entry matching the current time-of-day label
+    const matching = [...todayCheckins]
+      .reverse()
+      .find(c => c.label === timeOfDay);
+    if (matching) setMoodValue(matching.value);
+    seededRef.current = true;
+  }, [open, todayCheckins, timeOfDay]);
 
   const saveMutation = useMutation({
     mutationFn: async (value: number) => {
@@ -129,7 +156,6 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
       queryClient.invalidateQueries({ queryKey: ["/api/mood-checkins"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dates-with-data"] });
       onClose();
-      setMoodValue(50);
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to save mood check-in.", variant: "destructive" });
