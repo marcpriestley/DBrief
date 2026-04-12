@@ -374,19 +374,47 @@ export async function syncHealthData(dateStr: string, enabledMetricNames: string
 
       // Only add to results if it was in the user's requested list
       if (enabledMetricNames.includes(name) && raw !== null && raw > 0) {
-        const score = def.normalize(raw);
-        results.push({ name, value: score });
+        // Sleep Quality: require at least 3 hours of sleep (180 min raw) to be valid.
+        // When a wearable battery dies mid-night, Apple Health falls back to iPhone
+        // motion sensors and often reports 100% efficiency for the brief tracked period.
+        // We discard any Sleep Quality score backed by < 3 h of sleep as unreliable.
+        if (name === "Sleep Quality") {
+          const minSleepMinutes = 180;
+          const rawSleepMinutes = (normalizedSleepHours ?? 0) * 60;
+          if (rawSleepMinutes < minSleepMinutes && normalizedSleepHours !== null) {
+            console.warn(`[HealthKit] Sleep Quality skipped — only ${rawSleepMinutes.toFixed(0)} min of sleep recorded (min 180 min required)`);
+          } else if (normalizedSleepHours === null) {
+            // Sleep duration not available yet (parallel fetch) — add with guard below
+            const score = def.normalize(raw);
+            results.push({ name, value: score });
+          } else {
+            const score = def.normalize(raw);
+            results.push({ name, value: score });
+          }
+        } else {
+          const score = def.normalize(raw);
+          results.push({ name, value: score });
+        }
       }
     })
   );
 
+  // Remove Sleep Quality if sleep duration turned out to be < 3 h
+  // (handles the case where Sleep Quality resolved in parallel before Sleep Duration)
+  const sleepQualityIdx = results.findIndex(r => r.name === "Sleep Quality");
+  if (sleepQualityIdx !== -1 && normalizedSleepHours !== null && normalizedSleepHours < 3) {
+    console.warn(`[HealthKit] Sleep Quality removed post-sync — only ${(normalizedSleepHours * 60).toFixed(0)} min of sleep`);
+    results.splice(sleepQualityIdx, 1);
+  }
+
   // Sleep Quality fallback: if native "sleep-quality" returned nothing, compute from
   // sleep duration (efficiency proxy: hours / 8 * 100, where 8 h = 100 quality).
+  // Only apply if sleep duration is at least 3 hours (reliable data).
   if (
     enabledMetricNames.includes("Sleep Quality") &&
     !results.find(r => r.name === "Sleep Quality") &&
     normalizedSleepHours !== null &&
-    normalizedSleepHours > 0
+    normalizedSleepHours >= 3
   ) {
     const quality = Math.min(100, Math.round((normalizedSleepHours / 8) * 100));
     if (quality > 0) results.push({ name: "Sleep Quality", value: quality });

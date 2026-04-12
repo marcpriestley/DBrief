@@ -146,16 +146,15 @@ function AppLayoutInner({ children }: AppLayoutProps) {
     }).catch(() => {}); // fire-and-forget
   }, []);
 
-  // Auto-sync Apple Health on launch (native iOS, already authorized)
+  // Auto-sync Apple Health on launch + every time app comes back to foreground
   useEffect(() => {
     if (!isNativeIOS() || !getHealthAuthState()) return;
-    // Use local date (en-CA gives YYYY-MM-DD format) so UTC+ users in the
-    // evening don't end up with a "tomorrow" UTC date that misses last night's sleep.
+
     const localDateStr = (d: Date) => d.toLocaleDateString("en-CA");
-    const today = localDateStr(new Date());
-    const yesterday = localDateStr(new Date(Date.now() - 86400000));
-    // Delay slightly so user metrics have time to load
-    const t = setTimeout(async () => {
+
+    async function runSync() {
+      const today = localDateStr(new Date());
+      const yesterday = localDateStr(new Date(Date.now() - 86400000));
       try {
         const metricsRes = await fetch("/api/user-metrics", { credentials: "include" });
         const metrics: Array<{ name: string; isActive: boolean }> = await metricsRes.json();
@@ -169,8 +168,19 @@ function AppLayoutInner({ children }: AppLayoutProps) {
       } catch (e) {
         console.error("[HealthKit] Auto-sync error:", e);
       }
-    }, 2500);
-    return () => clearTimeout(t);
+    }
+
+    // Run on mount with a short delay so user metrics have time to load
+    const t = setTimeout(runSync, 2500);
+
+    // Re-run every time the app comes back to the foreground (e.g. after lock screen)
+    const onVisible = () => { if (document.visibilityState === "visible") runSync(); };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
 
 

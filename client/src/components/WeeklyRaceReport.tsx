@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Flag, ChevronDown, ChevronUp, RefreshCw, Calendar } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { haptic } from "@/lib/haptics";
+import { useToast } from "@/hooks/use-toast";
 
 interface WeeklyReport {
   id: number;
@@ -32,6 +33,8 @@ function isThisWeek(weekStart: string): boolean {
 export default function WeeklyRaceReport() {
   const queryClient = useQueryClient();
   const [expanded, setExpanded] = useState(false);
+  const [skippedMsg, setSkippedMsg] = useState<string | null>(null);
+  const { toast } = useToast();
 
   const { data: report, isLoading } = useQuery<WeeklyReport | null>({
     queryKey: ["/api/weekly-report/latest"],
@@ -44,20 +47,24 @@ export default function WeeklyRaceReport() {
       if (data && !data.skipped) {
         queryClient.setQueryData(["/api/weekly-report/latest"], data);
         setExpanded(true);
+        setSkippedMsg(null);
+      } else {
+        setSkippedMsg("Not enough data yet this week — log some scores or complete a debrief first.");
       }
+    },
+    onError: () => {
+      toast({ title: "Report generation failed", description: "Something went wrong. Try again in a moment.", variant: "destructive" });
     },
   });
 
   const isCurrentWeek = report ? isThisWeek(report.weekStart) : false;
 
-  // Show generate button if no report OR if it's Sunday and no report for this week
-  const today = new Date();
-  const isSunday = today.getDay() === 0;
-  const showGenerate = !report || (!isCurrentWeek && isSunday);
+  // Show generate button whenever there's no report for this week
+  const showGenerate = !report || !isCurrentWeek;
 
   if (isLoading) return null;
 
-  if (!report && !isSunday) return null; // Don't show anything mid-week if no report yet
+  if (!report && !showGenerate) return null;
 
   return (
     <div className="bg-card rounded-xl border border-border/50 shadow-sm overflow-hidden">
@@ -149,10 +156,12 @@ export default function WeeklyRaceReport() {
         )}
       </AnimatePresence>
 
-      {/* No report yet state */}
-      {!report && !generateMutation.isPending && (
+      {/* No report yet / skipped state */}
+      {(!report || !isCurrentWeek) && !generateMutation.isPending && (
         <div className="px-5 pb-4 text-xs text-muted-foreground">
-          Your engineer compiles a race report every Sunday evening. Generate one now to review this week's performance.
+          {skippedMsg ?? (report && !isCurrentWeek
+            ? "No report for this week yet. Generate one to review your performance."
+            : "Generate a race report to review this week's performance.")}
         </div>
       )}
       {generateMutation.isPending && (

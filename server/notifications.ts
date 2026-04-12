@@ -407,15 +407,13 @@ export function startNotificationScheduler() {
     return;
   }
 
-  cron.schedule('* * * * *', async () => {
-    try {
-      await sendDailyReminders();
-      await sendMoodCheckinReminders();
-      await sendHabitReminders();
-      await sendWeeklyReportNotifications();
-    } catch (error) {
-      console.error('[Scheduler] Error:', error);
-    }
+  cron.schedule('* * * * *', () => {
+    Promise.all([
+      sendDailyReminders(),
+      sendMoodCheckinReminders(),
+      sendHabitReminders(),
+      sendWeeklyReportNotifications(),
+    ]).catch(error => console.error('[Scheduler] Error:', error));
   });
 
   console.log('[Notification Scheduler] Started — checking every minute for due reminders');

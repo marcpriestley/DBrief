@@ -142,8 +142,13 @@ export async function setupNotificationTapListener() {
     await PushNotifications.addListener("notificationActionPerformed", (action) => {
       const data: Record<string, any> = action.notification?.data ?? {};
       const url  = (data.url  ?? data.URL)  as string | undefined;
-      const type = (data.type ?? data.TYPE ?? data.category) as string | undefined;
-      console.log("[APNs] Notification tapped, url:", url, "type:", type);
+      // type can appear at top-level OR inside aps (Capacitor version-dependent)
+      const type = (
+        data.type ?? data.TYPE ??
+        data.category ?? data.CATEGORY ??
+        data.aps?.category ?? data.aps?.type
+      ) as string | undefined;
+      console.log("[APNs] Notification tapped, url:", url, "type:", type, "data:", JSON.stringify(data));
       // Mood check-in: detect by type field (preferred) or URL fallback
       if (type === "MOOD_CHECKIN" || url?.includes("mood=checkin")) {
         dispatchOpenMood();
