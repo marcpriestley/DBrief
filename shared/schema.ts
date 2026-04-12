@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, date, timestamp, jsonb, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, real, date, timestamp, jsonb, boolean } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -34,7 +34,7 @@ export const dailyScores = pgTable("daily_scores", {
   userId: integer("user_id").notNull(),
   date: date("date").notNull(),
   metricName: text("metric_name").notNull(),
-  value: integer("value").notNull(),
+  value: real("value").notNull(),
   isAutoSynced: boolean("is_auto_synced").default(false),
 });
 
