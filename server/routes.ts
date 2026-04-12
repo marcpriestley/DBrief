@@ -1107,13 +1107,24 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
       };
 
       const incomingMetrics: Array<{ name: string; value: number }> = metrics || [];
+      // Metric names that were attempted by the client but filtered out (e.g. Sleep Quality
+      // discarded because sleep duration < 3 h). Any previously auto-synced value for these
+      // metrics on this date should be removed so stale data doesn't persist.
+      const clearedMetricNames: string[] = req.body.clearedMetricNames || [];
+
+      const existingMetrics = await storage.getUserMetrics(userId);
+      const existingByName = new Map(existingMetrics.filter(m => m.isActive).map(m => [m.name, m]));
+
+      // Clear stale auto-synced scores for metrics the client explicitly filtered out
+      if (clearedMetricNames.length > 0) {
+        await Promise.all(clearedMetricNames.map(name =>
+          storage.clearAutoSyncedScore(userId, date, name)
+        ));
+      }
 
       if (incomingMetrics.length === 0) {
         return res.json({ success: true, updatedScores: [] });
       }
-
-      const existingMetrics = await storage.getUserMetrics(userId);
-      const existingByName = new Map(existingMetrics.filter(m => m.isActive).map(m => [m.name, m]));
 
       const updatedScores = [];
 

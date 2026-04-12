@@ -420,14 +420,21 @@ export async function syncHealthData(dateStr: string, enabledMetricNames: string
     if (quality > 0) results.push({ name: "Sleep Quality", value: quality });
   }
 
-  if (results.length === 0) return { synced: 0, metrics: [] };
+  // Metrics the user has enabled but that produced no result (null from HealthKit or
+  // filtered out by a guard, e.g. Sleep Quality blocked because sleep < 3 h).
+  // We tell the server to clear any previously auto-synced value so stale data
+  // (e.g. a 100% Sleep Quality from an Oura-dead iPhone-sensor reading) is removed.
+  const savedNames = new Set(results.map(r => r.name));
+  const clearedMetricNames = enabledMetricNames.filter(n => !savedNames.has(n) && METRIC_MAP[n]);
+
+  if (results.length === 0 && clearedMetricNames.length === 0) return { synced: 0, metrics: [] };
 
   try {
     const res = await fetch("/api/health/sync", {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ date: dateStr, metrics: results }),
+      body: JSON.stringify({ date: dateStr, metrics: results, clearedMetricNames }),
     });
     if (!res.ok) throw new Error(await res.text());
   } catch (e) {

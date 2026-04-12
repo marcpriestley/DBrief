@@ -36,6 +36,7 @@ export interface IStorage {
   getMetricHistory(userId: number, metricName: string, days: number): Promise<DailyScore[]>;
   createDailyScore(score: InsertDailyScore): Promise<DailyScore>;
   updateDailyScore(userId: number, date: string, metricName: string, value: number, isAutoSynced?: boolean): Promise<DailyScore | undefined>;
+  clearAutoSyncedScore(userId: number, date: string, metricName: string): Promise<void>;
 
   // User metrics methods
   getUserMetrics(userId: number): Promise<UserMetric[]>;
@@ -311,6 +312,13 @@ export class MemStorage implements IStorage {
     } else {
       return await this.createDailyScore({ userId, date, metricName, value, isAutoSynced });
     }
+  }
+
+  async clearAutoSyncedScore(userId: number, date: string, metricName: string): Promise<void> {
+    const existing = Array.from(this.dailyScores.values()).find(s =>
+      s.userId === userId && s.date === date && s.metricName === metricName && s.isAutoSynced === true
+    );
+    if (existing) this.dailyScores.delete(existing.id);
   }
 
   async getUserMetrics(userId: number): Promise<UserMetric[]> {
@@ -640,6 +648,15 @@ export class DatabaseStorage implements IStorage {
     if (updated) return updated;
 
     return await this.createDailyScore({ userId, date, metricName, value, isAutoSynced });
+  }
+
+  async clearAutoSyncedScore(userId: number, date: string, metricName: string): Promise<void> {
+    await db.delete(dailyScores).where(and(
+      eq(dailyScores.userId, userId),
+      eq(dailyScores.date, date),
+      eq(dailyScores.metricName, metricName),
+      eq(dailyScores.isAutoSynced, true)
+    ));
   }
 
   async getUserMetrics(userId: number): Promise<UserMetric[]> {
