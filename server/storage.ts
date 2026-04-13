@@ -13,7 +13,7 @@ import {
   type PerformancePattern, type InsertPerformancePattern,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, gte, lte, gt } from "drizzle-orm";
+import { eq, and, asc, desc, gte, lte, gt } from "drizzle-orm";
 import { encrypt, decrypt } from "./encryption";
 
 export interface IStorage {
@@ -741,7 +741,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPushSubscriptions(userId: number): Promise<PushSubscription[]> {
-    return await db.select().from(pushSubscriptions).where(eq(pushSubscriptions.userId, userId));
+    return await db.select().from(pushSubscriptions)
+      .where(eq(pushSubscriptions.userId, userId))
+      .orderBy(asc(pushSubscriptions.id));
   }
 
   async createPushSubscription(subscription: InsertPushSubscription): Promise<PushSubscription> {

@@ -1367,21 +1367,45 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
   app.post("/api/push/test", async (req, res) => {
     try {
       const userId = getUserId(req);
-      const users = await storage.getAllUsersForReminder("");
-      const user = users.find(u => u.id === userId);
-      const subs = user?.subscriptions ?? [];
+      const subs = await storage.getPushSubscriptions(userId);
       if (subs.length === 0) {
         return res.status(404).json({ message: "No registered device found. Toggle notifications off and on to register." });
       }
-      const { dispatchToUser } = await import("./notifications");
-      await dispatchToUser(subs, {
+      const { sendApnsNotification } = await import("./apns");
+
+      const apnsSubs = subs.filter(s => !!s.apnsToken);
+      const payload = {
         title: "🏁 Test Notification",
         body: "DBrief notifications are working correctly!",
         url: "/",
         tag: `test-${userId}-${Date.now()}`,
-      });
-      res.json({ success: true, sent: subs.length });
+      };
+
+      if (apnsSubs.length > 0) {
+        // Send to the most recently registered APNs token (highest ID = last in sorted list)
+        const target = apnsSubs[apnsSubs.length - 1];
+        console.log(`[Push Test] Sending APNs test to token ${target.apnsToken?.slice(0, 10)}… (${apnsSubs.length} APNs subs total)`);
+        const ok = await sendApnsNotification(target.apnsToken!, payload);
+        if (!ok) {
+          return res.status(502).json({ message: "Notification sent to Apple but delivery failed. Check APNs credentials or device token." });
+        }
+        return res.json({ success: true, via: "apns", tokens: apnsSubs.length });
+      }
+
+      // No APNs — try web push
+      const { sendPushNotification } = await import("./notifications");
+      const webSubs = subs.filter(s => !s.apnsToken && s.p256dh && s.auth);
+      if (webSubs.length === 0) {
+        return res.status(404).json({ message: "No registered device found. Toggle notifications off and on to register." });
+      }
+      let sent = 0;
+      for (const sub of webSubs) {
+        const ok = await sendPushNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload);
+        if (ok) sent++;
+      }
+      res.json({ success: sent > 0, via: "web-push", sent, total: webSubs.length });
     } catch (error: any) {
+      console.error('[Push Test] Error:', error?.message);
       res.status(500).json({ message: error?.message || "Failed to send test notification" });
     }
   });

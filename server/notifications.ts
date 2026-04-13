@@ -153,7 +153,7 @@ async function dispatchToSubscriptions(
 
 // ─── Daily reminders ────────────────────────────────────────────────────────
 
-export async function sendDailyReminders() {
+export async function sendDailyReminders(windowMinutes = DELIVERY_WINDOW_MINUTES) {
   const now = new Date();
   const allUsers = await storage.getAllUsersForReminder("");
 
@@ -180,7 +180,7 @@ export async function sendDailyReminders() {
 
       for (const reminder of reminderTimes) {
         const [reminderHour, reminderMinute] = reminder.time.split(':').map(Number);
-        if (!isWithinDeliveryWindow(reminderHour, reminderMinute, currentHour, currentMinute)) continue;
+        if (!isWithinDeliveryWindow(reminderHour, reminderMinute, currentHour, currentMinute, windowMinutes)) continue;
 
         // Dedup key includes the date so each slot fires at most once per day.
         // In-memory cache is checked first (fast-path); DB is the authoritative store
@@ -215,7 +215,7 @@ export async function sendDailyReminders() {
 
 // ─── Mood check-in reminders ────────────────────────────────────────────────
 
-export async function sendMoodCheckinReminders() {
+export async function sendMoodCheckinReminders(windowMinutes = MOOD_DELIVERY_WINDOW_MINUTES) {
   const now = new Date();
   const allUsers = await storage.getAllUsersForReminder("");
 
@@ -236,7 +236,7 @@ export async function sendMoodCheckinReminders() {
       const currentMinute = parseInt(currentMinuteStr, 10);
 
       for (const checkinTime of MOOD_CHECKIN_TIMES) {
-        if (!isWithinDeliveryWindow(checkinTime.hour, checkinTime.minute, currentHour, currentMinute, MOOD_DELIVERY_WINDOW_MINUTES)) continue;
+        if (!isWithinDeliveryWindow(checkinTime.hour, checkinTime.minute, currentHour, currentMinute, windowMinutes)) continue;
 
         const key = `mood_sent_${user.id}_${userDateStr}_${checkinTime.label}`;
         // Check in-memory cache first (fast), then DB (survives server restarts)
@@ -401,11 +401,32 @@ async function sendWeeklyReportNotifications() {
 
 // ─── Scheduler ──────────────────────────────────────────────────────────────
 
+// Startup catch-up: run once with a wide window to deliver any notifications
+// that were missed during a server restart or brief downtime.
+// The DB dedup keys prevent any notification from being sent twice.
+const STARTUP_CATCHUP_MINUTES = 240; // 4 hours back
+
+async function runStartupCatchup() {
+  console.log('[Notification Scheduler] Running startup catch-up (4-hour window)…');
+  try {
+    await Promise.all([
+      sendDailyReminders(STARTUP_CATCHUP_MINUTES),
+      sendMoodCheckinReminders(STARTUP_CATCHUP_MINUTES),
+    ]);
+    console.log('[Notification Scheduler] Startup catch-up complete');
+  } catch (err) {
+    console.error('[Notification Scheduler] Startup catch-up error:', err);
+  }
+}
+
 export function startNotificationScheduler() {
   if (!isNotificationsEnabled) {
     console.log('[Notification Scheduler] Disabled — VAPID keys not configured');
     return;
   }
+
+  // Run catch-up 5 seconds after startup to deliver any missed scheduled notifications
+  setTimeout(runStartupCatchup, 5000);
 
   cron.schedule('* * * * *', () => {
     Promise.all([
