@@ -426,7 +426,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   // Voice note mode — long-form voice dump that only sends on explicit Submit
   const [voiceNoteMode, setVoiceNoteMode] = useState(false);
   // "live" or "voice" — which quick-start chip is selected when there are no messages yet
-  const [inputStartMode, setInputStartMode] = useState<"live" | "voice">("live");
+  const [inputStartMode, setInputStartMode] = useState<"live" | "voice">("voice");
   const [voiceNoteSeconds, setVoiceNoteSeconds] = useState(0);
   const voiceNoteTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const voiceNoteTextRef = useRef(""); // accumulated transcript (mirrors voice.interimText continuously)
@@ -820,10 +820,12 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     voiceNoteTimerRef.current = setInterval(() => {
       setVoiceNoteSeconds(s => s + 1);
     }, 1000);
-    // Voice note mode: mic stays open indefinitely — only submit/cancel stops it
+    // Voice note mode: mic stays open indefinitely — only submit/cancel stops it.
+    // restartThresholdMs=3000 so the keep-alive loop only restarts after iOS has definitely
+    // killed recognition (~1-2 s of silence), not mid-pause during normal thinking.
     voice.start(
       (text) => { voiceNoteTextRef.current = text; setUserInput(text); },
-      { noSilenceStop: true },
+      { noSilenceStop: true, restartThresholdMs: 3_000 },
     );
   }, [voice]);
 
