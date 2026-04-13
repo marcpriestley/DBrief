@@ -47,9 +47,11 @@ function formatMsgTime(isoStr: string) {
 
 // How long of unbroken silence (no new speech) before the mic auto-stops
 const AUTO_STOP_SILENCE_MS = 30_000;
-// How often to poll on native to detect iOS stopped recognition due to short pause.
-// Shorter = faster restart after iOS kills recognition on silence, less dead-mic window.
+// Default poll interval for native keep-alive. Shorter = faster restart, more stop/start churn.
 const NATIVE_RESTART_POLL_MS = 1_200;
+// For regular chat mic: restart less aggressively so natural speech pauses (1-2 s) aren't
+// interrupted by a stop/start cycle that creates a brief dead-mic window.
+const NATIVE_RESTART_POLL_CHAT_MS = 2_500;
 
 function useInlineVoice() {
   const [isListening, setIsListening] = useState(false);
@@ -76,6 +78,9 @@ function useInlineVoice() {
   const onSilenceStopRef = useRef<((text: string) => void) | null>(null);
   // When true, silence NEVER auto-stops the mic — only an explicit stop() call does
   const noSilenceStopRef = useRef<boolean>(false);
+  // How long of silence before native keep-alive restarts recognition. Lower = faster recovery
+  // but risks stopping a recognition that's still alive (creating a brief dead-mic window).
+  const restartThresholdMsRef = useRef<number>(NATIVE_RESTART_POLL_MS);
 
   const isNative = Capacitor.isNativePlatform();
   const isSupported =
@@ -175,7 +180,7 @@ function useInlineVoice() {
   };
 
   const start = useCallback(
-    async (onFinal: (text: string) => void, opts?: { autoStopMs?: number; onSilenceStop?: (text: string) => void; noSilenceStop?: boolean }) => {
+    async (onFinal: (text: string) => void, opts?: { autoStopMs?: number; onSilenceStop?: (text: string) => void; noSilenceStop?: boolean; restartThresholdMs?: number }) => {
       if (!isSupported) return;
 
       accumulatedRef.current = "";
@@ -183,6 +188,7 @@ function useInlineVoice() {
       autoStopMsRef.current = opts?.autoStopMs ?? AUTO_STOP_SILENCE_MS;
       onSilenceStopRef.current = opts?.onSilenceStop ?? null;
       noSilenceStopRef.current = opts?.noSilenceStop ?? false;
+      restartThresholdMsRef.current = opts?.restartThresholdMs ?? NATIVE_RESTART_POLL_MS;
       // Clear any stale silence timer from a previous session
       if (silenceAutoStopRef.current) { clearTimeout(silenceAutoStopRef.current); silenceAutoStopRef.current = null; }
 
@@ -248,10 +254,9 @@ function useInlineVoice() {
           nativeSilenceCheckRef.current = setInterval(async () => {
             if (!shouldListenRef.current || isStoppingRef.current || nativeIsRestartingRef.current) return;
             const silenceDuration = Date.now() - lastSpeechTimeRef.current;
-            // If iOS has been quiet for ≥ NATIVE_RESTART_POLL_MS (using >= to handle the
-            // exact-boundary case where silenceDuration === interval period), and we
-            // haven't hit the auto-stop ceiling in timed mode, restart recognition.
-            const pastRestartThreshold = silenceDuration >= NATIVE_RESTART_POLL_MS;
+            // If iOS has been quiet for ≥ restartThresholdMs and we haven't hit the
+            // auto-stop ceiling in timed mode, restart recognition.
+            const pastRestartThreshold = silenceDuration >= restartThresholdMsRef.current;
             const belowAutoStop = noSilenceStopRef.current || silenceDuration < autoStopMsRef.current;
             if (pastRestartThreshold && belowAutoStop) {
               nativeIsRestartingRef.current = true;
@@ -785,7 +790,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
       setUserInput("");
       voice.start((finalText) => {
         setUserInput(finalText);
-      });
+      }, { restartThresholdMs: NATIVE_RESTART_POLL_CHAT_MS });
     }
   };
 
@@ -858,19 +863,6 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     const s = (secs % 60).toString().padStart(2, "0");
     return `${m}:${s}`;
   };
-
-  // Start a voice note from the start screen (creates user-led session first)
-  const startVoiceNoteFresh = useCallback((fresh = false) => {
-    haptic("medium");
-    warmAudioCtx();
-    // Start a user-led session (no AI opening message), then enter voice note mode
-    startDebriefMutation.mutate({ fresh, userLed: true }, {
-      onSuccess: () => {
-        // Enter voice note mode after the session is ready (slight delay for query refresh)
-        setTimeout(() => startVoiceNote(), 400);
-      },
-    });
-  }, [startDebriefMutation, startVoiceNote]);
 
   const toggleConversation = () => {
     haptic("medium");
@@ -1120,23 +1112,6 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                   </>
                 )}
               </Button>
-              {voice.isSupported && (
-                <Button
-                  onClick={() => startVoiceNoteFresh(false)}
-                  disabled={startDebriefMutation.isPending}
-                  variant="outline"
-                  className="flex-1 min-w-[110px] max-w-[150px]"
-                >
-                  {startDebriefMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <>
-                      <AudioLines className="h-4 w-4 mr-2" />
-                      Voice dump
-                    </>
-                  )}
-                </Button>
-              )}
             </div>
           </div>
         </CardContent>
@@ -1193,23 +1168,6 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                     </>
                   )}
                 </Button>
-                {voice.isSupported && (
-                  <Button
-                    onClick={() => startVoiceNoteFresh(true)}
-                    disabled={startDebriefMutation.isPending}
-                    variant="outline"
-                    className="flex-1 min-w-[110px] max-w-[150px]"
-                  >
-                    {startDebriefMutation.isPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <>
-                        <AudioLines className="h-4 w-4 mr-2" />
-                        Voice dump
-                      </>
-                    )}
-                  </Button>
-                )}
               </div>
             </div>
           </CardContent>
@@ -1364,21 +1322,40 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                 <AudioLines className={`h-3.5 w-3.5 ${voiceNoteMode ? "animate-pulse" : ""}`} />
               </Button>
             )}
-            {tts.isSupported && !realtimeVoice.isActive && !isConversationMode && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => { haptic("select"); tts.toggle(); }}
-                className={`h-7 w-7 p-0 ${tts.enabled ? "text-primary" : "text-muted-foreground"}`}
-                title={tts.enabled ? "Voice readback on" : "Voice readback off"}
-              >
-                {tts.enabled ? (
-                  <Volume2 className={`h-3.5 w-3.5 ${tts.speaking ? "animate-pulse" : ""}`} />
-                ) : (
-                  <VolumeX className="h-3.5 w-3.5" />
-                )}
-              </Button>
-            )}
+            {tts.isSupported && !realtimeVoice.isActive && !isConversationMode && (() => {
+              const lastAiMsg = debrief.messages.filter(m => m.role === "assistant").slice(-1)[0]?.content ?? "";
+              const handleSpeaker = () => {
+                haptic("select");
+                if (tts.speaking) {
+                  // Immediately silence whatever is playing
+                  tts.cancel();
+                } else if (lastAiMsg) {
+                  // Play last AI response regardless of enabled state
+                  // (speakNow bypasses the enabled flag)
+                  tts.speakNow(lastAiMsg);
+                } else {
+                  // No messages yet — just toggle the setting
+                  tts.toggle();
+                }
+              };
+              return (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleSpeaker}
+                  className={`h-7 w-7 p-0 ${tts.speaking ? "text-primary" : tts.enabled ? "text-primary/70" : "text-muted-foreground"}`}
+                  title={tts.speaking ? "Stop playback" : lastAiMsg ? "Play last response" : tts.enabled ? "Voice on" : "Voice off"}
+                >
+                  {tts.speaking ? (
+                    <Volume2 className="h-3.5 w-3.5 animate-pulse" />
+                  ) : tts.enabled ? (
+                    <Volume2 className="h-3.5 w-3.5" />
+                  ) : (
+                    <VolumeX className="h-3.5 w-3.5" />
+                  )}
+                </Button>
+              );
+            })()}
             {userMessageCount >= 1 && !showCheckpoint && (
               <Button
                 variant="ghost"
@@ -1717,6 +1694,29 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
             </div>
           ) : (
             <>
+              {/* Quick-start chips — show when session just opened with no messages yet */}
+              {debrief.messages.length === 0 && !isStreaming && (
+                <div className="flex items-center gap-2 mb-2 flex-wrap">
+                  {voice.isSupported && (
+                    <button
+                      onClick={() => { haptic("medium"); warmAudioCtx(); toggleConversation(); }}
+                      className="flex items-center gap-1.5 h-7 px-3 rounded-full text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20"
+                    >
+                      <Radio className="h-3 w-3" />
+                      Live chat
+                    </button>
+                  )}
+                  {voice.isSupported && (
+                    <button
+                      onClick={() => { haptic("medium"); warmAudioCtx(); startVoiceNote(); }}
+                      className="flex items-center gap-1.5 h-7 px-3 rounded-full text-xs font-medium bg-muted/80 text-muted-foreground hover:bg-muted transition-colors border border-border/50"
+                    >
+                      <AudioLines className="h-3 w-3" />
+                      Voice note
+                    </button>
+                  )}
+                </div>
+              )}
               {/* Normal mode — mic waveform indicator */}
               {voice.isListening && (
                 <div className="flex items-center gap-2 mb-2 px-2">
