@@ -47,8 +47,9 @@ function formatMsgTime(isoStr: string) {
 
 // How long of unbroken silence (no new speech) before the mic auto-stops
 const AUTO_STOP_SILENCE_MS = 30_000;
-// How often to poll on native to detect iOS stopped recognition due to short pause
-const NATIVE_RESTART_POLL_MS = 2_000;
+// How often to poll on native to detect iOS stopped recognition due to short pause.
+// Shorter = faster restart after iOS kills recognition on silence, less dead-mic window.
+const NATIVE_RESTART_POLL_MS = 1_200;
 
 function useInlineVoice() {
   const [isListening, setIsListening] = useState(false);
@@ -132,7 +133,8 @@ function useInlineVoice() {
     };
 
     recognition.onerror = (e: any) => {
-      if (e.error === "aborted" || e.error === "no-speech") return;
+      // Transient/recoverable errors — ignore and let onend restart recognition
+      if (e.error === "aborted" || e.error === "no-speech" || e.error === "audio-capture" || e.error === "network") return;
       shouldListenRef.current = false;
       setIsListening(false);
       if (e.error === "not-allowed" || e.error === "service-not-allowed") {
@@ -1310,7 +1312,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     <Card
       ref={debriefCardRef}
       className="border border-border/50 shadow-sm bg-card flex flex-col"
-      style={{ maxHeight: 'calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 15rem)' }}
+      style={{ maxHeight: 'calc(var(--visual-height, 100dvh) - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 15rem)' }}
     >
       <CardContent className="p-0 flex flex-col flex-1 overflow-hidden">
         <div className="px-5 py-3 border-b border-border/50 flex items-center justify-between flex-shrink-0">
@@ -1337,8 +1339,8 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                 variant="ghost"
                 size="sm"
                 onClick={toggleRealtimeVoice}
-                className={`h-7 px-2 gap-1 text-xs ${realtimeVoice.isActive ? "text-primary" : "text-muted-foreground"}`}
-                title={realtimeVoice.isActive ? "End live voice session" : "Start live voice conversation (OpenAI Realtime)"}
+                className={`h-7 w-7 p-0 ${realtimeVoice.isActive ? "text-primary" : "text-muted-foreground"}`}
+                title={realtimeVoice.isActive ? "End live voice session" : "Start live voice conversation"}
               >
                 {realtimeVoice.status === "connecting" ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1349,8 +1351,6 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                 ) : (
                   <Radio className={`h-3.5 w-3.5 ${realtimeVoice.isActive ? "animate-pulse" : ""}`} />
                 )}
-                {realtimeVoice.status === "connecting" ? "Connecting…" :
-                 realtimeVoice.isActive ? "Live" : "Live"}
               </Button>
             )}
             {debrief && !debrief.isComplete && voice.isSupported && !realtimeVoice.isActive && !isConversationMode && (
@@ -1358,11 +1358,10 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                 variant="ghost"
                 size="sm"
                 onClick={voiceNoteMode ? cancelVoiceNote : startVoiceNote}
-                className={`h-7 px-2 gap-1 text-xs ${voiceNoteMode ? "text-primary" : "text-muted-foreground"}`}
-                title={voiceNoteMode ? "Cancel voice note" : "Dump your thoughts — mic stays open until you hit Submit"}
+                className={`h-7 w-7 p-0 ${voiceNoteMode ? "text-primary" : "text-muted-foreground"}`}
+                title={voiceNoteMode ? "Cancel voice note" : "Voice note — mic stays open until you hit Submit"}
               >
                 <AudioLines className={`h-3.5 w-3.5 ${voiceNoteMode ? "animate-pulse" : ""}`} />
-                Voice Note
               </Button>
             )}
             {tts.isSupported && !realtimeVoice.isActive && !isConversationMode && (
@@ -1386,15 +1385,13 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                 size="sm"
                 onClick={() => completeDebriefMutation.mutate(debrief.id)}
                 disabled={completeDebriefMutation.isPending}
-                className="text-xs text-muted-foreground hover:text-foreground"
+                className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                title="End debrief"
               >
                 {completeDebriefMutation.isPending ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
-                  <>
-                    <CheckCircle className="h-3.5 w-3.5 mr-1" />
-                    Finish
-                  </>
+                  <CheckCircle className="h-3.5 w-3.5" />
                 )}
               </Button>
             )}

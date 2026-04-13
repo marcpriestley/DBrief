@@ -146,6 +146,40 @@ function AppLayoutInner({ children }: AppLayoutProps) {
     }).catch(() => {}); // fire-and-forget
   }, []);
 
+  // ── Visual-viewport keyboard tracking ──────────────────────────────────────
+  // Sets --visual-height CSS variable to the actual visible window height so that
+  // components using calc(var(--visual-height)) shrink when the iOS keyboard appears,
+  // even in WKWebView where 100dvh doesn't reflect the keyboard.
+  // Also scrolls focused text inputs / textareas into view after the keyboard opens.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+
+    const setVh = () => {
+      document.documentElement.style.setProperty("--visual-height", `${vv.height}px`);
+    };
+    setVh();
+    vv.addEventListener("resize", setVh);
+    vv.addEventListener("scroll", setVh);
+
+    // Scroll focused input/textarea into the visible area after keyboard opens
+    const onFocus = (e: FocusEvent) => {
+      const el = e.target as HTMLElement;
+      if (el.tagName !== "INPUT" && el.tagName !== "TEXTAREA") return;
+      // Wait for keyboard animation to settle (~350 ms on iOS)
+      setTimeout(() => {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 350);
+    };
+    document.addEventListener("focus", onFocus, true);
+
+    return () => {
+      vv.removeEventListener("resize", setVh);
+      vv.removeEventListener("scroll", setVh);
+      document.removeEventListener("focus", onFocus, true);
+    };
+  }, []);
+
   // Auto-sync Apple Health on launch + every time app comes back to foreground
   useEffect(() => {
     if (!isNativeIOS() || !getHealthAuthState()) return;
