@@ -1,7 +1,7 @@
 import { 
   users, journalEntries, dailyScores, userMetrics, streaks, aiInsights, pushSubscriptions,
-  goalTemplates, dailyGoals, journalAttachments, moodCheckins, debriefs, habits, habitLogs, serverConfig,
-  weeklyReports, performancePatterns,
+  goalTemplates, dailyGoals, journalAttachments, moodCheckins, debriefs, debriefMessages, habits, habitLogs, serverConfig,
+  weeklyReports, performancePatterns, infiniteGoals, longTermGoals,
   type User, type InsertUser, type JournalEntry, type InsertJournalEntry,
   type DailyScore, type InsertDailyScore, type UserMetric, type InsertUserMetric,
   type Streak, type InsertStreak, type AIInsight, type InsertAIInsight,
@@ -113,6 +113,9 @@ export interface IStorage {
   // Performance pattern methods
   getActivePerformancePatterns(userId: number): Promise<PerformancePattern[]>;
   replacePerformancePatterns(userId: number, patterns: InsertPerformancePattern[]): Promise<PerformancePattern[]>;
+
+  // Account deletion
+  deleteUser(userId: number): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
@@ -540,6 +543,7 @@ export class MemStorage implements IStorage {
   async getAllUsersForWeeklyReport(): Promise<Array<User & { subscriptions: PushSubscription[] }>> { return []; }
   async getActivePerformancePatterns(_userId: number): Promise<PerformancePattern[]> { return []; }
   async replacePerformancePatterns(_userId: number, _patterns: InsertPerformancePattern[]): Promise<PerformancePattern[]> { return []; }
+  async deleteUser(_userId: number): Promise<void> {}
 }
 
 // Database implementation
@@ -1237,6 +1241,54 @@ export class DatabaseStorage implements IStorage {
     if (patterns.length === 0) return [];
     const created = await db.insert(performancePatterns).values(patterns).returning();
     return created;
+  }
+
+  async deleteUser(userId: number): Promise<void> {
+    // Delete in dependency order — children before parents
+    const userHabits = await db.select({ id: habits.id }).from(habits).where(eq(habits.userId, userId));
+    if (userHabits.length > 0) {
+      const habitIds = userHabits.map(h => h.id);
+      for (const hid of habitIds) {
+        await db.delete(habitLogs).where(eq(habitLogs.habitId, hid));
+      }
+    }
+
+    const userDebriefs = await db.select({ id: debriefs.id }).from(debriefs).where(eq(debriefs.userId, userId));
+    if (userDebriefs.length > 0) {
+      for (const d of userDebriefs) {
+        await db.delete(debriefMessages).where(eq(debriefMessages.debriefId, d.id));
+      }
+    }
+
+    const userJournals = await db.select({ id: journalEntries.id }).from(journalEntries).where(eq(journalEntries.userId, userId));
+    if (userJournals.length > 0) {
+      for (const j of userJournals) {
+        await db.delete(journalAttachments).where(eq(journalAttachments.journalEntryId, j.id));
+      }
+    }
+
+    const userGoals = await db.select({ id: goalTemplates.id }).from(goalTemplates).where(eq(goalTemplates.userId, userId));
+    if (userGoals.length > 0) {
+      for (const g of userGoals) {
+        await db.delete(dailyGoals).where(eq(dailyGoals.goalTemplateId, g.id));
+      }
+    }
+
+    await db.delete(debriefs).where(eq(debriefs.userId, userId));
+    await db.delete(journalEntries).where(eq(journalEntries.userId, userId));
+    await db.delete(dailyScores).where(eq(dailyScores.userId, userId));
+    await db.delete(userMetrics).where(eq(userMetrics.userId, userId));
+    await db.delete(streaks).where(eq(streaks.userId, userId));
+    await db.delete(aiInsights).where(eq(aiInsights.userId, userId));
+    await db.delete(pushSubscriptions).where(eq(pushSubscriptions.userId, userId));
+    await db.delete(goalTemplates).where(eq(goalTemplates.userId, userId));
+    await db.delete(moodCheckins).where(eq(moodCheckins.userId, userId));
+    await db.delete(habits).where(eq(habits.userId, userId));
+    await db.delete(weeklyReports).where(eq(weeklyReports.userId, userId));
+    await db.delete(performancePatterns).where(eq(performancePatterns.userId, userId));
+    await db.delete(infiniteGoals).where(eq(infiniteGoals.userId, userId));
+    await db.delete(longTermGoals).where(eq(longTermGoals.userId, userId));
+    await db.delete(users).where(eq(users.id, userId));
   }
 }
 

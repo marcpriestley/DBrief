@@ -7,6 +7,9 @@ import { storage } from "./storage";
 import { sessionMiddleware } from "./session";
 
 const app = express();
+// Trust the first reverse-proxy hop (Replit's load balancer) so express-rate-limit
+// can read the real client IP from X-Forwarded-For without validation warnings.
+app.set("trust proxy", 1);
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 

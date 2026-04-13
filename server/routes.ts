@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { authLimiter, aiLimiter, generalLimiter } from "./rate-limit";
 import { 
   insertJournalEntrySchema, insertDailyScoreSchema, 
   insertUserMetricSchema, insertAIInsightSchema,
@@ -32,10 +33,13 @@ const openai = new OpenAI({
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
 
+  // Global rate limit on all /api routes — baseline DDoS/abuse protection
+  app.use("/api", generalLimiter);
+
   registerObjectStorageRoutes(app);
 
-  // Authentication
-  app.post("/api/auth/register", async (req, res) => {
+  // Authentication — brute-force protected
+  app.post("/api/auth/register", authLimiter, async (req, res) => {
     try {
       const { username, password } = req.body;
       if (!username || !password) {
@@ -72,7 +76,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/auth/login", async (req, res) => {
+  app.post("/api/auth/login", authLimiter, async (req, res) => {
     try {
       const { username, password } = req.body;
       if (!username || !password) {
@@ -235,6 +239,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       res.status(500).json({ message: "Failed to sign out" });
+    }
+  });
+
+  app.delete("/api/auth/account", authLimiter, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      await storage.deleteUser(userId);
+      req.session.destroy((err) => {
+        if (err) console.error("[deleteAccount] session destroy error:", err);
+        res.clearCookie("connect.sid");
+        res.json({ success: true });
+      });
+    } catch (error) {
+      console.error("[deleteAccount] error:", error);
+      res.status(500).json({ message: "Failed to delete account" });
     }
   });
 
@@ -1167,7 +1187,7 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
     }
   });
 
-  app.post("/api/weekly-report/generate", async (req, res) => {
+  app.post("/api/weekly-report/generate", aiLimiter, async (req, res) => {
     try {
       const userId = getUserId(req);
       const report = await generateWeeklyReport(userId);
@@ -1191,7 +1211,7 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
     }
   });
 
-  app.post("/api/performance-patterns/generate", async (req, res) => {
+  app.post("/api/performance-patterns/generate", aiLimiter, async (req, res) => {
     try {
       const userId = getUserId(req);
       const patterns = await generatePerformancePatterns(userId);

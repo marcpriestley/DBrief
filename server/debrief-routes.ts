@@ -1,5 +1,6 @@
 import type { Express, Request, Response } from "express";
 import OpenAI from "openai";
+import { aiLimiter } from "./rate-limit";
 import { db } from "./db";
 import { debriefs, debriefMessages, dailyScores, journalEntries, moodCheckins, dailyGoals, userMetrics, users, infiniteGoals, longTermGoals, goalTemplates, habits, habitLogs } from "@shared/schema";
 import { eq, and, desc } from "drizzle-orm";
@@ -381,7 +382,7 @@ export function registerDebriefRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/debriefs/:debriefId/respond", async (req: Request, res: Response) => {
+  app.post("/api/debriefs/:debriefId/respond", aiLimiter, async (req: Request, res: Response) => {
     const userId = requireAuth(req, res);
     if (!userId) return;
 

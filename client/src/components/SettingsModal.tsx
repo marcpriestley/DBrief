@@ -16,7 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import {
   Bell, BellOff, AlertCircle, CheckCircle2, Heart, Plus, Check, Info,
-  User, Map, RefreshCw, KeyRound, ChevronDown, Sun, Moon,
+  User, Map, RefreshCw, KeyRound, ChevronDown, Sun, Moon, Trash2,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { haptic } from "@/lib/haptics";
@@ -380,6 +380,23 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [healthSyncResult, setHealthSyncResult] = useState<string | null>(null);
   const [healthSetupNeeded, setHealthSetupNeeded] = useState(false);
   const [healthRawError, setHealthRawError] = useState<string | null>(null);
+
+  // Danger zone — account deletion
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+
+  const deleteAccountMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", "/api/auth/account");
+    },
+    onSuccess: () => {
+      queryClient.clear();
+      window.location.href = "/";
+    },
+    onError: () => {
+      toast({ title: "Deletion failed", description: "Something went wrong. Please try again.", variant: "destructive" });
+    },
+  });
 
   useEffect(() => {
     if (settings) {
@@ -825,6 +842,45 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   Replay app tour
                 </button>
               </SettingsSection>
+
+              {/* ── Danger Zone ──────────────────────────── */}
+              <div className="border border-red-500/30 rounded-xl overflow-hidden">
+                <button
+                  onClick={() => { haptic("select"); setDeleteConfirmOpen(o => !o); }}
+                  className="w-full flex items-center justify-between px-4 py-3.5 bg-red-500/5 hover:bg-red-500/10 transition-colors"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Trash2 className="h-4 w-4 text-red-500/70" />
+                    <span className="text-sm font-medium text-red-500">Danger Zone</span>
+                  </div>
+                  <ChevronDown className={`h-4 w-4 text-red-500/50 transition-transform duration-200 ${deleteConfirmOpen ? "rotate-180" : ""}`} />
+                </button>
+                {deleteConfirmOpen && (
+                  <div className="px-4 pb-4 pt-3 space-y-3 border-t border-red-500/20 bg-red-500/5">
+                    <p className="text-[12px] text-red-400/90 leading-relaxed">
+                      Permanently deletes your account, all debrief sessions, journal entries, goals, habits, and performance data. This cannot be undone.
+                    </p>
+                    <div className="space-y-2">
+                      <p className="text-[11px] text-muted-foreground">Type <span className="font-mono font-semibold text-red-400">DELETE</span> to confirm</p>
+                      <Input
+                        value={deleteConfirmText}
+                        onChange={e => setDeleteConfirmText(e.target.value)}
+                        placeholder="DELETE"
+                        className="h-8 text-sm border-red-500/30 focus-visible:ring-red-500/40 bg-background"
+                      />
+                    </div>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="w-full"
+                      disabled={deleteConfirmText !== "DELETE" || deleteAccountMutation.isPending}
+                      onClick={() => { haptic("heavy"); deleteAccountMutation.mutate(); }}
+                    >
+                      {deleteAccountMutation.isPending ? "Deleting..." : "Delete My Account"}
+                    </Button>
+                  </div>
+                )}
+              </div>
             </>
           )}
         </div>
