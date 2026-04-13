@@ -425,6 +425,8 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
 
   // Voice note mode — long-form voice dump that only sends on explicit Submit
   const [voiceNoteMode, setVoiceNoteMode] = useState(false);
+  // "live" or "voice" — which quick-start chip is selected when there are no messages yet
+  const [inputStartMode, setInputStartMode] = useState<"live" | "voice">("live");
   const [voiceNoteSeconds, setVoiceNoteSeconds] = useState(0);
   const voiceNoteTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const voiceNoteTextRef = useRef(""); // accumulated transcript (mirrors voice.interimText continuously)
@@ -1694,27 +1696,31 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
             </div>
           ) : (
             <>
-              {/* Quick-start chips — show when session just opened with no messages yet */}
-              {debrief.messages.length === 0 && !isStreaming && (
-                <div className="flex items-center gap-2 mb-2 flex-wrap">
-                  {voice.isSupported && (
-                    <button
-                      onClick={() => { haptic("medium"); warmAudioCtx(); toggleConversation(); }}
-                      className="flex items-center gap-1.5 h-7 px-3 rounded-full text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20"
-                    >
-                      <Radio className="h-3 w-3" />
-                      Live chat
-                    </button>
-                  )}
-                  {voice.isSupported && (
-                    <button
-                      onClick={() => { haptic("medium"); warmAudioCtx(); startVoiceNote(); }}
-                      className="flex items-center gap-1.5 h-7 px-3 rounded-full text-xs font-medium bg-muted/80 text-muted-foreground hover:bg-muted transition-colors border border-border/50"
-                    >
-                      <AudioLines className="h-3 w-3" />
-                      Voice note
-                    </button>
-                  )}
+              {/* Quick-start mode selector — show when session just opened with no messages yet */}
+              {debrief.messages.length === 0 && !isStreaming && voice.isSupported && (
+                <div className="flex items-center gap-1.5 mb-2">
+                  <button
+                    onClick={() => { haptic("select"); setInputStartMode("live"); }}
+                    className={`flex items-center gap-1.5 h-7 px-3 rounded-full text-xs font-medium transition-colors border ${
+                      inputStartMode === "live"
+                        ? "bg-primary/10 text-primary border-primary/30"
+                        : "bg-transparent text-muted-foreground border-border/40 hover:bg-muted/60"
+                    }`}
+                  >
+                    <Radio className="h-3 w-3" />
+                    Live chat
+                  </button>
+                  <button
+                    onClick={() => { haptic("select"); setInputStartMode("voice"); }}
+                    className={`flex items-center gap-1.5 h-7 px-3 rounded-full text-xs font-medium transition-colors border ${
+                      inputStartMode === "voice"
+                        ? "bg-primary/10 text-primary border-primary/30"
+                        : "bg-transparent text-muted-foreground border-border/40 hover:bg-muted/60"
+                    }`}
+                  >
+                    <AudioLines className="h-3 w-3" />
+                    Voice note
+                  </button>
                 </div>
               )}
               {/* Normal mode — mic waveform indicator */}
@@ -1752,7 +1758,20 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
               <div className="flex items-end gap-2 bg-muted/50 rounded-xl border border-border/50 p-2">
                 {voice.isSupported && (
                   <button
-                    onClick={handleMicToggle}
+                    onClick={() => {
+                      // When no messages yet, mic button also respects the selected start mode
+                      if (debrief.messages.length === 0 && !isStreaming) {
+                        haptic("medium");
+                        warmAudioCtx();
+                        if (inputStartMode === "live") {
+                          toggleConversation();
+                        } else {
+                          startVoiceNote();
+                        }
+                      } else {
+                        handleMicToggle();
+                      }
+                    }}
                     disabled={isStreaming}
                     className={`h-8 w-8 rounded-lg shrink-0 flex items-center justify-center transition-all ${
                       voice.isListening
@@ -1771,7 +1790,20 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                   onChange={(e) => setUserInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   onInput={handleTextareaInput}
-                  placeholder={voice.isListening ? "Speak freely — pausing is fine, mic stays on..." : "Message your engineer..."}
+                  onFocus={() => {
+                    // When no messages yet, tapping the input row launches the selected mode
+                    // rather than opening the keyboard to type
+                    if (debrief.messages.length === 0 && !isStreaming && voice.isSupported) {
+                      inputRef.current?.blur();
+                      warmAudioCtx();
+                      if (inputStartMode === "live") {
+                        toggleConversation();
+                      } else {
+                        startVoiceNote();
+                      }
+                    }
+                  }}
+                  placeholder={voice.isListening ? "Speak freely — pausing is fine, mic stays on..." : "Talk to your engineer..."}
                   className="flex-1 min-w-0 bg-transparent border-0 outline-none text-sm placeholder:text-muted-foreground/60 text-foreground p-1 resize-none overflow-hidden leading-5"
                   style={{ height: "20px" }}
                   disabled={isStreaming}
