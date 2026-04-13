@@ -797,7 +797,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
       setUserInput("");
       voice.start((finalText) => {
         setUserInput(finalText);
-      }, { restartThresholdMs: NATIVE_RESTART_POLL_CHAT_MS });
+      }, { restartPollMs: 400, restartThresholdMs: 1_200 });
     }
   };
 
@@ -1316,40 +1316,8 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
               )}
             </div>
           </div>
-          {/* Right: action buttons — never shrinks or clips */}
+          {/* Right: action buttons — icon-only to avoid overflow on narrow screens */}
           <div className="flex items-center gap-0.5 flex-shrink-0">
-            {debrief && !debrief.isComplete && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={toggleRealtimeVoice}
-                className={`h-7 px-2 gap-1 text-xs font-medium ${realtimeVoice.isActive ? "text-primary" : "text-muted-foreground"}`}
-                title={realtimeVoice.isActive ? "End live voice session" : "Start live voice conversation"}
-              >
-                {realtimeVoice.status === "connecting" ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : realtimeVoice.status === "user_speaking" ? (
-                  <Mic className="h-3 w-3 animate-pulse text-primary" />
-                ) : realtimeVoice.status === "ai_speaking" ? (
-                  <Waves className="h-3 w-3 animate-pulse text-primary" />
-                ) : (
-                  <Radio className={`h-3 w-3 ${realtimeVoice.isActive ? "animate-pulse" : ""}`} />
-                )}
-                Live Chat
-              </Button>
-            )}
-            {debrief && !debrief.isComplete && voice.isSupported && !realtimeVoice.isActive && !isConversationMode && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={voiceNoteMode ? cancelVoiceNote : startVoiceNote}
-                className={`h-7 px-2 gap-1 text-xs font-medium ${voiceNoteMode ? "text-primary" : "text-muted-foreground"}`}
-                title={voiceNoteMode ? "Cancel voice note" : "Voice note — mic stays open until you hit Submit"}
-              >
-                <AudioLines className={`h-3 w-3 ${voiceNoteMode ? "animate-pulse" : ""}`} />
-                Voice note
-              </Button>
-            )}
             {tts.isSupported && !realtimeVoice.isActive && !isConversationMode && (() => {
               const lastAiMsg = debrief.messages.filter(m => m.role === "assistant").slice(-1)[0]?.content ?? "";
               const handleSpeaker = () => {
@@ -1736,11 +1704,11 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
             </div>
           ) : (
             <>
-              {/* Quick-start mode selector — show when session just opened with no messages yet */}
-              {debrief.messages.length === 0 && !isStreaming && voice.isSupported && (
+              {/* Mode selector — always visible so labels are always clear */}
+              {!isStreaming && voice.isSupported && (
                 <div className="flex items-center gap-1.5 mb-2">
                   <button
-                    onClick={() => { haptic("select"); setInputStartMode("live"); }}
+                    onClick={() => { haptic("select"); setInputStartMode("live"); if (voiceNoteMode) cancelVoiceNote(); }}
                     className={`flex items-center gap-1.5 h-7 px-3 rounded-full text-xs font-medium transition-colors border ${
                       inputStartMode === "live"
                         ? "bg-primary/10 text-primary border-primary/30"
@@ -1748,7 +1716,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                     }`}
                   >
                     <Radio className="h-3 w-3" />
-                    Live chat
+                    Live Chat
                   </button>
                   <button
                     onClick={() => { haptic("select"); setInputStartMode("voice"); }}
