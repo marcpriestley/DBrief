@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { haptic } from "@/lib/haptics";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { MessageCircle, Send, CheckCircle, Loader2, RotateCcw, Mic, MicOff, ArrowRight, Volume2, VolumeX, Square, ChevronDown, Radio, Waves, AudioLines } from "lucide-react";
+import { MessageCircle, Send, CheckCircle, Flag, Loader2, RotateCcw, Mic, MicOff, ArrowRight, Volume2, VolumeX, Square, ChevronDown, Radio, Waves, AudioLines } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiRequest } from "@/lib/queryClient";
@@ -1289,7 +1289,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     {/* Active session card — viewport-height constrained so header + input always visible */}
     <Card
       ref={debriefCardRef}
-      className="border border-border/50 shadow-sm bg-card flex flex-col"
+      className="border border-amber-500/40 shadow-[0_0_0_1px_rgba(245,158,11,0.15),0_4px_20px_rgba(245,158,11,0.1)] bg-card flex flex-col"
       style={{ maxHeight: 'calc(var(--visual-height, 100dvh) - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 15rem)' }}
     >
       <CardContent className="p-0 flex flex-col flex-1 overflow-hidden">
@@ -1317,18 +1317,19 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                 variant="ghost"
                 size="sm"
                 onClick={toggleRealtimeVoice}
-                className={`h-7 w-7 p-0 ${realtimeVoice.isActive ? "text-primary" : "text-muted-foreground"}`}
+                className={`h-7 px-2 gap-1 text-xs font-medium ${realtimeVoice.isActive ? "text-primary" : "text-muted-foreground"}`}
                 title={realtimeVoice.isActive ? "End live voice session" : "Start live voice conversation"}
               >
                 {realtimeVoice.status === "connecting" ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <Loader2 className="h-3 w-3 animate-spin" />
                 ) : realtimeVoice.status === "user_speaking" ? (
-                  <Mic className="h-3.5 w-3.5 animate-pulse text-primary" />
+                  <Mic className="h-3 w-3 animate-pulse text-primary" />
                 ) : realtimeVoice.status === "ai_speaking" ? (
-                  <Waves className="h-3.5 w-3.5 animate-pulse text-primary" />
+                  <Waves className="h-3 w-3 animate-pulse text-primary" />
                 ) : (
-                  <Radio className={`h-3.5 w-3.5 ${realtimeVoice.isActive ? "animate-pulse" : ""}`} />
+                  <Radio className={`h-3 w-3 ${realtimeVoice.isActive ? "animate-pulse" : ""}`} />
                 )}
+                Live Chat
               </Button>
             )}
             {debrief && !debrief.isComplete && voice.isSupported && !realtimeVoice.isActive && !isConversationMode && (
@@ -1336,10 +1337,11 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                 variant="ghost"
                 size="sm"
                 onClick={voiceNoteMode ? cancelVoiceNote : startVoiceNote}
-                className={`h-7 w-7 p-0 ${voiceNoteMode ? "text-primary" : "text-muted-foreground"}`}
+                className={`h-7 px-2 gap-1 text-xs font-medium ${voiceNoteMode ? "text-primary" : "text-muted-foreground"}`}
                 title={voiceNoteMode ? "Cancel voice note" : "Voice note — mic stays open until you hit Submit"}
               >
-                <AudioLines className={`h-3.5 w-3.5 ${voiceNoteMode ? "animate-pulse" : ""}`} />
+                <AudioLines className={`h-3 w-3 ${voiceNoteMode ? "animate-pulse" : ""}`} />
+                Voice note
               </Button>
             )}
             {tts.isSupported && !realtimeVoice.isActive && !isConversationMode && (() => {
@@ -1382,14 +1384,15 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                 size="sm"
                 onClick={() => completeDebriefMutation.mutate(debrief.id)}
                 disabled={completeDebriefMutation.isPending}
-                className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                className="h-7 px-2 gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
                 title="End debrief"
               >
                 {completeDebriefMutation.isPending ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <Loader2 className="h-3 w-3 animate-spin" />
                 ) : (
-                  <CheckCircle className="h-3.5 w-3.5" />
+                  <Flag className="h-3 w-3" />
                 )}
+                Finish
               </Button>
             )}
           </div>
