@@ -389,6 +389,14 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
 
+  // Reset danger zone state every time the modal is closed so it always opens collapsed with empty input
+  useEffect(() => {
+    if (!isOpen) {
+      setDeleteConfirmOpen(false);
+      setDeleteConfirmText("");
+    }
+  }, [isOpen]);
+
   const deleteAccountMutation = useMutation({
     mutationFn: async () => {
       await apiRequest("DELETE", "/api/auth/account");
