@@ -72,6 +72,8 @@ function useInlineVoice() {
   // Configurable silence timeout and callback for conversation mode
   const autoStopMsRef = useRef<number>(AUTO_STOP_SILENCE_MS);
   const onSilenceStopRef = useRef<((text: string) => void) | null>(null);
+  // When true, silence NEVER auto-stops the mic — only an explicit stop() call does
+  const noSilenceStopRef = useRef<boolean>(false);
 
   const isNative = Capacitor.isNativePlatform();
   const isSupported =
@@ -116,14 +118,16 @@ function useInlineVoice() {
         onFinalRef.current?.(accumulatedRef.current);
       }
       setInterimText(interim);
-      // Any speech resets the silence auto-stop timer
+      // Any speech resets the silence auto-stop timer (skipped in noSilenceStop mode)
       lastSpeechTimeRef.current = Date.now();
-      if (silenceAutoStopRef.current) clearTimeout(silenceAutoStopRef.current);
-      silenceAutoStopRef.current = setTimeout(async () => {
-        if (!shouldListenRef.current) return;
-        onSilenceStopRef.current?.(accumulatedRef.current);
-        await stopRef.current();
-      }, autoStopMsRef.current);
+      if (!noSilenceStopRef.current) {
+        if (silenceAutoStopRef.current) clearTimeout(silenceAutoStopRef.current);
+        silenceAutoStopRef.current = setTimeout(async () => {
+          if (!shouldListenRef.current) return;
+          onSilenceStopRef.current?.(accumulatedRef.current);
+          await stopRef.current();
+        }, autoStopMsRef.current);
+      }
     };
 
     recognition.onerror = (e: any) => {
@@ -168,13 +172,16 @@ function useInlineVoice() {
   };
 
   const start = useCallback(
-    async (onFinal: (text: string) => void, opts?: { autoStopMs?: number; onSilenceStop?: (text: string) => void }) => {
+    async (onFinal: (text: string) => void, opts?: { autoStopMs?: number; onSilenceStop?: (text: string) => void; noSilenceStop?: boolean }) => {
       if (!isSupported) return;
 
       accumulatedRef.current = "";
       onFinalRef.current = onFinal;
       autoStopMsRef.current = opts?.autoStopMs ?? AUTO_STOP_SILENCE_MS;
       onSilenceStopRef.current = opts?.onSilenceStop ?? null;
+      noSilenceStopRef.current = opts?.noSilenceStop ?? false;
+      // Clear any stale silence timer from a previous session
+      if (silenceAutoStopRef.current) { clearTimeout(silenceAutoStopRef.current); silenceAutoStopRef.current = null; }
 
       // --- Native iOS path via Capacitor plugin (with Web Speech API fallback) ---
       if (isNative) {
@@ -217,12 +224,14 @@ function useInlineVoice() {
             // Track last speech so the silence-check loop can restart iOS recognition
             if (partial) {
               lastSpeechTimeRef.current = Date.now();
-              if (silenceAutoStopRef.current) clearTimeout(silenceAutoStopRef.current);
-              silenceAutoStopRef.current = setTimeout(async () => {
-                if (!shouldListenRef.current) return;
-                onSilenceStopRef.current?.(accumulatedRef.current);
-                await stopRef.current();
-              }, autoStopMsRef.current);
+              if (!noSilenceStopRef.current) {
+                if (silenceAutoStopRef.current) clearTimeout(silenceAutoStopRef.current);
+                silenceAutoStopRef.current = setTimeout(async () => {
+                  if (!shouldListenRef.current) return;
+                  onSilenceStopRef.current?.(accumulatedRef.current);
+                  await stopRef.current();
+                }, autoStopMsRef.current);
+              }
             }
           });
 
@@ -235,9 +244,11 @@ function useInlineVoice() {
           nativeSilenceCheckRef.current = setInterval(async () => {
             if (!shouldListenRef.current || isStoppingRef.current) return;
             const silenceDuration = Date.now() - lastSpeechTimeRef.current;
-            // If iOS has been quiet for >2 s but we haven't hit the auto-stop,
-            // restart recognition so the next utterance is captured.
-            if (silenceDuration > NATIVE_RESTART_POLL_MS && silenceDuration < autoStopMsRef.current) {
+            // If iOS has been quiet for >2 s (and we haven't hit the auto-stop limit in
+            // timed mode), restart recognition so the next utterance is captured.
+            const pastRestartThreshold = silenceDuration > NATIVE_RESTART_POLL_MS;
+            const belowAutoStop = noSilenceStopRef.current || silenceDuration < autoStopMsRef.current;
+            if (pastRestartThreshold && belowAutoStop) {
               try {
                 await SpeechRecognition.stop().catch(() => {});
                 if (!shouldListenRef.current || isStoppingRef.current) return;
@@ -789,10 +800,10 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     voiceNoteTimerRef.current = setInterval(() => {
       setVoiceNoteSeconds(s => s + 1);
     }, 1000);
-    // 5-minute max, no auto-send on silence
+    // Voice note mode: mic stays open indefinitely — only submit/cancel stops it
     voice.start(
       (text) => { voiceNoteTextRef.current = text; setUserInput(text); },
-      { autoStopMs: 5 * 60 * 1000 },
+      { noSilenceStop: true },
     );
   }, [voice]);
 
@@ -1337,10 +1348,10 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                 size="sm"
                 onClick={voiceNoteMode ? cancelVoiceNote : startVoiceNote}
                 className={`h-7 px-2 gap-1 text-xs ${voiceNoteMode ? "text-primary" : "text-muted-foreground"}`}
-                title={voiceNoteMode ? "Cancel voice note" : "Record a voice note (up to 5 min, submit when done)"}
+                title={voiceNoteMode ? "Cancel voice note" : "Dump your thoughts — mic stays open until you hit Submit"}
               >
                 <AudioLines className={`h-3.5 w-3.5 ${voiceNoteMode ? "animate-pulse" : ""}`} />
-                Note
+                Voice Note
               </Button>
             )}
             {tts.isSupported && !realtimeVoice.isActive && !isConversationMode && (
