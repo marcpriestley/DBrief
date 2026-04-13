@@ -1191,9 +1191,10 @@ export class DatabaseStorage implements IStorage {
 
   // ─── Weekly Reports ─────────────────────────────────────────────────────────
   async getLatestWeeklyReport(userId: number): Promise<WeeklyReport | undefined> {
+    const todayStr = new Date().toISOString().split("T")[0];
     const [row] = await db.select().from(weeklyReports)
-      .where(eq(weeklyReports.userId, userId))
-      .orderBy(desc(weeklyReports.createdAt))
+      .where(and(eq(weeklyReports.userId, userId), lte(weeklyReports.weekEnd, todayStr)))
+      .orderBy(desc(weeklyReports.weekStart))
       .limit(1);
     return row;
   }

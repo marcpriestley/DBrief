@@ -12,14 +12,20 @@ const openai = new OpenAI({
 
 export function getWeekBounds(date: Date = new Date()): { weekStart: string; weekEnd: string } {
   const d = new Date(date);
-  const day = d.getDay(); // 0=Sun, 1=Mon
-  const diffToMonday = (day === 0 ? -6 : 1 - day);
-  const monday = new Date(d);
-  monday.setDate(d.getDate() + diffToMonday);
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
+  const day = d.getDay(); // 0=Sun, 1=Mon, …, 6=Sat
+
+  // Always report on the most recently COMPLETED Mon–Sun week.
+  //   Sunday (day=0) → the week ending today is complete → use current week
+  //   Any other day  → the week ending last Sunday is the most recent complete week
+  const diffToLastSunday = day === 0 ? 0 : -day;
+  const lastSunday = new Date(d);
+  lastSunday.setDate(d.getDate() + diffToLastSunday);
+
+  const monday = new Date(lastSunday);
+  monday.setDate(lastSunday.getDate() - 6);
+
   const fmt = (dt: Date) => dt.toISOString().split("T")[0];
-  return { weekStart: fmt(monday), weekEnd: fmt(sunday) };
+  return { weekStart: fmt(monday), weekEnd: fmt(lastSunday) };
 }
 
 function dateRange(startStr: string, endStr: string): string[] {
