@@ -1,9 +1,8 @@
 import { useEffect } from "react";
 import { Capacitor } from "@capacitor/core";
 
-// Track registration state at module level so it survives re-renders
+// ── iOS APNs registration state ────────────────────────────────────────────
 let apnsRegistered = false;
-// Token that arrived before the user was logged in — retried after auth
 let pendingApnsToken: string | null = null;
 
 async function sendTokenToServer(token: string): Promise<boolean> {
@@ -14,11 +13,8 @@ async function sendTokenToServer(token: string): Promise<boolean> {
       credentials: "include",
       body: JSON.stringify({ deviceToken: token }),
     });
-
     if (!res.ok) {
       if (res.status === 401) {
-        // Not logged in yet — hold the token so useNativeNotifications can
-        // retry it once the user's session is confirmed.
         pendingApnsToken = token;
         console.log("[APNs] Not authenticated yet — token saved for post-login retry");
       } else {
@@ -26,15 +22,45 @@ async function sendTokenToServer(token: string): Promise<boolean> {
       }
       return false;
     }
-
     console.log("[APNs] Token registered with server successfully");
     pendingApnsToken = null;
     apnsRegistered = true;
     return true;
   } catch (err) {
-    // Network error — keep the token so we can retry
     console.error("[APNs] Network error registering token:", err);
     pendingApnsToken = token;
+    return false;
+  }
+}
+
+// ── Android FCM registration state ────────────────────────────────────────
+let fcmRegistered = false;
+let pendingFcmToken: string | null = null;
+
+async function sendFcmTokenToServer(token: string): Promise<boolean> {
+  try {
+    const res = await fetch("/api/push/register-fcm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ deviceToken: token }),
+    });
+    if (!res.ok) {
+      if (res.status === 401) {
+        pendingFcmToken = token;
+        console.log("[FCM] Not authenticated yet — token saved for post-login retry");
+      } else {
+        console.error("[FCM] Server rejected token registration:", res.status);
+      }
+      return false;
+    }
+    console.log("[FCM] Token registered with server successfully");
+    pendingFcmToken = null;
+    fcmRegistered = true;
+    return true;
+  } catch (err) {
+    console.error("[FCM] Network error registering token:", err);
+    pendingFcmToken = token;
     return false;
   }
 }
@@ -199,6 +225,21 @@ export function useNativeNotifications(enabled: boolean) {
 
     setupNotificationTapListener();
 
+    const platform = Capacitor.getPlatform();
+
+    // ── Android FCM path ──────────────────────────────────────────────────
+    if (platform === "android") {
+      if (fcmRegistered) return;
+      if (pendingFcmToken) {
+        console.log("[FCM] Retrying pending token after login...");
+        sendFcmTokenToServer(pendingFcmToken);
+        return;
+      }
+      registerNativePush();
+      return;
+    }
+
+    // ── iOS APNs path ─────────────────────────────────────────────────────
     if (apnsRegistered) return;
 
     // Case 1: token arrived pre-login via native bridge and needs to be re-sent now
@@ -226,44 +267,48 @@ export type PushPermissionResult = "granted" | "denied" | "error" | `error:${str
 export async function registerNativePush(): Promise<PushPermissionResult> {
   if (!Capacitor.isNativePlatform()) return "error";
 
+  const isAndroid = Capacitor.getPlatform() === "android";
+  const tag = isAndroid ? "[FCM]" : "[APNs]";
+
   try {
     const { PushNotifications } = await import("@capacitor/push-notifications");
 
     let permission = await PushNotifications.checkPermissions();
-    console.log("[APNs] Current permission state:", permission.receive);
+    console.log(`${tag} Current permission state:`, permission.receive);
 
-    // Always call requestPermissions — on iOS it returns current state without
-    // showing a dialog if already granted or denied. This handles the case where
-    // the user manually enabled notifications in iOS Settings after an initial denial.
     permission = await PushNotifications.requestPermissions();
-    console.log("[APNs] After requestPermissions:", permission.receive);
+    console.log(`${tag} After requestPermissions:`, permission.receive);
 
     if (permission.receive === "denied") {
-      console.log("[APNs] Permission denied — user must enable in iOS Settings");
+      console.log(`${tag} Permission denied — user must enable in device Settings`);
       return "denied";
     }
 
     if (permission.receive !== "granted") {
-      console.log("[APNs] Permission not granted:", permission.receive);
+      console.log(`${tag} Permission not granted:`, permission.receive);
       return `error:${permission.receive}`;
     }
 
-    // addListener returns a Promise in Capacitor — must await before calling register()
-    // so the listener is guaranteed to be set up before the registration event fires.
+    // addListener must be awaited before calling register() so the listener is
+    // guaranteed to be in place before the registration token event fires.
     await PushNotifications.addListener("registration", async (token) => {
-      console.log("[APNs] Device token via Capacitor plugin:", token.value.substring(0, 10) + "...");
-      await sendTokenToServer(token.value);
+      console.log(`${tag} Device token via Capacitor plugin:`, token.value.substring(0, 12) + "...");
+      if (isAndroid) {
+        await sendFcmTokenToServer(token.value);
+      } else {
+        await sendTokenToServer(token.value);
+      }
     });
 
     await PushNotifications.addListener("registrationError", (err) => {
-      console.error("[APNs] Registration error:", err.error);
+      console.error(`${tag} Registration error:`, err.error);
     });
 
     await PushNotifications.register();
     return "granted";
   } catch (err: any) {
     const msg = String(err?.message || err || "unknown");
-    console.log("[APNs] Capacitor plugin unavailable, relying on native bridge:", msg);
+    console.log(`${tag} Capacitor plugin unavailable:`, msg);
     return `error:${msg}`;
   }
 }

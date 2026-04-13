@@ -10,7 +10,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { haptic } from "@/lib/haptics";
 import { DateProvider, useDateContext } from "@/contexts/DateContext";
 import logoSrc from "@assets/9071F600-13EE-4563-BC00-D0D7AB8E3782_1_105_c_1775250530025.jpeg";
-import { isNativeIOS, getHealthAuthState, syncHealthData } from "@/lib/healthKit";
+import { isNativeHealth, getHealthAuthState, syncHealthData } from "@/lib/healthKit";
 import { useMoodOpen } from "@/contexts/MoodContext";
 
 interface AppLayoutProps {
@@ -180,9 +180,9 @@ function AppLayoutInner({ children }: AppLayoutProps) {
     };
   }, []);
 
-  // Auto-sync Apple Health on launch + every time app comes back to foreground
+  // Auto-sync Apple Health / Health Connect on launch + every time app comes back to foreground
   useEffect(() => {
-    if (!isNativeIOS() || !getHealthAuthState()) return;
+    if (!isNativeHealth() || !getHealthAuthState()) return;
 
     const localDateStr = (d: Date) => d.toLocaleDateString("en-CA");
 

@@ -13,6 +13,15 @@ export function isNativeIOS(): boolean {
   return Capacitor.isNativePlatform() && Capacitor.getPlatform() === "ios";
 }
 
+export function isNativeAndroid(): boolean {
+  return Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android";
+}
+
+/** True if this is any native platform that can access health data */
+export function isNativeHealth(): boolean {
+  return isNativeIOS() || isNativeAndroid();
+}
+
 // Extended data type strings (matching the enhanced Swift plugin)
 type DataType =
   | "steps"
@@ -143,13 +152,15 @@ export function getHealthSyncableMetrics(): string[] {
   return Object.keys(METRIC_MAP);
 }
 
-export type HealthAvailability = "available" | "not_installed" | "not_ios" | "unavailable";
+// "not_health" replaces the old "not_ios" for cross-platform clarity
+export type HealthAvailability = "available" | "not_installed" | "not_ios" | "not_health" | "unavailable";
 
 export async function checkHealthAvailable(): Promise<HealthAvailability> {
-  if (!isNativeIOS()) return "not_ios";
+  if (!isNativeHealth()) return isNativeIOS() ? "not_ios" : "not_health";
   try {
     const { available } = await Health.isHealthAvailable();
-    return available ? "available" : "unavailable";
+    // On Android "not available" means Health Connect isn't installed
+    return available ? "available" : (isNativeAndroid() ? "not_installed" : "unavailable");
   } catch (e: any) {
     const msg = String(e?.message ?? e);
     _lastHealthError = msg;
@@ -165,7 +176,7 @@ export async function checkHealthAvailable(): Promise<HealthAvailability> {
 export type HealthAuthResult = "granted" | "denied" | "not_installed" | "error";
 
 export async function requestHealthPermissions(): Promise<HealthAuthResult> {
-  if (!isNativeIOS()) return "not_installed";
+  if (!isNativeHealth()) return "not_installed";
   try {
     await (Health as any).requestHealthPermissions({ permissions: ALL_PERMISSIONS });
     setHealthAuthState(true);
@@ -174,7 +185,7 @@ export async function requestHealthPermissions(): Promise<HealthAuthResult> {
   } catch (e: any) {
     const msg = String(e?.message ?? e);
     _lastHealthError = msg;
-    console.error("[HealthKit] Authorization error:", msg);
+    console.error("[Health] Authorization error:", msg);
     const low = msg.toLowerCase();
     if (low.includes("not implemented") || low.includes("not available") ||
         low.includes("unimplemented") || low.includes("no implementation") ||
@@ -188,157 +199,159 @@ export async function requestHealthPermissions(): Promise<HealthAuthResult> {
   }
 }
 
-/** Query one metric for a date; returns the raw HealthKit value (pre-normalization) */
+/** Android only: open Health Connect in Play Store so user can install it */
+export async function showHealthConnectInPlayStore(): Promise<void> {
+  try {
+    await (Health as any).showHealthConnectInPlayStore();
+  } catch (e) {
+    console.warn("[Health] showHealthConnectInPlayStore failed:", e);
+  }
+}
+
+/** Android only: open Health Connect settings */
+export async function openHealthConnectSettings(): Promise<void> {
+  try {
+    await (Health as any).openHealthConnectSettings();
+  } catch (e) {
+    console.warn("[Health] openHealthConnectSettings failed:", e);
+  }
+}
+
+/** Query one metric for a date; returns the raw value (pre-normalization) */
 async function queryRawMetric(dataType: DataType, dateStr: string): Promise<number | null> {
+  const onAndroid = isNativeAndroid();
+  const tag = onAndroid ? "[HealthConnect]" : "[HealthKit]";
   try {
     let startDate: string;
     let endDate: string;
 
     if (dataType === "sleep" || dataType === "sleep-quality") {
-      // Sleep samples span midnight and can start/end at irregular times.
-      // Use a wide 40-hour window (previous day 4 AM → today 8 PM local) to
-      // ensure no session is missed regardless of timezone or nap timing.
-      const todayLocal = new Date(`${dateStr}T20:00:00`); // no Z → local time
+      // Sleep samples span midnight. Use a 40-hour window to catch any overnight session.
+      const todayLocal = new Date(`${dateStr}T20:00:00`); // local time (no Z)
       const prevLocal  = new Date(`${dateStr}T04:00:00`);
       prevLocal.setDate(prevLocal.getDate() - 1);
       startDate = prevLocal.toISOString();
       endDate   = todayLocal.toISOString();
     } else {
-      // For all other metrics, a UTC-day window is accurate enough
       startDate = `${dateStr}T00:00:00.000Z`;
       endDate   = `${dateStr}T23:59:59.999Z`;
     }
 
-    // ── Sleep Quality ──────────────────────────────────────────────────────────
+    // ── Sleep Quality ─────────────────────────────────────────────────────────
     if (dataType === "sleep-quality") {
-      // Primary: Health.querySleepQuality — a top-level method on the SPM plugin
-      // (the HealthPlugin is always discovered; ExtendedHealth has registration issues)
-      try {
-        const r = await (Health as any).querySleepQuality({ startDate, endDate });
-        if ((r?.efficiency ?? 0) > 0) {
-          console.log("[HealthKit] sleep-quality via Health.querySleepQuality:", r.efficiency);
-          return Math.min(100, Math.round(r.efficiency));
-        }
-        if ((r?.minutes ?? 0) > 0) {
-          return Math.min(100, Math.round((r.minutes / 480) * 100));
-        }
-      } catch (e) {
-        console.warn("[HealthKit] Health.querySleepQuality failed:", e);
+      if (!onAndroid) {
+        // iOS primary: Health.querySleepQuality
+        try {
+          const r = await (Health as any).querySleepQuality({ startDate, endDate });
+          if ((r?.efficiency ?? 0) > 0) {
+            console.log(`${tag} sleep-quality via querySleepQuality:`, r.efficiency);
+            return Math.min(100, Math.round(r.efficiency));
+          }
+          if ((r?.minutes ?? 0) > 0) return Math.min(100, Math.round((r.minutes / 480) * 100));
+        } catch (e) { console.warn(`${tag} querySleepQuality failed:`, e); }
+
+        // iOS fallback: ExtendedHealth Swift plugin
+        try {
+          const r = await ExtendedHealth.querySleepQuality({ startDate, endDate });
+          if (r.efficiency > 0) return Math.min(100, Math.round(r.efficiency));
+          if (r.minutes > 0)    return Math.min(100, Math.round((r.minutes / 480) * 100));
+        } catch (_) {}
+
+        // iOS fallback: queryAggregated sleep-quality (patched HealthPlugin path)
+        try {
+          const r = await (Health as any).queryAggregated({ dataType: "sleep-quality", startDate, endDate, bucket: "day" });
+          const agg: any[] = r?.aggregatedData ?? r?.data ?? [];
+          const best = agg.reduce((b: any, d: any) => (d.value ?? 0) > (b?.value ?? 0) ? d : b, agg[0]);
+          if ((best?.value ?? 0) > 0) return Math.min(100, Math.round(best.value));
+        } catch (_) {}
+      } else {
+        // Android: queryAggregated with sleep-quality
+        try {
+          const r = await (Health as any).queryAggregated({ dataType: "sleep-quality", startDate, endDate, bucket: "day" });
+          const agg: any[] = r?.aggregatedData ?? r?.data ?? [];
+          if (agg.length > 0) {
+            const best = agg.reduce((b: any, d: any) => (d.value ?? 0) > (b?.value ?? 0) ? d : b, agg[0]);
+            if ((best?.value ?? 0) > 0) return Math.min(100, Math.round(best.value));
+          }
+        } catch (_) {}
       }
 
-      // Fallback: ExtendedHealth plugin (works if AppDelegate NSStringFromClass fix is in binary)
-      try {
-        const r = await ExtendedHealth.querySleepQuality({ startDate, endDate });
-        if (r.efficiency > 0) {
-          console.log("[HealthKit] sleep-quality via ExtendedHealth:", r.efficiency);
-          return Math.min(100, Math.round(r.efficiency));
-        }
-        if (r.minutes > 0) {
-          return Math.min(100, Math.round((r.minutes / 480) * 100));
-        }
-      } catch (_) {}
-
-      // Fallback: queryAggregated with sleep-quality (patched HealthPlugin path)
-      try {
-        const r = await (Health as any).queryAggregated({ dataType: "sleep-quality", startDate, endDate, bucket: "day" });
-        const agg: any[] = r?.aggregatedData ?? r?.data ?? [];
-        if (agg.length > 0) {
-          const best = agg.reduce((best: any, d: any) =>
-            (d.value ?? 0) > (best?.value ?? 0) ? d : best, agg[0]);
-          const eff = best?.value ?? 0;
-          if (eff > 0) return Math.min(100, Math.round(eff));
-        }
-      } catch (_) {}
-
-      // Last resort: sleep duration proxy
+      // Universal last-resort: sleep duration proxy
       try {
         const r = await (Health as any).queryAggregated({ dataType: "sleep", startDate, endDate, bucket: "day" });
         const data: any[] = r?.aggregatedData ?? r?.data ?? [];
-        if (data.length > 0) {
-          const total = data.reduce((s: number, d: any) => s + (d.value ?? 0), 0);
-          if (total > 0) return Math.min(100, Math.round((total / 480) * 100));
-        }
+        const total = data.reduce((s: number, d: any) => s + (d.value ?? 0), 0);
+        if (total > 0) return Math.min(100, Math.round((total / 480) * 100));
       } catch (_) {}
 
-      console.warn("[HealthKit] sleep-quality: all approaches returned null");
+      console.warn(`${tag} sleep-quality: all approaches returned null`);
       return null;
     }
 
-    // ── Sleep Duration ──────────────────────────────────────────────────────────
+    // ── Sleep Duration ────────────────────────────────────────────────────────
     if (dataType === "sleep") {
-      // Primary: Health.querySleepQuality already in the binary — its "minutes" field
-      // gives us sleep duration without needing a separate native method.
-      try {
-        const r = await (Health as any).querySleepQuality({ startDate, endDate });
-        if ((r?.minutes ?? 0) > 0) {
-          console.log("[HealthKit] sleep duration via Health.querySleepQuality:", r.minutes, "min");
-          return r.minutes;
-        }
-      } catch (e) {
-        console.warn("[HealthKit] Health.querySleepQuality (duration) failed:", e);
+      if (!onAndroid) {
+        // iOS primary: querySleepQuality returns minutes as a side-channel
+        try {
+          const r = await (Health as any).querySleepQuality({ startDate, endDate });
+          if ((r?.minutes ?? 0) > 0) {
+            console.log(`${tag} sleep duration via querySleepQuality:`, r.minutes, "min");
+            return r.minutes;
+          }
+        } catch (e) { console.warn(`${tag} querySleepQuality (duration) failed:`, e); }
+
+        // iOS fallback: ExtendedHealth Swift plugin
+        try {
+          const r = await ExtendedHealth.querySleep({ startDate, endDate });
+          if (r.minutes > 0) {
+            console.log(`${tag} sleep via ExtendedHealth:`, r.minutes, "min");
+            return r.minutes;
+          }
+        } catch (_) {}
       }
 
-      // Fallback: ExtendedHealth plugin
+      // Universal path: queryAggregated sleep
       try {
-        const r = await ExtendedHealth.querySleep({ startDate, endDate });
-        if (r.minutes > 0) {
-          console.log("[HealthKit] sleep via ExtendedHealth:", r.minutes, "min");
-          return r.minutes;
-        }
-      } catch (_) {}
-
-      // Fallback: queryAggregated sleep
-      try {
-        const { aggregatedData } = await (Health as any).queryAggregated({
-          dataType, startDate, endDate, bucket: "day",
-        });
-        if (aggregatedData?.length > 0) {
-          const total = aggregatedData.reduce((s: number, d: any) => s + (d.value ?? 0), 0);
-          if (total > 0) return total;
-        }
+        const r = await (Health as any).queryAggregated({ dataType, startDate, endDate, bucket: "day" });
+        const agg: any[] = r?.aggregatedData ?? r?.data ?? [];
+        const total = agg.reduce((s: number, d: any) => s + (d.value ?? 0), 0);
+        if (total > 0) return total;
       } catch (_) {}
 
       return null;
     }
 
-    // ── Mindfulness ─────────────────────────────────────────────────────────────
+    // ── Mindfulness ──────────────────────────────────────────────────────────
     if (dataType === "mindfulness") {
-      // Primary: Health.queryMindfulSession — top-level method added to HealthPlugin
-      try {
-        const r = await (Health as any).queryMindfulSession({ startDate, endDate });
-        if ((r?.minutes ?? 0) > 0) {
-          console.log("[HealthKit] mindfulness via Health.queryMindfulSession:", r.minutes, "min");
-          return r.minutes;
-        }
-      } catch (_) {}
+      if (!onAndroid) {
+        // iOS primary: queryMindfulSession direct method
+        try {
+          const r = await (Health as any).queryMindfulSession({ startDate, endDate });
+          if ((r?.minutes ?? 0) > 0) {
+            console.log(`${tag} mindfulness via queryMindfulSession:`, r.minutes, "min");
+            return r.minutes;
+          }
+        } catch (_) {}
+      }
 
-      // Fallback: queryAggregated mindfulness (works in patched local binary)
+      // Universal path: queryAggregated mindfulness
       try {
-        const { aggregatedData } = await (Health as any).queryAggregated({
-          dataType: "mindfulness", startDate, endDate, bucket: "day",
-        });
-        if (aggregatedData?.length > 0) {
-          const total = aggregatedData.reduce((s: number, d: any) => s + (d.value ?? 0), 0);
-          if (total > 0) return total;
-        }
+        const r = await (Health as any).queryAggregated({ dataType: "mindfulness", startDate, endDate, bucket: "day" });
+        const agg: any[] = r?.aggregatedData ?? r?.data ?? [];
+        const total = agg.reduce((s: number, d: any) => s + (d.value ?? 0), 0);
+        if (total > 0) return total;
       } catch (_) {}
 
       return null;
     }
 
-    // Standard path for all other data types
-    const { aggregatedData } = await (Health as any).queryAggregated({
-      dataType,
-      startDate,
-      endDate,
-      bucket: "day",
-    });
-    if (!aggregatedData || aggregatedData.length === 0) return null;
-    // Sum all returned buckets (cumulative) or take the single value (discrete)
-    const total = aggregatedData.reduce((s: number, d: any) => s + (d.value ?? 0), 0);
-    return total;
+    // ── Standard metrics (steps, heart rate, etc.) ───────────────────────────
+    const r = await (Health as any).queryAggregated({ dataType, startDate, endDate, bucket: "day" });
+    const agg: any[] = r?.aggregatedData ?? r?.data ?? [];
+    if (agg.length === 0) return null;
+    return agg.reduce((s: number, d: any) => s + (d.value ?? 0), 0);
   } catch (e) {
-    console.error(`[HealthKit] Error reading ${dataType}:`, e);
+    console.error(`${tag} Error reading ${dataType}:`, e);
     return null;
   }
 }

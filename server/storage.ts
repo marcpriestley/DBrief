@@ -87,6 +87,8 @@ export interface IStorage {
   saveApnsToken(userId: number, apnsToken: string): Promise<PushSubscription>;
   deletePushSubscription(endpoint: string): Promise<void>;
   deleteApnsToken(apnsToken: string): Promise<void>;
+  saveFcmToken(userId: number, fcmToken: string): Promise<PushSubscription>;
+  deleteFcmToken(fcmToken: string): Promise<void>;
   getAllUsersForReminder(time: string): Promise<Array<User & { subscriptions: PushSubscription[] }>>;
 
   // Habit methods
@@ -491,6 +493,12 @@ export class MemStorage implements IStorage {
     }
   }
 
+  async saveFcmToken(_userId: number, _fcmToken: string): Promise<PushSubscription> {
+    return {} as PushSubscription;
+  }
+
+  async deleteFcmToken(_fcmToken: string): Promise<void> {}
+
   async getAllUsersForReminder(time: string): Promise<Array<User & { subscriptions: PushSubscription[] }>> {
     const usersWithReminders: Array<User & { subscriptions: PushSubscription[] }> = [];
     
@@ -783,6 +791,22 @@ export class DatabaseStorage implements IStorage {
 
   async deleteApnsToken(apnsToken: string): Promise<void> {
     await db.delete(pushSubscriptions).where(eq(pushSubscriptions.apnsToken, apnsToken));
+  }
+
+  async saveFcmToken(userId: number, fcmToken: string): Promise<PushSubscription> {
+    const endpoint = `fcm:${fcmToken}`;
+    const [row] = await db.insert(pushSubscriptions)
+      .values({ userId, endpoint, p256dh: "", auth: "", apnsToken: null })
+      .onConflictDoUpdate({
+        target: pushSubscriptions.endpoint,
+        set: { userId },
+      })
+      .returning();
+    return row;
+  }
+
+  async deleteFcmToken(fcmToken: string): Promise<void> {
+    await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, `fcm:${fcmToken}`));
   }
 
   async getGoalTemplates(userId: number): Promise<GoalTemplate[]> {

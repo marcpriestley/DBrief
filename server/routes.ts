@@ -1303,6 +1303,35 @@ Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag
     }
   });
 
+  // Register Android FCM token
+  app.post("/api/push/register-fcm", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const { deviceToken } = req.body;
+      if (!deviceToken || typeof deviceToken !== "string") {
+        return res.status(400).json({ message: "deviceToken required" });
+      }
+      const saved = await storage.saveFcmToken(userId, deviceToken);
+      res.json({ success: true, id: saved.id });
+    } catch (error) {
+      console.error("[FCM] Token registration error:", error);
+      res.status(500).json({ message: "Failed to register FCM token" });
+    }
+  });
+
+  // Unregister Android FCM token
+  app.delete("/api/push/unregister-fcm", async (req, res) => {
+    try {
+      const { deviceToken } = req.body;
+      if (!deviceToken) return res.status(400).json({ message: "deviceToken required" });
+      await storage.deleteFcmToken(deviceToken);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to unregister FCM token" });
+    }
+  });
+
   // Clear the app icon badge by sending a silent background push with badge=0
   app.post("/api/push/clear-badge", async (req, res) => {
     try {

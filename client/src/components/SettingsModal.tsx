@@ -25,12 +25,16 @@ import { ProfileQuestionsSettings, type ProfileQuestionsSettingsHandle } from ".
 import { resetTour } from "@/lib/tour";
 import {
   isNativeIOS,
+  isNativeAndroid,
+  isNativeHealth,
   requestHealthPermissions,
   syncHealthData,
   getHealthAuthState,
   getHealthSyncableMetrics,
   checkHealthAvailable,
   getLastHealthError,
+  showHealthConnectInPlayStore,
+  openHealthConnectSettings,
 } from "@/lib/healthKit";
 
 const APPLE_HEALTH_METRICS: {
@@ -408,10 +412,15 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     }
   }, [settings]);
 
+  // Android-specific Health Connect not-installed state
+  const [healthConnectNotInstalled, setHealthConnectNotInstalled] = useState(false);
+
   useEffect(() => {
-    if (!isNativeIOS() || healthAuthorized) return;
+    if (!isNativeHealth() || healthAuthorized) return;
     checkHealthAvailable().then(availability => {
-      if (availability === "not_installed" || availability === "unavailable") {
+      if (isNativeAndroid() && availability === "not_installed") {
+        setHealthConnectNotInstalled(true);
+      } else if (availability === "not_installed" || availability === "unavailable") {
         setHealthSetupNeeded(true);
         setHealthRawError(getLastHealthError());
       }
@@ -523,27 +532,38 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     setHealthSyncing(true);
     setHealthSyncResult(null);
     setHealthSetupNeeded(false);
+    const onAndroid = isNativeAndroid();
     try {
       const result = await requestHealthPermissions();
       if (result === "granted") {
         setHealthAuthorized(true);
+        setHealthConnectNotInstalled(false);
         const today = new Date().toISOString().split("T")[0];
         const enabledNames = userMetrics.filter(m => m.isActive).map(m => m.name);
         const syncResult = await syncHealthData(today, enabledNames);
         queryClient.invalidateQueries({ queryKey: ["/api/daily-scores"] });
         queryClient.invalidateQueries({ queryKey: ["/api/user-metrics"] });
         setHealthSyncResult(`Synced ${syncResult.synced} metric${syncResult.synced !== 1 ? "s" : ""}`);
-        toast({ title: "Apple Health connected", description: `${syncResult.synced} metric${syncResult.synced !== 1 ? "s" : ""} synced for today.` });
+        const label = onAndroid ? "Health Connect" : "Apple Health";
+        toast({ title: `${label} connected`, description: `${syncResult.synced} metric${syncResult.synced !== 1 ? "s" : ""} synced for today.` });
       } else if (result === "not_installed") {
-        setHealthSetupNeeded(true);
-        setHealthRawError(getLastHealthError());
+        if (onAndroid) {
+          setHealthConnectNotInstalled(true);
+        } else {
+          setHealthSetupNeeded(true);
+          setHealthRawError(getLastHealthError());
+        }
       } else if (result === "denied") {
-        toast({ title: "Health access denied", description: "Open iOS Settings → Privacy & Security → Health → DBrief and enable all categories.", variant: "destructive" });
+        const msg = onAndroid
+          ? "Open Android Settings → Apps → Health Connect → Permissions → DBrief and enable all categories."
+          : "Open iOS Settings → Privacy & Security → Health → DBrief and enable all categories.";
+        toast({ title: "Health access denied", description: msg, variant: "destructive" });
       } else {
         toast({ title: "Could not connect", description: "An unexpected error occurred. Try reinstalling the app.", variant: "destructive" });
       }
     } catch {
-      toast({ title: "Error", description: "Could not connect to Apple Health.", variant: "destructive" });
+      const label = onAndroid ? "Health Connect" : "Apple Health";
+      toast({ title: "Error", description: `Could not connect to ${label}.`, variant: "destructive" });
     } finally {
       setHealthSyncing(false);
     }
@@ -553,9 +573,9 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     setHealthSyncing(true);
     setHealthSyncResult(null);
     try {
-      // Always re-request permissions first — ensures Sleep Analysis (and any other new
-      // categories) is authorized even if the initial setup pre-dated this build.
-      if (isNativeIOS()) {
+      // Always re-request permissions first — ensures any newly added categories are
+      // authorized even if the initial setup pre-dated this build.
+      if (isNativeHealth()) {
         await requestHealthPermissions();
       }
       const today = new Date().toISOString().split("T")[0];
@@ -567,12 +587,16 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       queryClient.invalidateQueries({ queryKey: ["/api/user-metrics"] });
       setHealthSyncResult(`Synced ${total} reading${total !== 1 ? "s" : ""}`);
       if (total === 0) {
-        toast({ title: "Nothing synced", description: "No new health data found. Check that Apple Health permissions include Sleep Analysis: iPhone Settings → Privacy & Security → Health → DBrief.", variant: "destructive" });
+        const hint = isNativeAndroid()
+          ? "No new data found. Check Health Connect → Permissions → DBrief has all categories enabled."
+          : "No new data found. Check that Apple Health permissions include Sleep Analysis: iPhone Settings → Privacy & Security → Health → DBrief.";
+        toast({ title: "Nothing synced", description: hint, variant: "destructive" });
       } else {
         toast({ title: "Sync complete", description: `Updated ${total} health reading${total !== 1 ? "s" : ""}.` });
       }
     } catch {
-      toast({ title: "Sync failed", description: "Could not read Apple Health data.", variant: "destructive" });
+      const healthLabel = isNativeAndroid() ? "Health Connect" : "Apple Health";
+      toast({ title: "Sync failed", description: `Could not read ${healthLabel} data.`, variant: "destructive" });
     } finally {
       setHealthSyncing(false);
     }
@@ -586,7 +610,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       deleteMetricMutation.mutate(existing.id);
     } else {
       // Request permissions first so iOS prompts for any not yet granted (e.g. Sleep Analysis)
-      const canAutoSync = isNativeIOS() && getHealthSyncableMetrics().includes(metric.name);
+      const canAutoSync = isNativeHealth() && getHealthSyncableMetrics().includes(metric.name);
       if (canAutoSync) {
         await requestHealthPermissions();
       }
@@ -715,6 +739,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 badge={activeMetricCount > 0 ? `${activeMetricCount} active` : undefined}
               >
                 {isNativeIOS() ? (
+                  // ── iOS: Apple Health ─────────────────────────────────────
                   healthAuthorized ? (
                     <div className="space-y-2">
                       <div className="rounded-md bg-emerald-500/10 border border-emerald-500/20 p-2.5 flex items-center justify-between gap-2">
@@ -763,17 +788,65 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                             Grant access so DBrief can read your health data and auto-fill your metrics.
                           </p>
                           <p className="text-[11px] text-amber-600 dark:text-amber-400 leading-relaxed">
-                            <strong>Sleep not showing?</strong> iOS Settings → Privacy & Security → Health → DBrief → turn on Sleep Analysis.
+                            <strong>Sleep not showing?</strong> iOS Settings → Privacy &amp; Security → Health → DBrief → turn on Sleep Analysis.
                           </p>
                         </div>
                       )}
                     </div>
                   )
+                ) : isNativeAndroid() ? (
+                  // ── Android: Health Connect ──────────────────────────────
+                  healthConnectNotInstalled ? (
+                    <div className="space-y-2">
+                      <div className="rounded-md bg-amber-500/10 border border-amber-500/20 p-2.5 space-y-2">
+                        <div className="flex items-center gap-1.5">
+                          <AlertCircle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                          <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-400">Health Connect not installed</p>
+                        </div>
+                        <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed">
+                          DBrief uses Google Health Connect to sync your Android health data. Install it from the Play Store to get started.
+                        </p>
+                        <Button size="sm" className="w-full gap-2" onClick={() => showHealthConnectInPlayStore()}>
+                          Install Health Connect
+                        </Button>
+                      </div>
+                    </div>
+                  ) : healthAuthorized ? (
+                    <div className="space-y-2">
+                      <div className="rounded-md bg-emerald-500/10 border border-emerald-500/20 p-2.5 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                          <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">Health Connect connected</p>
+                        </div>
+                        <Button size="sm" variant="ghost" className="h-6 px-2 text-[11px]" onClick={handleSyncNow} disabled={healthSyncing}>
+                          <RefreshCw className={`h-3 w-3 mr-1 ${healthSyncing ? "animate-spin" : ""}`} />
+                          {healthSyncing ? "Syncing…" : "Sync now"}
+                        </Button>
+                      </div>
+                      {healthSyncResult && (
+                        <p className="text-[10px] text-muted-foreground px-0.5">{healthSyncResult} · select metrics below to choose what syncs</p>
+                      )}
+                      <Button size="sm" variant="ghost" className="text-[11px] text-muted-foreground w-full" onClick={() => openHealthConnectSettings()}>
+                        Manage Health Connect permissions
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Button className="w-full h-9 text-sm gap-2" onClick={handleConnectHealth} disabled={healthSyncing}>
+                        <Heart className="h-4 w-4" />
+                        {healthSyncing ? "Connecting…" : "Connect Health Connect"}
+                      </Button>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        Grant access so DBrief can read your health data from Google Health Connect and auto-fill your metrics.
+                      </p>
+                    </div>
+                  )
                 ) : (
+                  // ── Browser fallback ──────────────────────────────────────
                   <div className="rounded-md bg-blue-500/10 border border-blue-500/20 p-2.5 flex gap-2">
                     <Info className="h-3.5 w-3.5 text-blue-600 shrink-0 mt-0.5" />
                     <div className="text-[11px] text-blue-700 dark:text-blue-400 leading-relaxed space-y-1">
-                      <p><strong>Auto-sync requires the native app.</strong> Currently running in a browser — health data access requires the iOS app.</p>
+                      <p><strong>Auto-sync requires the native app.</strong> Currently running in a browser — health data access requires the iOS or Android app.</p>
                       <p>Select metrics below to <strong>manually track them now</strong>.</p>
                     </div>
                   </div>
@@ -781,8 +854,10 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
                 <div>
                   <p className="text-[11px] text-muted-foreground font-medium mb-2">Tap to add metrics to your dashboard:</p>
-                  {isNativeIOS() && (
-                    <p className="text-[10px] text-muted-foreground mb-2 leading-relaxed">⚡ = auto-syncs from Apple Health · others are entered manually</p>
+                  {isNativeHealth() && (
+                    <p className="text-[10px] text-muted-foreground mb-2 leading-relaxed">
+                      ⚡ = auto-syncs from {isNativeAndroid() ? "Health Connect" : "Apple Health"} · others are entered manually
+                    </p>
                   )}
                   <div className="space-y-3">
                     {groupedMetrics.map(({ category, metrics }) => (
@@ -805,7 +880,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                   <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: metric.color }} />
                                   <span className="text-xs text-foreground">{metric.name}</span>
                                   {metric.unit && <span className="text-[10px] text-muted-foreground">({metric.unit})</span>}
-                                  {isNativeIOS() && canAutoSync && <span className="text-[9px] text-primary font-semibold">⚡</span>}
+                                  {isNativeHealth() && canAutoSync && <span className="text-[9px] text-primary font-semibold">⚡</span>}
                                 </div>
                                 {isAdded ? <Check className="h-3.5 w-3.5 text-primary shrink-0" /> : <Plus className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
                               </button>

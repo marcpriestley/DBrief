@@ -2,6 +2,7 @@ import webPush from 'web-push';
 import cron from 'node-cron';
 import { storage } from './storage';
 import { sendApnsNotification } from './apns';
+import { sendFcmNotification, isFcmConfigured } from './fcm';
 import { generateWeeklyReport, getWeekBounds } from './weekly-report';
 import { habitNotificationBody, getIntervalSlots } from '../shared/habitUtils';
 
@@ -127,23 +128,42 @@ async function dispatchToSubscriptions(
   subscriptions: Array<{ apnsToken?: string | null; endpoint: string; p256dh: string; auth: string }>,
   payload: PushNotificationPayload
 ) {
-  // If this user has any native APNs token, send only via APNs.
-  // Sending both APNs and web push to the same person causes duplicate notifications
-  // on iOS (app + Safari both fire), so we prefer the native path.
-  // Deduplicate tokens — multiple DB rows with the same APNs token would otherwise
-  // each trigger a separate notification on the same device.
-  const seenTokens = new Set<string>();
+  // Priority 1: iOS native (APNs)
+  // Deduplicate and only send to the most-recently-registered token.
+  const seenApns = new Set<string>();
   const apnsTokens = subscriptions
     .map(s => s.apnsToken)
-    .filter((t): t is string => !!t && !seenTokens.has(t) && (seenTokens.add(t), true));
+    .filter((t): t is string => !!t && !seenApns.has(t) && (seenApns.add(t), true));
   if (apnsTokens.length > 0) {
-    // Only send to the MOST RECENTLY registered token (last in array = newest registration)
     await sendApnsNotification(apnsTokens[apnsTokens.length - 1], payload);
     return;
   }
 
-  // No APNs tokens — send via web push (browser users)
+  // Priority 2: Android native (FCM)
+  // FCM tokens are stored with an "fcm:" prefix on the endpoint column.
+  const fcmTokens = subscriptions
+    .filter(s => s.endpoint.startsWith("fcm:"))
+    .map(s => s.endpoint.slice(4));
+  if (fcmTokens.length > 0) {
+    if (isFcmConfigured()) {
+      try {
+        await sendFcmNotification(fcmTokens[fcmTokens.length - 1], {
+          title: payload.title,
+          body: payload.body,
+          data: payload.url ? { url: payload.url } : {},
+        });
+      } catch (err) {
+        console.error("[Notifications] FCM send failed:", err);
+      }
+    } else {
+      console.warn("[Notifications] FCM token present but Firebase not configured — skipping Android push");
+    }
+    return;
+  }
+
+  // Priority 3: Web Push (browser)
   for (const sub of subscriptions) {
+    if (sub.endpoint.startsWith("apns:") || sub.endpoint.startsWith("fcm:")) continue;
     await sendPushNotification(
       { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
       payload
