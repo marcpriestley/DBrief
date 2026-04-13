@@ -78,9 +78,10 @@ function useInlineVoice() {
   const onSilenceStopRef = useRef<((text: string) => void) | null>(null);
   // When true, silence NEVER auto-stops the mic — only an explicit stop() call does
   const noSilenceStopRef = useRef<boolean>(false);
-  // How long of silence before native keep-alive restarts recognition. Lower = faster recovery
-  // but risks stopping a recognition that's still alive (creating a brief dead-mic window).
+  // How long of silence before native keep-alive restarts recognition.
   const restartThresholdMsRef = useRef<number>(NATIVE_RESTART_POLL_MS);
+  // How often to run the keep-alive poll. Shorter = faster detection of iOS killing recognition.
+  const restartPollMsRef = useRef<number>(NATIVE_RESTART_POLL_MS);
 
   const isNative = Capacitor.isNativePlatform();
   const isSupported =
@@ -180,7 +181,7 @@ function useInlineVoice() {
   };
 
   const start = useCallback(
-    async (onFinal: (text: string) => void, opts?: { autoStopMs?: number; onSilenceStop?: (text: string) => void; noSilenceStop?: boolean; restartThresholdMs?: number }) => {
+    async (onFinal: (text: string) => void, opts?: { autoStopMs?: number; onSilenceStop?: (text: string) => void; noSilenceStop?: boolean; restartThresholdMs?: number; restartPollMs?: number }) => {
       if (!isSupported) return;
 
       accumulatedRef.current = "";
@@ -189,6 +190,7 @@ function useInlineVoice() {
       onSilenceStopRef.current = opts?.onSilenceStop ?? null;
       noSilenceStopRef.current = opts?.noSilenceStop ?? false;
       restartThresholdMsRef.current = opts?.restartThresholdMs ?? NATIVE_RESTART_POLL_MS;
+      restartPollMsRef.current = opts?.restartPollMs ?? NATIVE_RESTART_POLL_MS;
       // Clear any stale silence timer from a previous session
       if (silenceAutoStopRef.current) { clearTimeout(silenceAutoStopRef.current); silenceAutoStopRef.current = null; }
 
@@ -269,7 +271,7 @@ function useInlineVoice() {
                   partialResults: true,
                   popup: false,
                 });
-                // Reset the clock so we don't fire again immediately on the very next tick
+                // Reset the clock so we don't restart again immediately on the next tick
                 lastSpeechTimeRef.current = Date.now();
               } catch {
                 // ignore — next tick will retry
@@ -277,7 +279,7 @@ function useInlineVoice() {
                 nativeIsRestartingRef.current = false;
               }
             }
-          }, NATIVE_RESTART_POLL_MS);
+          }, restartPollMsRef.current);
 
           await SpeechRecognition.start({
             language: "en-US",
@@ -429,7 +431,10 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const [inputStartMode, setInputStartMode] = useState<"live" | "voice">("voice");
   const [voiceNoteSeconds, setVoiceNoteSeconds] = useState(0);
   const voiceNoteTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const voiceNoteAutoStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const voiceNoteTextRef = useRef(""); // accumulated transcript (mirrors voice.interimText continuously)
+  // Forward ref so startVoiceNote can call submitVoiceNote without circular dependency
+  const submitVoiceNoteRef = useRef<() => void>(() => {});
 
   const VISIBLE_MESSAGES = 6;
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -810,35 +815,43 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
 
   // ── Voice note mode handlers ──────────────────────────────────────────────
 
+  const VOICE_NOTE_MAX_SECS = 300; // 5-minute hard limit
+
   const startVoiceNote = useCallback(() => {
     haptic("medium");
     voiceNoteTextRef.current = "";
     setVoiceNoteSeconds(0);
     setVoiceNoteMode(true);
     setUserInput("");
-    // Timer counts up while recording
+    // Seconds counter
+    if (voiceNoteTimerRef.current) clearInterval(voiceNoteTimerRef.current);
     voiceNoteTimerRef.current = setInterval(() => {
       setVoiceNoteSeconds(s => s + 1);
     }, 1000);
-    // Voice note mode: mic stays open indefinitely — only submit/cancel stops it.
-    // restartThresholdMs=3000 so the keep-alive loop only restarts after iOS has definitely
-    // killed recognition (~1-2 s of silence), not mid-pause during normal thinking.
+    // 5-minute hard stop — auto-submits whatever has been transcribed
+    if (voiceNoteAutoStopRef.current) clearTimeout(voiceNoteAutoStopRef.current);
+    voiceNoteAutoStopRef.current = setTimeout(() => {
+      submitVoiceNoteRef.current();
+    }, VOICE_NOTE_MAX_SECS * 1000);
+    // Voice note mic strategy:
+    //   noSilenceStop: true  — never auto-stop on silence, only on explicit cancel/submit
+    //   restartPollMs: 400   — poll every 400 ms so we detect iOS killing recognition quickly
+    //   restartThresholdMs: 1500 — restart once recognition has been dead for 1.5 s, giving
+    //                              iOS time to kill it naturally without us interrupting live speech
     voice.start(
       (text) => { voiceNoteTextRef.current = text; setUserInput(text); },
-      { noSilenceStop: true, restartThresholdMs: 3_000 },
+      { noSilenceStop: true, restartPollMs: 400, restartThresholdMs: 1_500 },
     );
   }, [voice]);
 
-  const stopVoiceNoteTimer = () => {
-    if (voiceNoteTimerRef.current) {
-      clearInterval(voiceNoteTimerRef.current);
-      voiceNoteTimerRef.current = null;
-    }
+  const stopVoiceNoteTimers = () => {
+    if (voiceNoteTimerRef.current) { clearInterval(voiceNoteTimerRef.current); voiceNoteTimerRef.current = null; }
+    if (voiceNoteAutoStopRef.current) { clearTimeout(voiceNoteAutoStopRef.current); voiceNoteAutoStopRef.current = null; }
   };
 
   const cancelVoiceNote = useCallback(() => {
     haptic("light");
-    stopVoiceNoteTimer();
+    stopVoiceNoteTimers();
     voice.stop();
     setVoiceNoteMode(false);
     setVoiceNoteSeconds(0);
@@ -848,7 +861,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
 
   const submitVoiceNote = useCallback(() => {
     const text = voiceNoteTextRef.current.trim() || userInput.trim();
-    stopVoiceNoteTimer();
+    stopVoiceNoteTimers();
     voice.stop();
     setVoiceNoteMode(false);
     setVoiceNoteSeconds(0);
@@ -860,6 +873,9 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
       sendMessage(text);
     }
   }, [voice, userInput, sendMessage]);
+
+  // Keep the forward ref in sync so startVoiceNote's 5-min timeout always calls latest version
+  submitVoiceNoteRef.current = submitVoiceNote;
 
   // Format mm:ss for voice note timer
   const formatVoiceTime = (secs: number) => {
@@ -1622,7 +1638,20 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                     <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
                     <span className="text-xs font-medium text-red-500">Recording</span>
                     <span className="text-xs text-muted-foreground font-mono">{formatVoiceTime(voiceNoteSeconds)}</span>
-                    <span className="text-[10px] text-muted-foreground/60 ml-auto">Submit when done</span>
+                    <span className="text-[10px] text-muted-foreground/60 ml-auto">
+                      {VOICE_NOTE_MAX_SECS - voiceNoteSeconds <= 60
+                        ? <span className="text-amber-500 font-medium">{formatVoiceTime(VOICE_NOTE_MAX_SECS - voiceNoteSeconds)} left</span>
+                        : "Submit when done"}
+                    </span>
+                  </div>
+                  {/* Time progress bar — turns amber in last 60 s */}
+                  <div className="h-0.5 rounded-full bg-muted overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-1000 ${
+                        VOICE_NOTE_MAX_SECS - voiceNoteSeconds <= 60 ? "bg-amber-500" : "bg-red-500/60"
+                      }`}
+                      style={{ width: `${Math.min(100, (voiceNoteSeconds / VOICE_NOTE_MAX_SECS) * 100)}%` }}
+                    />
                   </div>
                   {/* Live transcript preview */}
                   {(userInput || voice.interimText) ? (
