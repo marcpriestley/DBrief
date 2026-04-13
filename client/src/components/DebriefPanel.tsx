@@ -71,6 +71,8 @@ function useInlineVoice() {
   const silenceAutoStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nativeSilenceCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const nativeIsRestartingRef = useRef(false); // prevents concurrent restart sequences
+  // Text accumulated before each iOS keep-alive restart — preserved across session boundaries
+  const nativeCommittedTextRef = useRef("");
   // stopRef lets timers call stop() without a forward-reference problem
   const stopRef = useRef<() => Promise<void>>(async () => {});
   // Configurable silence timeout and callback for conversation mode
@@ -185,6 +187,7 @@ function useInlineVoice() {
       if (!isSupported) return;
 
       accumulatedRef.current = "";
+      nativeCommittedTextRef.current = "";
       onFinalRef.current = onFinal;
       autoStopMsRef.current = opts?.autoStopMs ?? AUTO_STOP_SILENCE_MS;
       onSilenceStopRef.current = opts?.onSilenceStop ?? null;
@@ -229,9 +232,15 @@ function useInlineVoice() {
           nativeListenerRef.current = await SpeechRecognition.addListener("partialResults", (data: { matches: string[] }) => {
             if (isStoppingRef.current) return;
             const partial = data.matches?.[0] || "";
-            setInterimText(partial);
-            accumulatedRef.current = partial;
-            onFinalRef.current?.(partial);
+            // Combine text committed before the last keep-alive restart with new speech.
+            // This prevents text from disappearing when iOS kills & restarts recognition.
+            const committed = nativeCommittedTextRef.current;
+            const combined = committed
+              ? (partial ? committed + " " + partial : committed)
+              : partial;
+            setInterimText(""); // native plugin gives full running transcript via combined; no separate interim needed
+            accumulatedRef.current = combined;
+            onFinalRef.current?.(combined);
             // Track last speech so the silence-check loop can restart iOS recognition
             if (partial) {
               lastSpeechTimeRef.current = Date.now();
@@ -263,6 +272,8 @@ function useInlineVoice() {
             if (pastRestartThreshold && belowAutoStop) {
               nativeIsRestartingRef.current = true;
               try {
+                // Commit accumulated text so partialResults handler can prefix it after restart
+                nativeCommittedTextRef.current = accumulatedRef.current;
                 await SpeechRecognition.stop().catch(() => {});
                 if (!shouldListenRef.current || isStoppingRef.current) { nativeIsRestartingRef.current = false; return; }
                 await SpeechRecognition.start({

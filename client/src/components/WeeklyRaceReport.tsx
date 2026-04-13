@@ -21,13 +21,12 @@ function formatWeekLabel(weekStart: string, weekEnd: string): string {
   return `${s} – ${e}`;
 }
 
-function isThisWeek(weekStart: string): boolean {
-  const now = new Date();
-  const day = now.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  const monday = new Date(now);
-  monday.setDate(now.getDate() + diff);
-  return monday.toISOString().split("T")[0] === weekStart;
+// A report is "current" if its weekEnd is within the past 7 days.
+// This means a Mon–Sun report stays current all the following week until a newer one is generated.
+function isCurrentReport(weekEnd: string): boolean {
+  const end = new Date(weekEnd + "T12:00:00");
+  const diffDays = (Date.now() - end.getTime()) / (1000 * 60 * 60 * 24);
+  return diffDays <= 7;
 }
 
 export default function WeeklyRaceReport() {
@@ -57,7 +56,7 @@ export default function WeeklyRaceReport() {
     },
   });
 
-  const isCurrentWeek = report ? isThisWeek(report.weekStart) : false;
+  const isCurrentWeek = report ? isCurrentReport(report.weekEnd) : false;
 
   // Show generate button whenever there's no report for this week
   const showGenerate = !report || !isCurrentWeek;
