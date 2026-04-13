@@ -67,6 +67,7 @@ function useInlineVoice() {
   const lastSpeechTimeRef = useRef<number>(0);
   const silenceAutoStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nativeSilenceCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const nativeIsRestartingRef = useRef(false); // prevents concurrent restart sequences
   // stopRef lets timers call stop() without a forward-reference problem
   const stopRef = useRef<() => Promise<void>>(async () => {});
   // Configurable silence timeout and callback for conversation mode
@@ -240,25 +241,34 @@ function useInlineVoice() {
           // iOS kills speech recognition after a short pause (~1–2 s of silence).
           // This loop silently restarts it so the mic stays hot until the user taps stop
           // or the auto-stop timer above fires.
+          nativeIsRestartingRef.current = false;
           if (nativeSilenceCheckRef.current) clearInterval(nativeSilenceCheckRef.current);
           nativeSilenceCheckRef.current = setInterval(async () => {
-            if (!shouldListenRef.current || isStoppingRef.current) return;
+            if (!shouldListenRef.current || isStoppingRef.current || nativeIsRestartingRef.current) return;
             const silenceDuration = Date.now() - lastSpeechTimeRef.current;
-            // If iOS has been quiet for >2 s (and we haven't hit the auto-stop limit in
-            // timed mode), restart recognition so the next utterance is captured.
-            const pastRestartThreshold = silenceDuration > NATIVE_RESTART_POLL_MS;
+            // If iOS has been quiet for ≥ NATIVE_RESTART_POLL_MS (using >= to handle the
+            // exact-boundary case where silenceDuration === interval period), and we
+            // haven't hit the auto-stop ceiling in timed mode, restart recognition.
+            const pastRestartThreshold = silenceDuration >= NATIVE_RESTART_POLL_MS;
             const belowAutoStop = noSilenceStopRef.current || silenceDuration < autoStopMsRef.current;
             if (pastRestartThreshold && belowAutoStop) {
+              nativeIsRestartingRef.current = true;
               try {
                 await SpeechRecognition.stop().catch(() => {});
-                if (!shouldListenRef.current || isStoppingRef.current) return;
+                if (!shouldListenRef.current || isStoppingRef.current) { nativeIsRestartingRef.current = false; return; }
                 await SpeechRecognition.start({
                   language: "en-US",
                   maxResults: 1,
                   partialResults: true,
                   popup: false,
                 });
-              } catch {}
+                // Reset the clock so we don't fire again immediately on the very next tick
+                lastSpeechTimeRef.current = Date.now();
+              } catch {
+                // ignore — next tick will retry
+              } finally {
+                nativeIsRestartingRef.current = false;
+              }
             }
           }, NATIVE_RESTART_POLL_MS);
 
@@ -329,6 +339,7 @@ function useInlineVoice() {
     if (restartTimerRef.current) { clearTimeout(restartTimerRef.current); restartTimerRef.current = null; }
     if (nativeSilenceCheckRef.current) { clearInterval(nativeSilenceCheckRef.current); nativeSilenceCheckRef.current = null; }
     if (silenceAutoStopRef.current) { clearTimeout(silenceAutoStopRef.current); silenceAutoStopRef.current = null; }
+    nativeIsRestartingRef.current = false;
 
     if (isNative) {
       // Remove listener FIRST so no more partialResults fire during/after stop
@@ -1633,7 +1644,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                     <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
                     <span className="text-xs font-medium text-red-500">Recording</span>
                     <span className="text-xs text-muted-foreground font-mono">{formatVoiceTime(voiceNoteSeconds)}</span>
-                    <span className="text-[10px] text-muted-foreground/60 ml-auto">5:00 max</span>
+                    <span className="text-[10px] text-muted-foreground/60 ml-auto">Submit when done</span>
                   </div>
                   {/* Live transcript preview */}
                   {(userInput || voice.interimText) ? (
