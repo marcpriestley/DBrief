@@ -5,17 +5,13 @@ const TTS_VOICE_KEY = "dbrief_tts_voice";
 
 export type TTSVoice = "fable" | "onyx" | "echo" | "nova" | "shimmer" | "alloy";
 
-// No-op kept for import compatibility
 export function warmAudioCtx() {}
 
-// Convert ArrayBuffer → object URL (synchronous, no FileReader delay).
 function arrayBufferToObjectUrl(buffer: ArrayBuffer): string {
   const blob = new Blob([buffer], { type: "audio/mpeg" });
   return URL.createObjectURL(blob);
 }
 
-// SpeechSynthesis fallback — works in Capacitor WKWebView on iOS 14+ and
-// does not need a user gesture when called from within an event handler chain.
 function speakViaSynthesis(text: string, onEnd: () => void): SpeechSynthesisUtterance | null {
   if (!window.speechSynthesis) { onEnd(); return null; }
   window.speechSynthesis.cancel();
@@ -40,9 +36,9 @@ export function useTTS() {
   const abortRef = useRef<AbortController | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
-  // Text queued to play immediately after the current speech ends
   const continuationRef = useRef<string | null>(null);
-  // Ref mirror of speaking so callbacks don't capture stale state
+  // Pre-fetched audio buffer for the queued continuation — eliminates inter-fetch gap
+  const pendingBufferRef = useRef<Promise<ArrayBuffer | null> | null>(null);
   const isSpeakingRef = useRef(false);
 
   const setSpeakingBoth = (val: boolean) => {
@@ -52,11 +48,17 @@ export function useTTS() {
 
   const cancel = useCallback(() => {
     continuationRef.current = null;
+    pendingBufferRef.current = null;
     abortRef.current?.abort();
     abortRef.current = null;
     if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.src = "";
+      // Remove error handler BEFORE clearing src so the error event
+      // doesn't trigger the speech-synthesis fallback on intentional cancel
+      const a = audioRef.current;
+      a.onerror = null;
+      a.onended = null;
+      a.pause();
+      a.src = "";
       audioRef.current = null;
     }
     if (window.speechSynthesis?.speaking) {
@@ -66,67 +68,41 @@ export function useTTS() {
     setSpeakingBoth(false);
   }, []);
 
-  // Forward declaration so onended callbacks can reference it
-  const doSpeakRef = useRef<(text: string) => Promise<void>>(async () => {});
+  const doSpeakRef = useRef<(text: string, preFetched?: Promise<ArrayBuffer | null>) => Promise<void>>(async () => {});
 
-  const _doSpeak = useCallback(async (text: string) => {
-    // Reset continuation but don't cancel existing speech — caller decides
+  const _doSpeak = useCallback(async (text: string, preFetched?: Promise<ArrayBuffer | null>) => {
     const ac = new AbortController();
     abortRef.current = ac;
     setSpeakingBoth(true);
 
-    // Helper: called when audio finishes — plays continuation if any
     const onDone = () => {
       setSpeakingBoth(false);
       const cont = continuationRef.current;
       continuationRef.current = null;
+      const pending = pendingBufferRef.current;
+      pendingBufferRef.current = null;
       if (cont && !ac.signal.aborted) {
-        doSpeakRef.current(cont);
+        doSpeakRef.current(cont, pending ?? undefined);
       }
     };
 
-    // ── Phase 1: OpenAI TTS via data URL ─────────────────────────────────
+    // ── Get audio buffer — use pre-fetched promise if available ───────────
+    let buffer: ArrayBuffer | null = null;
     try {
-      const res = await fetch("/api/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ text, voice }),
-        signal: ac.signal,
-      });
-
-      if (!res.ok) throw new Error(`tts-${res.status}`);
-
-      const buffer = await res.arrayBuffer();
-      if (ac.signal.aborted) return;
-
-      // Synchronous — no FileReader async delay
-      const objectUrl = arrayBufferToObjectUrl(buffer);
-      if (ac.signal.aborted) { URL.revokeObjectURL(objectUrl); return; }
-
-      const audio = new Audio();
-      audioRef.current = audio;
-
-      const cleanup = () => {
-        URL.revokeObjectURL(objectUrl);
-        if (audioRef.current === audio) audioRef.current = null;
-      };
-      audio.onended = () => { cleanup(); onDone(); };
-      audio.onerror = () => {
-        cleanup();
-        console.warn("[TTS] audio element error → SpeechSynthesis fallback");
-        utteranceRef.current = speakViaSynthesis(text, onDone);
-        if (!utteranceRef.current) onDone();
-      };
-
-      audio.src = objectUrl;
-      try {
-        await audio.play();
-        return; // success — onended will fire onDone
-      } catch (playErr: any) {
-        console.warn("[TTS] play() rejected:", playErr?.name, "→ SpeechSynthesis fallback");
-        cleanup();
-        audioRef.current = null;
+      if (preFetched) {
+        buffer = await preFetched;
+        if (ac.signal.aborted) return;
+      } else {
+        const res = await fetch("/api/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ text, voice }),
+          signal: ac.signal,
+        });
+        if (!res.ok) throw new Error(`tts-${res.status}`);
+        buffer = await res.arrayBuffer();
+        if (ac.signal.aborted) return;
       }
     } catch (err: any) {
       if (err?.name === "AbortError") return;
@@ -135,41 +111,86 @@ export function useTTS() {
 
     if (ac.signal.aborted) { setSpeakingBoth(false); return; }
 
-    // ── Phase 2: SpeechSynthesis fallback ────────────────────────────────
-    utteranceRef.current = speakViaSynthesis(text, onDone);
-    if (!utteranceRef.current) onDone();
+    if (!buffer) {
+      utteranceRef.current = speakViaSynthesis(text, onDone);
+      if (!utteranceRef.current) onDone();
+      return;
+    }
+
+    // ── Play the buffer ───────────────────────────────────────────────────
+    const objectUrl = arrayBufferToObjectUrl(buffer);
+
+    const audio = new Audio();
+    audioRef.current = audio;
+
+    const cleanup = () => {
+      URL.revokeObjectURL(objectUrl);
+      if (audioRef.current === audio) audioRef.current = null;
+    };
+
+    audio.onended = () => { cleanup(); onDone(); };
+    audio.onerror = () => {
+      // Guard: if we intentionally cancelled, onerror fires because we cleared
+      // audio.src — do NOT fall back to speech synthesis in that case.
+      if (ac.signal.aborted) { cleanup(); return; }
+      cleanup();
+      console.warn("[TTS] audio element error → SpeechSynthesis fallback");
+      utteranceRef.current = speakViaSynthesis(text, onDone);
+      if (!utteranceRef.current) onDone();
+    };
+
+    audio.src = objectUrl;
+    try {
+      await audio.play();
+    } catch (playErr: any) {
+      console.warn("[TTS] play() rejected:", playErr?.name, "→ SpeechSynthesis fallback");
+      cleanup();
+      audioRef.current = null;
+      if (ac.signal.aborted) return;
+      utteranceRef.current = speakViaSynthesis(text, onDone);
+      if (!utteranceRef.current) onDone();
+    }
   }, [voice]);
 
-  // Keep doSpeakRef current so onDone closures can call the latest version
   doSpeakRef.current = _doSpeak;
 
-  // Auto-speak (after AI responses) — respects the user's enabled toggle.
-  // Cancels any in-progress speech and clears the continuation queue.
   const speak = useCallback((text: string) => {
     if (!enabled || !text.trim()) return Promise.resolve();
     cancel();
     return _doSpeak(text);
   }, [enabled, _doSpeak, cancel]);
 
-  // Manual play — always works regardless of the auto-speak toggle state.
-  // Cancels any in-progress speech and clears the continuation queue.
   const speakNow = useCallback((text: string) => {
     if (!text.trim()) return Promise.resolve();
     cancel();
     return _doSpeak(text);
   }, [_doSpeak, cancel]);
 
-  // Queue text to play after the current speech ends (no interruption).
-  // If nothing is playing, starts immediately. Respects the enabled toggle.
+  // Pre-fetch audio for a future continuation while current speech is still playing.
+  // Call this as soon as the continuation text is known so the buffer is ready (or
+  // nearly ready) when the current audio ends — eliminating the inter-fetch silence gap.
+  const preFetchAudio = useCallback((text: string) => {
+    if (!enabled || !text.trim()) return;
+    const ac = abortRef.current;
+    pendingBufferRef.current = fetch("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ text, voice }),
+      signal: ac?.signal,
+    }).then(r => r.ok ? r.arrayBuffer() : null).catch(() => null);
+  }, [enabled, voice]);
+
   const speakOrQueue = useCallback((text: string) => {
     if (!enabled || !text.trim()) return;
     if (isSpeakingRef.current) {
-      // Chain it: play after whatever is currently speaking (or already queued)
       continuationRef.current = text;
+      // Only pre-fetch if not already pre-fetching for this continuation
+      if (!pendingBufferRef.current) preFetchAudio(text);
     } else {
       _doSpeak(text);
     }
-  }, [enabled, _doSpeak]);
+  }, [enabled, _doSpeak, preFetchAudio]);
 
   const toggle = useCallback(() => {
     setEnabled(prev => {
@@ -182,5 +203,5 @@ export function useTTS() {
 
   useEffect(() => () => { cancel(); }, [cancel]);
 
-  return { enabled, speaking, isSupported: true, speak, speakNow, speakOrQueue, cancel, toggle };
+  return { enabled, speaking, isSupported: true, speak, speakNow, speakOrQueue, preFetchAudio, cancel, toggle };
 }

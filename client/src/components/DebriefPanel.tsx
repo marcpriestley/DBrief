@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { haptic } from "@/lib/haptics";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { MessageCircle, Send, CheckCircle, Loader2, RotateCcw, Mic, MicOff, ArrowRight, Volume2, VolumeX, Square, ChevronDown, Radio, Waves } from "lucide-react";
+import { MessageCircle, Send, CheckCircle, Loader2, RotateCcw, Mic, MicOff, ArrowRight, Volume2, VolumeX, Square, ChevronDown, Radio, Waves, AudioLines } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiRequest } from "@/lib/queryClient";
@@ -394,6 +394,12 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     return s;
   });
 
+  // Voice note mode — long-form voice dump that only sends on explicit Submit
+  const [voiceNoteMode, setVoiceNoteMode] = useState(false);
+  const [voiceNoteSeconds, setVoiceNoteSeconds] = useState(0);
+  const voiceNoteTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const voiceNoteTextRef = useRef(""); // accumulated transcript (mirrors voice.interimText continuously)
+
   const VISIBLE_MESSAGES = 6;
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -680,14 +686,20 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
       }
 
       queryClient.invalidateQueries({ queryKey: ["/api/debriefs", selectedDate] });
-      // Speak: if first sentence was already started, queue the rest; otherwise speak all
+      // Speak: if first sentence was already started, queue the rest; otherwise speak all.
+      // Pre-fetch the remainder audio NOW (before first sentence finishes) to eliminate
+      // the inter-fetch silence gap between the two TTS calls.
       if (accumulated) {
         const remainder = ttsFirstSentenceRef.current
           ? accumulated.slice(ttsFirstSentenceRef.current).trim()
           : accumulated;
         if (remainder) {
+          if (ttsFirstSentenceRef.current && tts.enabled) {
+            // First sentence is already playing — start fetching remainder in background
+            tts.preFetchAudio(remainder);
+          }
           tts.speakOrQueue(remainder);
-          hadTtsResponseRef.current = tts.enabled; // TTS was queued — wait for it before restarting mic
+          hadTtsResponseRef.current = tts.enabled;
         }
       }
       setTimeout(() => {
@@ -765,6 +777,77 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     }
   };
 
+  // ── Voice note mode handlers ──────────────────────────────────────────────
+
+  const startVoiceNote = useCallback(() => {
+    haptic("medium");
+    voiceNoteTextRef.current = "";
+    setVoiceNoteSeconds(0);
+    setVoiceNoteMode(true);
+    setUserInput("");
+    // Timer counts up while recording
+    voiceNoteTimerRef.current = setInterval(() => {
+      setVoiceNoteSeconds(s => s + 1);
+    }, 1000);
+    // 5-minute max, no auto-send on silence
+    voice.start(
+      (text) => { voiceNoteTextRef.current = text; setUserInput(text); },
+      { autoStopMs: 5 * 60 * 1000 },
+    );
+  }, [voice]);
+
+  const stopVoiceNoteTimer = () => {
+    if (voiceNoteTimerRef.current) {
+      clearInterval(voiceNoteTimerRef.current);
+      voiceNoteTimerRef.current = null;
+    }
+  };
+
+  const cancelVoiceNote = useCallback(() => {
+    haptic("light");
+    stopVoiceNoteTimer();
+    voice.stop();
+    setVoiceNoteMode(false);
+    setVoiceNoteSeconds(0);
+    voiceNoteTextRef.current = "";
+    setUserInput("");
+  }, [voice]);
+
+  const submitVoiceNote = useCallback(() => {
+    const text = voiceNoteTextRef.current.trim() || userInput.trim();
+    stopVoiceNoteTimer();
+    voice.stop();
+    setVoiceNoteMode(false);
+    setVoiceNoteSeconds(0);
+    voiceNoteTextRef.current = "";
+    setUserInput("");
+    if (text) {
+      haptic("medium");
+      warmAudioCtx();
+      sendMessage(text);
+    }
+  }, [voice, userInput, sendMessage]);
+
+  // Format mm:ss for voice note timer
+  const formatVoiceTime = (secs: number) => {
+    const m = Math.floor(secs / 60).toString().padStart(2, "0");
+    const s = (secs % 60).toString().padStart(2, "0");
+    return `${m}:${s}`;
+  };
+
+  // Start a voice note from the start screen (creates user-led session first)
+  const startVoiceNoteFresh = useCallback((fresh = false) => {
+    haptic("medium");
+    warmAudioCtx();
+    // Start a user-led session (no AI opening message), then enter voice note mode
+    startDebriefMutation.mutate({ fresh, userLed: true }, {
+      onSuccess: () => {
+        // Enter voice note mode after the session is ready (slight delay for query refresh)
+        setTimeout(() => startVoiceNote(), 400);
+      },
+    });
+  }, [startDebriefMutation, startVoiceNote]);
+
   const toggleConversation = () => {
     haptic("medium");
     if (conversationActiveRef.current) {
@@ -821,6 +904,15 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
       setIsConversationMode(false);
       voice.stop();
       tts.cancel();
+    }
+    // End voice note mode when switching dates
+    if (voiceNoteMode) {
+      stopVoiceNoteTimer();
+      voice.stop();
+      setVoiceNoteMode(false);
+      setVoiceNoteSeconds(0);
+      voiceNoteTextRef.current = "";
+      setUserInput("");
     }
     // End realtime session when switching dates
     if (realtimeVoice.isActive) realtimeVoice.disconnect();
@@ -974,12 +1066,12 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                 : "Reflect on this day — choose how you want to start."
               }
             </p>
-            <div className="flex items-center justify-center gap-3">
+            <div className="flex items-center justify-center gap-2 flex-wrap">
               <Button
                 onClick={() => { haptic("medium"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: false, userLed: true }); }}
                 disabled={startDebriefMutation.isPending}
                 variant="outline"
-                className="flex-1 max-w-[160px]"
+                className="flex-1 min-w-[110px] max-w-[150px]"
               >
                 {startDebriefMutation.isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -993,7 +1085,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
               <Button
                 onClick={() => { haptic("medium"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: false }); }}
                 disabled={startDebriefMutation.isPending}
-                className="flex-1 max-w-[160px]"
+                className="flex-1 min-w-[110px] max-w-[150px]"
               >
                 {startDebriefMutation.isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -1004,6 +1096,23 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                   </>
                 )}
               </Button>
+              {voice.isSupported && (
+                <Button
+                  onClick={() => startVoiceNoteFresh(false)}
+                  disabled={startDebriefMutation.isPending}
+                  variant="outline"
+                  className="flex-1 min-w-[110px] max-w-[150px]"
+                >
+                  {startDebriefMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      <AudioLines className="h-4 w-4 mr-2" />
+                      Voice dump
+                    </>
+                  )}
+                </Button>
+              )}
             </div>
           </div>
         </CardContent>
@@ -1030,12 +1139,12 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                   ? "Your previous session is saved below. How do you want to open this one?"
                   : "Log another reflection for this day."}
               </p>
-              <div className="flex items-center justify-center gap-3">
+              <div className="flex items-center justify-center gap-2 flex-wrap">
                 <Button
                   onClick={() => { haptic("medium"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: true, userLed: true }); }}
                   disabled={startDebriefMutation.isPending}
                   variant="outline"
-                  className="flex-1 max-w-[160px]"
+                  className="flex-1 min-w-[110px] max-w-[150px]"
                 >
                   {startDebriefMutation.isPending ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -1049,7 +1158,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                 <Button
                   onClick={() => { haptic("medium"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: true }); }}
                   disabled={startDebriefMutation.isPending}
-                  className="flex-1 max-w-[160px]"
+                  className="flex-1 min-w-[110px] max-w-[150px]"
                 >
                   {startDebriefMutation.isPending ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -1060,6 +1169,23 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                     </>
                   )}
                 </Button>
+                {voice.isSupported && (
+                  <Button
+                    onClick={() => startVoiceNoteFresh(true)}
+                    disabled={startDebriefMutation.isPending}
+                    variant="outline"
+                    className="flex-1 min-w-[110px] max-w-[150px]"
+                  >
+                    {startDebriefMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <>
+                        <AudioLines className="h-4 w-4 mr-2" />
+                        Voice dump
+                      </>
+                    )}
+                  </Button>
+                )}
               </div>
             </div>
           </CardContent>
@@ -1203,6 +1329,18 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                 )}
                 {realtimeVoice.status === "connecting" ? "Connecting…" :
                  realtimeVoice.isActive ? "Live" : "Live"}
+              </Button>
+            )}
+            {debrief && !debrief.isComplete && voice.isSupported && !realtimeVoice.isActive && !isConversationMode && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={voiceNoteMode ? cancelVoiceNote : startVoiceNote}
+                className={`h-7 px-2 gap-1 text-xs ${voiceNoteMode ? "text-primary" : "text-muted-foreground"}`}
+                title={voiceNoteMode ? "Cancel voice note" : "Record a voice note (up to 5 min, submit when done)"}
+              >
+                <AudioLines className={`h-3.5 w-3.5 ${voiceNoteMode ? "animate-pulse" : ""}`} />
+                Note
               </Button>
             )}
             {tts.isSupported && !realtimeVoice.isActive && !isConversationMode && (
@@ -1474,6 +1612,45 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                 <Square className="h-3 w-3 fill-current" />
                 End
               </button>
+            </div>
+          ) : voiceNoteMode ? (
+            <div className="space-y-2">
+              {/* Voice note recording panel */}
+              <div className="flex items-start gap-3 bg-muted/50 rounded-xl border border-red-500/30 p-3">
+                <div className="flex-1 min-w-0 space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
+                    <span className="text-xs font-medium text-red-500">Recording</span>
+                    <span className="text-xs text-muted-foreground font-mono">{formatVoiceTime(voiceNoteSeconds)}</span>
+                    <span className="text-[10px] text-muted-foreground/60 ml-auto">5:00 max</span>
+                  </div>
+                  {/* Live transcript preview */}
+                  {(userInput || voice.interimText) ? (
+                    <p className="text-sm text-foreground leading-relaxed line-clamp-3">
+                      {userInput}{voice.interimText ? <span className="text-muted-foreground"> {voice.interimText}</span> : null}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground italic">Speak freely — pauses are fine, mic stays open until you submit…</p>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={cancelVoiceNote}
+                  className="flex-1 h-8 rounded-lg flex items-center justify-center gap-1.5 text-xs font-medium bg-muted hover:bg-muted/80 text-muted-foreground transition-colors"
+                >
+                  <Square className="h-3 w-3 fill-current" />
+                  Cancel
+                </button>
+                <button
+                  onClick={submitVoiceNote}
+                  disabled={!(userInput.trim()) && !(voice.interimText?.trim())}
+                  className="flex-1 h-8 rounded-lg flex items-center justify-center gap-1.5 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Send className="h-3 w-3" />
+                  Submit to engineer
+                </button>
+              </div>
             </div>
           ) : isConversationMode ? (
             <div className="flex items-center gap-3 bg-muted/50 rounded-xl border border-primary/30 p-3">
