@@ -1289,29 +1289,35 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     {/* Active session card — viewport-height constrained so header + input always visible */}
     <Card
       ref={debriefCardRef}
-      className="border border-amber-500/40 shadow-[0_0_0_1px_rgba(245,158,11,0.15),0_4px_20px_rgba(245,158,11,0.1)] bg-card flex flex-col"
-      style={{ maxHeight: 'calc(var(--visual-height, 100dvh) - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 15rem)' }}
+      className="bg-card flex flex-col"
+      style={{
+        border: '1px solid rgba(245,158,11,0.5)',
+        boxShadow: '0 0 0 3px rgba(245,158,11,0.1), 0 4px 24px rgba(245,158,11,0.12)',
+        maxHeight: 'calc(var(--visual-height, 100dvh) - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 15rem)',
+      }}
     >
       <CardContent className="p-0 flex flex-col flex-1 overflow-hidden">
-        <div className="px-5 py-3 border-b border-border/50 flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-sm font-medium text-foreground">Debrief</span>
-            <div className="flex items-center gap-1 ml-1">
+        <div className="px-3 py-2.5 border-b border-border/50 flex items-center gap-2 flex-shrink-0">
+          {/* Left: title + progress dots — shrinks to give room to buttons */}
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+            <span className="text-sm font-medium text-foreground shrink-0">Debrief</span>
+            <div className="flex items-center gap-1 min-w-0">
               {Array.from({ length: CORE_EXCHANGES }).map((_, i) => (
                 <div
                   key={i}
-                  className={`w-1.5 h-1.5 rounded-full transition-colors ${
+                  className={`w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${
                     i < progressDots ? "bg-primary" : "bg-border"
                   }`}
                 />
               ))}
               {userMessageCount > CORE_EXCHANGES && (
-                <span className="text-[10px] text-primary font-medium ml-0.5">+{userMessageCount - CORE_EXCHANGES}</span>
+                <span className="text-[10px] text-primary font-medium ml-0.5 shrink-0">+{userMessageCount - CORE_EXCHANGES}</span>
               )}
             </div>
           </div>
-          <div className="flex items-center gap-1">
+          {/* Right: action buttons — never shrinks or clips */}
+          <div className="flex items-center gap-0.5 flex-shrink-0">
             {debrief && !debrief.isComplete && (
               <Button
                 variant="ghost"
