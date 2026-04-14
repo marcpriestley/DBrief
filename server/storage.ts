@@ -133,15 +133,15 @@ export interface IStorage {
   deleteUser(userId: number): Promise<void>;
 
   // Challenge methods
-  createChallenge(creatorId: number, data: import("@shared/schema").InsertChallenge): Promise<import("@shared/schema").Challenge>;
+  createChallenge(creatorId: number, data: import("@shared/schema").InsertChallenge, creatorCommitment?: string): Promise<import("@shared/schema").Challenge>;
   getChallengesForUser(userId: number): Promise<import("@shared/schema").ChallengeWithProgress[]>;
   getChallengeById(challengeId: number): Promise<import("@shared/schema").Challenge | undefined>;
-  joinChallenge(challengeId: number, userId: number): Promise<void>;
+  joinChallenge(challengeId: number, userId: number, commitment?: string): Promise<void>;
   declineChallenge(challengeId: number, userId: number): Promise<void>;
   leaveChallenge(challengeId: number, userId: number): Promise<void>;
   deleteChallenge(challengeId: number, userId: number): Promise<void>;
   logChallengeEntry(challengeId: number, userId: number, date: string, value: number): Promise<void>;
-  getChallengeLeaderboard(challengeId: number, viewerId: number): Promise<import("@shared/schema").ChallengeParticipantStats[]>;
+  getChallengeLeaderboard(challengeId: number, viewerId: number): Promise<import("@shared/schema").ChallengeLeaderboard>;
   inviteToChallenge(challengeId: number, inviteeUserId: number, inviterId: number): Promise<void>;
 }
 
@@ -1548,10 +1548,15 @@ export class DatabaseStorage implements IStorage {
 
   // ── Challenge methods ────────────────────────────────────────────────────────
 
-  async createChallenge(creatorId: number, data: import("@shared/schema").InsertChallenge): Promise<import("@shared/schema").Challenge> {
+  async createChallenge(creatorId: number, data: import("@shared/schema").InsertChallenge, creatorCommitment?: string): Promise<import("@shared/schema").Challenge> {
     const { challenges, challengeParticipants } = await import("@shared/schema");
     const [ch] = await db.insert(challenges).values({ ...data, creatorId }).returning();
-    await db.insert(challengeParticipants).values({ challengeId: ch.id, userId: creatorId, status: "joined" });
+    await db.insert(challengeParticipants).values({
+      challengeId: ch.id,
+      userId: creatorId,
+      status: "joined",
+      commitment: creatorCommitment ?? null,
+    });
     return ch;
   }
 
@@ -1591,6 +1596,7 @@ export class DatabaseStorage implements IStorage {
         myStats: myPart ? { score: avgScore, daysLogged, loggedToday } : null,
         creatorUsername: creator?.username ?? "",
         creatorDisplayName: creator?.displayName ?? null,
+        myCommitment: myPart?.commitment ?? null,
       });
     }
     return results;
@@ -1602,15 +1608,15 @@ export class DatabaseStorage implements IStorage {
     return ch;
   }
 
-  async joinChallenge(challengeId: number, userId: number): Promise<void> {
+  async joinChallenge(challengeId: number, userId: number, commitment?: string): Promise<void> {
     const { challengeParticipants } = await import("@shared/schema");
     const existing = await db.select().from(challengeParticipants)
       .where(and(eq(challengeParticipants.challengeId, challengeId), eq(challengeParticipants.userId, userId)));
     if (existing.length > 0) {
-      await db.update(challengeParticipants).set({ status: "joined" })
+      await db.update(challengeParticipants).set({ status: "joined", ...(commitment !== undefined ? { commitment } : {}) })
         .where(and(eq(challengeParticipants.challengeId, challengeId), eq(challengeParticipants.userId, userId)));
     } else {
-      await db.insert(challengeParticipants).values({ challengeId, userId, status: "joined" });
+      await db.insert(challengeParticipants).values({ challengeId, userId, status: "joined", commitment: commitment ?? null });
     }
   }
 
@@ -1652,16 +1658,20 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async getChallengeLeaderboard(challengeId: number, viewerId: number): Promise<import("@shared/schema").ChallengeParticipantStats[]> {
+  async getChallengeLeaderboard(challengeId: number, viewerId: number): Promise<import("@shared/schema").ChallengeLeaderboard> {
     const { challengeParticipants, challengeLogs } = await import("@shared/schema");
     const ch = await this.getChallengeById(challengeId);
-    if (!ch) return [];
+    if (!ch) return { entries: [], scoresHidden: false, submittedToday: 0, totalParticipants: 0 };
 
     const participants = await db.select().from(challengeParticipants)
       .where(and(eq(challengeParticipants.challengeId, challengeId), eq(challengeParticipants.status, "joined")));
     const today = new Date().toISOString().split("T")[0];
 
-    const entries: import("@shared/schema").ChallengeParticipantStats[] = [];
+    const raw: Array<{
+      userId: number; username: string; displayName: string | null;
+      isMe: boolean; score: number; daysLogged: number; loggedToday: boolean; commitment: string | null;
+    }> = [];
+
     for (const p of participants) {
       const user = await this.getUser(p.userId);
       if (!user) continue;
@@ -1672,27 +1682,40 @@ export class DatabaseStorage implements IStorage {
       const score = ch.type === "score" && logs.length > 0
         ? Math.round(logs.reduce((s, l) => s + l.value, 0) / logs.length)
         : daysLogged;
-      entries.push({
+      raw.push({
         userId: p.userId,
         username: user.username,
         displayName: user.displayName ?? null,
         isMe: p.userId === viewerId,
         score,
         daysLogged,
-        rank: 0,
         loggedToday,
+        commitment: p.commitment ?? null,
       });
     }
 
-    entries.sort((a, b) => b.score - a.score || b.daysLogged - a.daysLogged);
+    const submittedToday = raw.filter(e => e.loggedToday).length;
+    const totalParticipants = raw.length;
+
+    // For score challenges: hide scores until everyone has submitted today
+    const scoresHidden = ch.type === "score" && submittedToday < totalParticipants;
+
+    // Sort by visible score (desc), then daysLogged (desc)
+    raw.sort((a, b) => b.score - a.score || b.daysLogged - a.daysLogged);
+
     let rank = 1;
-    for (let i = 0; i < entries.length; i++) {
-      if (i > 0 && (entries[i].score !== entries[i - 1].score || entries[i].daysLogged !== entries[i - 1].daysLogged)) {
+    const entries: import("@shared/schema").ChallengeParticipantStats[] = raw.map((e, i) => {
+      if (i > 0 && (raw[i].score !== raw[i - 1].score || raw[i].daysLogged !== raw[i - 1].daysLogged)) {
         rank = i + 1;
       }
-      entries[i].rank = rank;
-    }
-    return entries;
+      return {
+        ...e,
+        score: scoresHidden ? null : e.score,
+        rank: scoresHidden ? 0 : rank,
+      };
+    });
+
+    return { entries, scoresHidden, submittedToday, totalParticipants };
   }
 
   async inviteToChallenge(challengeId: number, inviteeUserId: number, inviterId: number): Promise<void> {

@@ -502,6 +502,8 @@ export const challengeParticipants = pgTable("challenge_participants", {
   userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   // "invited" | "joined" | "declined"
   status: text("status").notNull().default("joined"),
+  // For habit challenges: personal commitment text (e.g. "20 pushups")
+  commitment: text("commitment"),
   joinedAt: timestamp("joined_at").defaultNow(),
 });
 
@@ -524,11 +526,21 @@ export type ChallengeParticipantStats = {
   username: string;
   displayName: string | null;
   isMe: boolean;
-  // habit: days completed in window | score: avg value
-  score: number;
+  // habit: days completed in window | score: avg value (null when hidden)
+  score: number | null;
   daysLogged: number;
   rank: number;
   loggedToday: boolean;
+  // Habit challenges: personal commitment text
+  commitment: string | null;
+};
+
+export type ChallengeLeaderboard = {
+  entries: ChallengeParticipantStats[];
+  // For score challenges: scores are hidden until all participants have submitted today
+  scoresHidden: boolean;
+  submittedToday: number;
+  totalParticipants: number;
 };
 
 export type ChallengeWithProgress = Challenge & {
@@ -537,6 +549,8 @@ export type ChallengeWithProgress = Challenge & {
   myStats: { score: number; daysLogged: number; loggedToday: boolean } | null;
   creatorUsername: string;
   creatorDisplayName: string | null;
+  // For habit challenges: my personal commitment
+  myCommitment: string | null;
 };
 
 export * from "./models/chat";

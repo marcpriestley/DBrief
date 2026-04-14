@@ -211,7 +211,7 @@ function ConnectionCard({ stats, onRemove }: { stats: ConnectionPublicStats; onR
             exit={{ height: 0, opacity: 0 }}
             className="border-t border-border/50 bg-red-500/5 px-4 py-3 flex items-center justify-between"
           >
-            <p className="text-xs text-muted-foreground">Remove {name} from your squad?</p>
+            <p className="text-xs text-muted-foreground">Remove {name} from your team?</p>
             <div className="flex gap-2">
               <button onClick={() => setShowRemove(false)} className="text-xs text-muted-foreground px-2 py-1">Cancel</button>
               <button
@@ -294,6 +294,11 @@ export default function SquadPage() {
     return () => { if (searchRef.current) clearTimeout(searchRef.current); };
   }, [searchQuery]);
 
+  const { data: me } = useQuery<{ id: number; username: string }>({
+    queryKey: ["/api/auth/me"],
+    staleTime: Infinity,
+  });
+
   const { data: stats = [], isLoading: statsLoading } = useQuery<ConnectionPublicStats[]>({
     queryKey: ["/api/connections/stats"],
     staleTime: 30000,
@@ -364,7 +369,7 @@ export default function SquadPage() {
         {/* Header */}
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-xl font-bold text-foreground">Squad</h1>
+            <h1 className="text-xl font-bold text-foreground">My Team</h1>
             <p className="text-sm text-muted-foreground mt-0.5">Accountability partners</p>
           </div>
         </div>
@@ -556,6 +561,7 @@ export default function SquadPage() {
                   username: s.username,
                   displayName: s.displayName,
                 }))}
+                viewerUserId={me?.id ?? -1}
               />
             </motion.div>
           )}

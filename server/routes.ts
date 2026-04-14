@@ -1912,6 +1912,7 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
       if (type === "score" && !metricName) {
         return res.status(400).json({ message: "metricName is required for score challenges" });
       }
+      const { creatorCommitment } = req.body;
       const challenge = await storage.createChallenge(userId, {
         creatorId: userId,
         title,
@@ -1923,7 +1924,7 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
         visibility: visibility ?? "invite_only",
         startDate,
         endDate,
-      });
+      }, creatorCommitment ?? undefined);
 
       // If open, auto-invite all accepted connections
       if (visibility === "open") {
@@ -1953,12 +1954,13 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
     }
   });
 
-  // Join a challenge
+  // Join a challenge (optionally with a personal commitment for habit challenges)
   app.post("/api/challenges/:id/join", async (req, res) => {
     try {
       const userId = getUserId(req);
       const challengeId = parseInt(req.params.id);
-      await storage.joinChallenge(challengeId, userId);
+      const { commitment } = req.body;
+      await storage.joinChallenge(challengeId, userId, commitment ?? undefined);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ message: "Failed to join challenge" });

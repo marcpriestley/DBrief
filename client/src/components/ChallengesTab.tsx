@@ -3,12 +3,12 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus, Flame, Zap, Trophy, Calendar, Users, ChevronRight,
-  Check, X, LogOut, Trash2, Crown, Medal, Lock, Globe,
-  Target, Activity, CheckCircle2, Clock,
+  Check, X, Trash2, Crown, Medal, Lock, Globe,
+  Target, Activity, CheckCircle2, Clock, EyeOff, Eye,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import type { ChallengeWithProgress, ChallengeParticipantStats } from "@shared/schema";
+import type { ChallengeWithProgress, ChallengeLeaderboard, ChallengeParticipantStats } from "@shared/schema";
 import { haptic } from "@/lib/haptics";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
@@ -55,12 +55,27 @@ function SmallRank({ rank, isMe }: { rank: number; isMe: boolean }) {
 }
 
 // ── Leaderboard sheet ─────────────────────────────────────────────────────────
-function ChallengeLeaderboard({ challengeId, onClose }: { challengeId: number; onClose: () => void }) {
-  const { data: board = [], isLoading } = useQuery<ChallengeParticipantStats[]>({
+function ChallengeLeaderboardSheet({
+  challengeId,
+  challengeType,
+  onClose,
+}: {
+  challengeId: number;
+  challengeType: string;
+  onClose: () => void;
+}) {
+  const { data, isLoading } = useQuery<ChallengeLeaderboard>({
     queryKey: ["/api/challenges", challengeId, "leaderboard"],
-    queryFn: () => fetch(`/api/challenges/${challengeId}/leaderboard`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () =>
+      fetch(`/api/challenges/${challengeId}/leaderboard`, { credentials: "include" }).then(r => r.json()),
     staleTime: 15000,
+    refetchInterval: 15000,
   });
+
+  const board = data?.entries ?? [];
+  const scoresHidden = data?.scoresHidden ?? false;
+  const submittedToday = data?.submittedToday ?? 0;
+  const totalParticipants = data?.totalParticipants ?? 0;
 
   return (
     <motion.div
@@ -71,15 +86,35 @@ function ChallengeLeaderboard({ challengeId, onClose }: { challengeId: number; o
       onClick={onClose}
     >
       <div
-        className="w-full max-w-2xl mx-auto bg-background rounded-t-3xl border-t border-x border-border/60 shadow-2xl p-6 pb-10 space-y-4 max-h-[70vh] overflow-y-auto"
+        className="w-full max-w-2xl mx-auto bg-background rounded-t-3xl border-t border-x border-border/60 shadow-2xl p-6 pb-10 space-y-4 max-h-[75vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
           <h3 className="font-bold text-base">Standings</h3>
-          <button onClick={onClose} className="p-1 text-muted-foreground">
-            <X className="h-4 w-4" />
-          </button>
+          <button onClick={onClose} className="p-1 text-muted-foreground"><X className="h-4 w-4" /></button>
         </div>
+
+        {/* Blind state banner for score challenges */}
+        {scoresHidden && (
+          <div className="flex items-start gap-3 bg-muted/50 rounded-xl px-4 py-3">
+            <EyeOff className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-medium text-foreground">Scores hidden until everyone submits</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                {submittedToday} of {totalParticipants} submitted today — scores reveal when the last person logs.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Submission progress for score challenges */}
+        {challengeType === "score" && !scoresHidden && submittedToday === totalParticipants && totalParticipants > 0 && (
+          <div className="flex items-center gap-2 text-[11px] text-green-500">
+            <Eye className="h-3.5 w-3.5" />
+            All {totalParticipants} members submitted — final scores revealed.
+          </div>
+        )}
+
         {isLoading ? (
           <div className="space-y-2">
             {[1, 2, 3].map(i => <div key={i} className="h-12 bg-muted rounded-xl animate-pulse" />)}
@@ -97,28 +132,42 @@ function ChallengeLeaderboard({ challengeId, onClose }: { challengeId: number; o
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${
                   entry.isMe
                     ? "bg-primary/5 border-primary/20"
-                    : entry.rank === 1 ? "bg-amber-400/5 border-amber-400/20"
+                    : entry.rank === 1 && !scoresHidden ? "bg-amber-400/5 border-amber-400/20"
                     : "bg-card border-border/50"
                 }`}
               >
                 <div className="w-6 flex items-center justify-center shrink-0">
-                  <SmallRank rank={entry.rank} isMe={entry.isMe} />
+                  {scoresHidden
+                    ? <EyeOff className="h-3 w-3 text-muted-foreground/40" />
+                    : <SmallRank rank={entry.rank} isMe={entry.isMe} />
+                  }
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     <p className={`text-sm font-semibold truncate ${entry.isMe ? "text-primary" : "text-foreground"}`}>
                       {entry.displayName || entry.username}
                     </p>
                     {entry.isMe && <span className="text-[10px] text-primary/60">you</span>}
                     {entry.loggedToday && (
-                      <span className="ml-auto w-2 h-2 rounded-full bg-green-400 shrink-0" title="Logged today" />
+                      <span className="ml-auto w-2 h-2 rounded-full bg-green-400 shrink-0" title="Submitted today" />
                     )}
                   </div>
-                  <p className="text-[11px] text-muted-foreground/60">{entry.daysLogged} day{entry.daysLogged !== 1 ? "s" : ""} logged</p>
+                  {entry.commitment && (
+                    <p className="text-[11px] text-muted-foreground/70 italic truncate">"{entry.commitment}"</p>
+                  )}
+                  <p className="text-[11px] text-muted-foreground/50">{entry.daysLogged} day{entry.daysLogged !== 1 ? "s" : ""} logged</p>
                 </div>
                 <div className="text-right shrink-0">
-                  <p className="text-base font-bold tabular-nums text-foreground">{entry.score}</p>
-                  <p className="text-[10px] text-muted-foreground/60">score</p>
+                  {scoresHidden ? (
+                    <span className="text-xs text-muted-foreground/40">
+                      {entry.loggedToday ? "✓ done" : "waiting…"}
+                    </span>
+                  ) : (
+                    <>
+                      <p className="text-base font-bold tabular-nums text-foreground">{entry.score ?? "—"}</p>
+                      <p className="text-[10px] text-muted-foreground/60">score</p>
+                    </>
+                  )}
                 </div>
               </motion.div>
             ))}
@@ -129,15 +178,115 @@ function ChallengeLeaderboard({ challengeId, onClose }: { challengeId: number; o
   );
 }
 
+// ── Join with commitment sheet ─────────────────────────────────────────────────
+function JoinWithCommitmentSheet({
+  challenge,
+  onClose,
+  onJoined,
+}: {
+  challenge: ChallengeWithProgress;
+  onClose: () => void;
+  onJoined: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [commitment, setCommitment] = useState("");
+
+  const joinMutation = useMutation({
+    mutationFn: (body: object) =>
+      apiRequest("POST", `/api/challenges/${challenge.id}/join`, body).then(r => r.json()),
+    onSuccess: () => {
+      haptic("success");
+      queryClient.invalidateQueries({ queryKey: ["/api/challenges"] });
+      toast({ title: "You're in!", description: challenge.type === "habit" ? "Your commitment is set." : "Welcome to the challenge." });
+      onJoined();
+      onClose();
+    },
+    onError: () => toast({ title: "Failed to join", variant: "destructive" }),
+  });
+
+  const isHabit = challenge.type === "habit";
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 30 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 30 }}
+      className="fixed inset-0 z-50 flex items-end"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-2xl mx-auto bg-background rounded-t-3xl border-t border-x border-border/60 shadow-2xl p-6 pb-10 space-y-5"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold text-base">Join challenge</h3>
+          <button onClick={onClose} className="p-1 text-muted-foreground"><X className="h-4 w-4" /></button>
+        </div>
+
+        <div className="flex items-center gap-3 bg-muted/40 rounded-xl px-4 py-3">
+          <div className="text-2xl">{challenge.type === "habit" ? (challenge.habitEmoji ?? "🎯") : "📊"}</div>
+          <div>
+            <p className="text-sm font-semibold text-foreground">{challenge.title}</p>
+            <p className="text-xs text-muted-foreground">
+              {isHabit ? challenge.habitName : `Score: ${challenge.metricName}`}
+            </p>
+          </div>
+        </div>
+
+        {isHabit && (
+          <div>
+            <label className="text-xs font-medium text-foreground block mb-1">
+              What's your personal commitment? <span className="text-muted-foreground font-normal">(optional)</span>
+            </label>
+            <Input
+              value={commitment}
+              onChange={e => setCommitment(e.target.value)}
+              placeholder={`e.g. ${challenge.habitName ? `20 ${challenge.habitName.toLowerCase()}` : "10 reps, 20 mins…"}`}
+              className="bg-card border-border/50"
+              maxLength={80}
+            />
+            <p className="text-[11px] text-muted-foreground/60 mt-1.5">
+              Set your own target. You tick done when you hit it — the group sees what you committed to.
+            </p>
+          </div>
+        )}
+
+        {!isHabit && (
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Log your <strong className="text-foreground">{challenge.metricName}</strong> score each day. 
+            Scores are hidden until everyone has submitted for that day — no one can chase a known target.
+          </p>
+        )}
+
+        <div className="flex gap-3">
+          <button
+            onClick={onClose}
+            className="flex-1 py-3 rounded-xl border border-border/50 text-sm text-muted-foreground"
+          >Decline</button>
+          <button
+            onClick={() => {
+              haptic("medium");
+              joinMutation.mutate({ commitment: commitment.trim() || undefined });
+            }}
+            disabled={joinMutation.isPending}
+            className="flex-1 py-3 rounded-xl bg-primary text-white font-medium text-sm disabled:opacity-60"
+          >
+            {joinMutation.isPending ? "Joining…" : "Join challenge"}
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 // ── Log entry sheet ───────────────────────────────────────────────────────────
 function LogEntrySheet({
   challenge,
   onClose,
-  onLogged,
 }: {
   challenge: ChallengeWithProgress;
   onClose: () => void;
-  onLogged: () => void;
 }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -153,8 +302,12 @@ function LogEntrySheet({
       haptic("success");
       queryClient.invalidateQueries({ queryKey: ["/api/challenges"] });
       queryClient.invalidateQueries({ queryKey: ["/api/challenges", challenge.id, "leaderboard"] });
-      toast({ title: "Logged!", description: challenge.type === "habit" ? "Nice work — keep the streak going." : `Score ${scoreValue} saved.` });
-      onLogged();
+      toast({
+        title: "Logged!",
+        description: challenge.type === "habit"
+          ? "Commitment met — keep it up."
+          : `Score ${scoreValue} saved.`,
+      });
       onClose();
     },
     onError: () => toast({ title: "Failed to log", variant: "destructive" }),
@@ -173,15 +326,24 @@ function LogEntrySheet({
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
-          <h3 className="font-bold text-base">Log today's entry</h3>
+          <h3 className="font-bold text-base">Log today</h3>
           <button onClick={onClose} className="p-1 text-muted-foreground"><X className="h-4 w-4" /></button>
         </div>
 
         {challenge.type === "habit" ? (
-          <div className="text-center py-4">
+          <div className="text-center py-2">
             <div className="text-4xl mb-3">{challenge.habitEmoji ?? "✅"}</div>
-            <p className="text-sm text-foreground font-medium mb-1">{challenge.habitName}</p>
-            <p className="text-xs text-muted-foreground mb-5">Did you do it today?</p>
+            <p className="text-sm font-semibold text-foreground mb-1">{challenge.habitName}</p>
+            {challenge.myCommitment && (
+              <p className="text-xs text-primary/80 bg-primary/5 rounded-lg px-3 py-1.5 mx-auto inline-block mb-3">
+                Your commitment: <strong>{challenge.myCommitment}</strong>
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground mb-5">
+              {challenge.myCommitment
+                ? "Tick this when you've hit your commitment."
+                : "Did you do it today?"}
+            </p>
             <div className="flex gap-3 justify-center">
               <button
                 onClick={() => { haptic("light"); onClose(); }}
@@ -200,9 +362,18 @@ function LogEntrySheet({
           </div>
         ) : (
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Log your <strong className="text-foreground">{challenge.metricName}</strong> score for today.
-            </p>
+            <div className="bg-muted/40 rounded-xl px-4 py-3">
+              <p className="text-xs text-muted-foreground mb-0.5">Metric</p>
+              <p className="text-sm font-semibold text-foreground">{challenge.metricName}</p>
+            </div>
+            <div className="bg-amber-400/5 border border-amber-400/20 rounded-xl px-4 py-3">
+              <div className="flex items-start gap-2">
+                <EyeOff className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Scores are hidden until everyone in the challenge has submitted for today. You can't see anyone else's score before you log.
+                </p>
+              </div>
+            </div>
             <div className="flex items-center gap-4">
               <Slider
                 value={[scoreValue]}
@@ -217,7 +388,7 @@ function LogEntrySheet({
               disabled={logMutation.isPending}
               className="w-full py-3 rounded-xl bg-primary text-white font-medium text-sm disabled:opacity-60"
             >
-              Save score
+              {logMutation.isPending ? "Saving…" : "Submit score"}
             </button>
           </div>
         )}
@@ -227,12 +398,13 @@ function LogEntrySheet({
 }
 
 // ── Challenge card ────────────────────────────────────────────────────────────
-function ChallengeCard({ challenge, isMe }: { challenge: ChallengeWithProgress; isMe: boolean }) {
+function ChallengeCard({ challenge, viewerIsCreator }: { challenge: ChallengeWithProgress; viewerIsCreator: boolean }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [showLogSheet, setShowLogSheet] = useState(false);
-  const [showActions, setShowActions] = useState(false);
+  const [showJoinSheet, setShowJoinSheet] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const active = isActive(challenge);
   const past = isPast(challenge);
@@ -241,19 +413,9 @@ function ChallengeCard({ challenge, isMe }: { challenge: ChallengeWithProgress; 
   const loggedToday = challenge.myStats?.loggedToday ?? false;
   const myDays = challenge.myStats?.daysLogged ?? 0;
 
-  const joinMutation = useMutation({
-    mutationFn: () => apiRequest("POST", `/api/challenges/${challenge.id}/join`, {}).then(r => r.json()),
-    onSuccess: () => { haptic("success"); queryClient.invalidateQueries({ queryKey: ["/api/challenges"] }); },
-  });
-
   const declineMutation = useMutation({
     mutationFn: () => apiRequest("POST", `/api/challenges/${challenge.id}/decline`, {}).then(r => r.json()),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/challenges"] }); },
-  });
-
-  const leaveMutation = useMutation({
-    mutationFn: () => apiRequest("POST", `/api/challenges/${challenge.id}/leave`, {}).then(r => r.json()),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/challenges"] }); },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/challenges"] }),
   });
 
   const deleteMutation = useMutation({
@@ -278,7 +440,7 @@ function ChallengeCard({ challenge, isMe }: { challenge: ChallengeWithProgress; 
           invited ? "border-primary/30 bg-primary/5" : "border-border/50"
         }`}
       >
-        {/* Header */}
+        {/* Card body */}
         <div className="px-4 pt-4 pb-3">
           <div className="flex items-start gap-3 mb-3">
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0 ${
@@ -293,25 +455,31 @@ function ChallengeCard({ challenge, isMe }: { challenge: ChallengeWithProgress; 
               <div className="flex items-center gap-1.5 flex-wrap">
                 <p className="text-sm font-semibold text-foreground leading-tight">{challenge.title}</p>
                 {challenge.visibility === "open"
-                  ? <Globe className="h-3 w-3 text-muted-foreground/50 shrink-0" />
-                  : <Lock className="h-3 w-3 text-muted-foreground/50 shrink-0" />
+                  ? <Globe className="h-3 w-3 text-muted-foreground/40 shrink-0" />
+                  : <Lock className="h-3 w-3 text-muted-foreground/40 shrink-0" />
                 }
                 {past && <span className="text-[10px] text-muted-foreground/60 bg-muted px-1.5 py-0.5 rounded-full">Ended</span>}
               </div>
               <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
                 {challenge.type === "habit" ? challenge.habitName : `Score: ${challenge.metricName}`}
-                {" · "}
-                by @{challenge.creatorDisplayName ?? challenge.creatorUsername}
+                {" · "}by @{challenge.creatorDisplayName ?? challenge.creatorUsername}
               </p>
+              {/* My commitment pill */}
+              {challenge.myCommitment && challenge.type === "habit" && !invited && (
+                <p className="text-[11px] text-primary/80 mt-0.5 italic">Your target: {challenge.myCommitment}</p>
+              )}
             </div>
-            {isMe && !past && (
-              <button onClick={() => setShowActions(v => !v)} className="p-1.5 text-muted-foreground/40 hover:text-muted-foreground shrink-0">
+            {viewerIsCreator && !past && (
+              <button
+                onClick={() => { haptic("light"); setShowDeleteConfirm(v => !v); }}
+                className="p-1.5 text-muted-foreground/40 hover:text-red-400 transition-colors shrink-0"
+              >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
             )}
           </div>
 
-          {/* Stats row */}
+          {/* Stats */}
           <div className="flex items-center gap-4 mb-3">
             <div className="flex items-center gap-1">
               <Users className="h-3 w-3 text-muted-foreground/50" />
@@ -345,22 +513,27 @@ function ChallengeCard({ challenge, isMe }: { challenge: ChallengeWithProgress; 
           </div>
         </div>
 
-        {/* Invited state */}
+        {/* Invited — show join sheet (with commitment prompt) */}
         {invited && (
           <div className="border-t border-primary/20 px-4 py-3 flex items-center gap-3 bg-primary/5">
-            <p className="text-xs text-foreground/80 flex-1">You've been invited to join</p>
+            <p className="text-xs text-foreground/80 flex-1">
+              {challenge.type === "habit"
+                ? `You've been invited — set your personal target`
+                : `You've been invited to the ${challenge.metricName} challenge`
+              }
+            </p>
             <button
               onClick={() => { haptic("light"); declineMutation.mutate(); }}
               className="text-xs text-muted-foreground px-2 py-1"
             >Decline</button>
             <button
-              onClick={() => { haptic("medium"); joinMutation.mutate(); }}
+              onClick={() => { haptic("medium"); setShowJoinSheet(true); }}
               className="text-xs font-medium text-white bg-primary px-3 py-1.5 rounded-lg"
             >Join</button>
           </div>
         )}
 
-        {/* Joined + active state */}
+        {/* Joined + active */}
         {!invited && !past && active && (
           <div className="border-t border-border/40 px-4 py-2.5 flex gap-2">
             {!loggedToday && (
@@ -372,8 +545,10 @@ function ChallengeCard({ challenge, isMe }: { challenge: ChallengeWithProgress; 
                     : "bg-blue-500/10 text-blue-400"
                 }`}
               >
-                {challenge.type === "habit" ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Zap className="h-3.5 w-3.5" />}
-                Log today
+                {challenge.type === "habit"
+                  ? <><CheckCircle2 className="h-3.5 w-3.5" /> Log today</>
+                  : <><Zap className="h-3.5 w-3.5" /> Submit score</>
+                }
               </button>
             )}
             <button
@@ -381,12 +556,12 @@ function ChallengeCard({ challenge, isMe }: { challenge: ChallengeWithProgress; 
               className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-muted text-muted-foreground hover:text-foreground"
             >
               <Trophy className="h-3.5 w-3.5" />
-              Standings
+              {challenge.type === "score" ? "Standings" : "Standings"}
             </button>
           </div>
         )}
 
-        {/* Past challenge */}
+        {/* Past */}
         {past && (
           <div className="border-t border-border/40 px-4 py-2.5">
             <button
@@ -400,7 +575,7 @@ function ChallengeCard({ challenge, isMe }: { challenge: ChallengeWithProgress; 
 
         {/* Delete confirm */}
         <AnimatePresence>
-          {showActions && isMe && (
+          {showDeleteConfirm && (
             <motion.div
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: "auto", opacity: 1 }}
@@ -409,9 +584,9 @@ function ChallengeCard({ challenge, isMe }: { challenge: ChallengeWithProgress; 
             >
               <p className="text-xs text-muted-foreground">Delete this challenge for everyone?</p>
               <div className="flex gap-2">
-                <button onClick={() => setShowActions(false)} className="text-xs text-muted-foreground px-2 py-1">Cancel</button>
+                <button onClick={() => setShowDeleteConfirm(false)} className="text-xs text-muted-foreground px-2 py-1">Cancel</button>
                 <button
-                  onClick={() => { setShowActions(false); deleteMutation.mutate(); }}
+                  onClick={() => { setShowDeleteConfirm(false); deleteMutation.mutate(); }}
                   className="text-xs font-medium text-red-500 px-2 py-1"
                 >Delete</button>
               </div>
@@ -422,10 +597,21 @@ function ChallengeCard({ challenge, isMe }: { challenge: ChallengeWithProgress; 
 
       <AnimatePresence>
         {showLeaderboard && (
-          <ChallengeLeaderboard challengeId={challenge.id} onClose={() => setShowLeaderboard(false)} />
+          <ChallengeLeaderboardSheet
+            challengeId={challenge.id}
+            challengeType={challenge.type}
+            onClose={() => setShowLeaderboard(false)}
+          />
         )}
         {showLogSheet && (
-          <LogEntrySheet challenge={challenge} onClose={() => setShowLogSheet(false)} onLogged={() => {}} />
+          <LogEntrySheet challenge={challenge} onClose={() => setShowLogSheet(false)} />
+        )}
+        {showJoinSheet && (
+          <JoinWithCommitmentSheet
+            challenge={challenge}
+            onClose={() => setShowJoinSheet(false)}
+            onJoined={() => {}}
+          />
         )}
       </AnimatePresence>
     </>
@@ -446,28 +632,27 @@ function CreateChallengeSheet({
   const [step, setStep] = useState<"type" | "details" | "settings">("type");
   const [type, setType] = useState<"habit" | "score">("habit");
   const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
   const [habitName, setHabitName] = useState("");
   const [habitEmoji, setHabitEmoji] = useState("🎯");
   const [metricName, setMetricName] = useState("");
+  const [creatorCommitment, setCreatorCommitment] = useState("");
   const [durationDays, setDurationDays] = useState(7);
   const [visibility, setVisibility] = useState<"invite_only" | "open">("invite_only");
   const [selectedInvitees, setSelectedInvitees] = useState<number[]>([]);
 
   const createMutation = useMutation({
     mutationFn: (body: object) => apiRequest("POST", "/api/challenges", body).then(r => r.json()),
-    onSuccess: (ch) => {
-      // Send individual invites if invite_only
+    onSuccess: async (ch) => {
       if (visibility === "invite_only" && selectedInvitees.length > 0) {
         const targets = connections.filter(c => selectedInvitees.includes(c.userId));
-        Promise.all(
+        await Promise.all(
           targets.map(t =>
             apiRequest("POST", `/api/challenges/${ch.id}/invite`, { username: t.username }).then(r => r.json())
           )
         );
       }
       haptic("success");
-      toast({ title: "Challenge created!", description: "Invitations sent to your crew." });
+      toast({ title: "Challenge created!", description: selectedInvitees.length > 0 || visibility === "open" ? "Invitations sent." : "Ready when your crew joins." });
       queryClient.invalidateQueries({ queryKey: ["/api/challenges"] });
       onClose();
     },
@@ -478,19 +663,19 @@ function CreateChallengeSheet({
     const today = new Date().toISOString().split("T")[0];
     const end = new Date(Date.now() + durationDays * 86400000).toISOString().split("T")[0];
     createMutation.mutate({
-      title: title || (type === "habit" ? habitName : `${metricName} challenge`),
-      description: description || null,
+      title: title.trim() || (type === "habit" ? habitName : `${metricName} challenge`),
       type,
       habitName: type === "habit" ? habitName : null,
       habitEmoji: type === "habit" ? habitEmoji : null,
       metricName: type === "score" ? metricName : null,
+      creatorCommitment: type === "habit" && creatorCommitment.trim() ? creatorCommitment.trim() : undefined,
       visibility,
       startDate: today,
       endDate: end,
     });
   }
 
-  const canProceedDetails = type === "habit" ? habitName.trim().length > 0 : metricName.trim().length > 0;
+  const canProceed = type === "habit" ? habitName.trim().length > 0 : metricName.trim().length > 0;
 
   return (
     <motion.div
@@ -501,7 +686,7 @@ function CreateChallengeSheet({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-2xl mx-auto bg-background rounded-t-3xl border-t border-x border-border/60 shadow-2xl p-6 pb-10 space-y-5 max-h-[85vh] overflow-y-auto"
+        className="w-full max-w-2xl mx-auto bg-background rounded-t-3xl border-t border-x border-border/60 shadow-2xl p-6 pb-10 space-y-5 max-h-[88vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -517,7 +702,7 @@ function CreateChallengeSheet({
           <button onClick={onClose} className="p-1 text-muted-foreground"><X className="h-4 w-4" /></button>
         </div>
 
-        {/* Step indicator */}
+        {/* Step progress */}
         <div className="flex gap-1.5">
           {["type", "details", "settings"].map((s, i) => (
             <div key={s} className={`h-1 flex-1 rounded-full transition-all ${
@@ -531,32 +716,41 @@ function CreateChallengeSheet({
           {step === "type" && (
             <motion.div key="type" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-3">
               <p className="text-sm text-muted-foreground">What kind of challenge?</p>
-              <button
-                onClick={() => { haptic("select"); setType("habit"); setStep("details"); }}
-                className={`w-full flex items-center gap-4 p-4 rounded-2xl border text-left transition-all ${
-                  type === "habit" ? "border-primary bg-primary/5" : "border-border/50 bg-card"
-                }`}
-              >
-                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-xl shrink-0">🎯</div>
-                <div>
-                  <p className="text-sm font-semibold text-foreground">Habit challenge</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Everyone commits to completing the same habit daily</p>
-                </div>
-              </button>
-              <button
-                onClick={() => { haptic("select"); setType("score"); setStep("details"); }}
-                className={`w-full flex items-center gap-4 p-4 rounded-2xl border text-left transition-all ${
-                  type === "score" ? "border-blue-400 bg-blue-400/5" : "border-border/50 bg-card"
-                }`}
-              >
-                <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center shrink-0">
-                  <Activity className="h-5 w-5 text-blue-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-foreground">Score challenge</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Everyone tracks the same metric — highest average wins</p>
-                </div>
-              </button>
+              {[
+                {
+                  key: "habit" as const,
+                  icon: "🎯",
+                  title: "Habit challenge",
+                  desc: "Everyone commits to the same habit — each person sets their own personal target.",
+                },
+                {
+                  key: "score" as const,
+                  icon: null,
+                  iconEl: <Activity className="h-5 w-5 text-blue-400" />,
+                  title: "Score challenge",
+                  desc: "Log the same metric daily. Scores stay hidden until everyone submits — no score-chasing.",
+                },
+              ].map(opt => (
+                <button
+                  key={opt.key}
+                  onClick={() => { haptic("select"); setType(opt.key); setStep("details"); }}
+                  className={`w-full flex items-center gap-4 p-4 rounded-2xl border text-left transition-all ${
+                    type === opt.key
+                      ? opt.key === "habit" ? "border-primary bg-primary/5" : "border-blue-400 bg-blue-400/5"
+                      : "border-border/50 bg-card"
+                  }`}
+                >
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0 ${
+                    opt.key === "habit" ? "bg-primary/10" : "bg-blue-500/10"
+                  }`}>
+                    {opt.icon ?? opt.iconEl}
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">{opt.title}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{opt.desc}</p>
+                  </div>
+                </button>
+              ))}
             </motion.div>
           )}
 
@@ -580,43 +774,65 @@ function CreateChallengeSheet({
                     </div>
                   </div>
                   <div>
-                    <label className="text-xs text-muted-foreground block mb-1.5">Habit to track together</label>
+                    <label className="text-xs text-muted-foreground block mb-1.5">Shared habit name</label>
                     <Input
                       value={habitName}
                       onChange={e => setHabitName(e.target.value)}
-                      placeholder="e.g. Morning workout, No phone in bed…"
+                      placeholder="e.g. Morning workout, Cold shower, No phone before 9am…"
                       className="bg-card border-border/50"
                     />
                   </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground block mb-1.5">
+                      Your personal target <span className="text-muted-foreground/60">(optional)</span>
+                    </label>
+                    <Input
+                      value={creatorCommitment}
+                      onChange={e => setCreatorCommitment(e.target.value)}
+                      placeholder={habitName ? `e.g. 30 mins of ${habitName.toLowerCase()}` : "e.g. 100 pushups, 20 mins…"}
+                      className="bg-card border-border/50"
+                      maxLength={80}
+                    />
+                    <p className="text-[11px] text-muted-foreground/60 mt-1">
+                      Each person sets their own — others join at a level that works for them.
+                    </p>
+                  </div>
                 </>
               ) : (
-                <div>
-                  <label className="text-xs text-muted-foreground block mb-1.5">Metric name</label>
-                  <Input
-                    value={metricName}
-                    onChange={e => setMetricName(e.target.value)}
-                    placeholder="e.g. Sleep, Energy, Focus…"
-                    className="bg-card border-border/50"
-                  />
-                  <p className="text-[11px] text-muted-foreground/60 mt-1.5">
-                    Everyone logs this metric using the 0–100 scale each day. Highest average wins.
-                  </p>
-                </div>
+                <>
+                  <div>
+                    <label className="text-xs text-muted-foreground block mb-1.5">Shared metric to track</label>
+                    <Input
+                      value={metricName}
+                      onChange={e => setMetricName(e.target.value)}
+                      placeholder="e.g. Sleep, Energy, Focus, Steps…"
+                      className="bg-card border-border/50"
+                    />
+                  </div>
+                  <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl px-4 py-3">
+                    <div className="flex items-start gap-2">
+                      <EyeOff className="h-3.5 w-3.5 text-blue-400 shrink-0 mt-0.5" />
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        Scores are hidden until everyone has submitted for that day — no one can see the leaderboard and then submit a higher number.
+                      </p>
+                    </div>
+                  </div>
+                </>
               )}
 
               <div>
-                <label className="text-xs text-muted-foreground block mb-1.5">Challenge name (optional)</label>
+                <label className="text-xs text-muted-foreground block mb-1.5">Challenge name <span className="text-muted-foreground/60">(optional)</span></label>
                 <Input
                   value={title}
                   onChange={e => setTitle(e.target.value)}
-                  placeholder={type === "habit" ? habitName || "Give it a name…" : metricName ? `${metricName} challenge` : "Give it a name…"}
+                  placeholder={type === "habit" ? (habitName || "Give it a name…") : (metricName ? `${metricName} challenge` : "Give it a name…")}
                   className="bg-card border-border/50"
                 />
               </div>
 
               <button
-                onClick={() => { if (canProceedDetails) { haptic("light"); setStep("settings"); } }}
-                disabled={!canProceedDetails}
+                onClick={() => { if (canProceed) { haptic("light"); setStep("settings"); } }}
+                disabled={!canProceed}
                 className="w-full py-3 rounded-xl bg-primary text-white font-medium text-sm disabled:opacity-40"
               >
                 Next
@@ -655,37 +871,33 @@ function CreateChallengeSheet({
               <div>
                 <label className="text-xs text-muted-foreground block mb-2">Who can join?</label>
                 <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => setVisibility("invite_only")}
-                    className={`flex items-center gap-2 p-3 rounded-xl border text-left transition-all ${
-                      visibility === "invite_only" ? "border-primary bg-primary/5" : "border-border/50 bg-card"
-                    }`}
-                  >
-                    <Lock className={`h-4 w-4 shrink-0 ${visibility === "invite_only" ? "text-primary" : "text-muted-foreground"}`} />
-                    <div>
-                      <p className="text-xs font-medium text-foreground">Invite only</p>
-                      <p className="text-[10px] text-muted-foreground">You choose who joins</p>
-                    </div>
-                  </button>
-                  <button
-                    onClick={() => setVisibility("open")}
-                    className={`flex items-center gap-2 p-3 rounded-xl border text-left transition-all ${
-                      visibility === "open" ? "border-blue-400 bg-blue-400/5" : "border-border/50 bg-card"
-                    }`}
-                  >
-                    <Globe className={`h-4 w-4 shrink-0 ${visibility === "open" ? "text-blue-400" : "text-muted-foreground"}`} />
-                    <div>
-                      <p className="text-xs font-medium text-foreground">Open to crew</p>
-                      <p className="text-[10px] text-muted-foreground">All connections invited</p>
-                    </div>
-                  </button>
+                  {[
+                    { key: "invite_only" as const, icon: Lock, label: "Invite only", sub: "You choose who joins", active: "border-primary bg-primary/5", iconClass: "text-primary" },
+                    { key: "open" as const, icon: Globe, label: "Open to crew", sub: "All connections invited", active: "border-blue-400 bg-blue-400/5", iconClass: "text-blue-400" },
+                  ].map(opt => {
+                    const Icon = opt.icon;
+                    const isSelected = visibility === opt.key;
+                    return (
+                      <button
+                        key={opt.key}
+                        onClick={() => setVisibility(opt.key)}
+                        className={`flex items-center gap-2 p-3 rounded-xl border text-left transition-all ${isSelected ? opt.active : "border-border/50 bg-card"}`}
+                      >
+                        <Icon className={`h-4 w-4 shrink-0 ${isSelected ? opt.iconClass : "text-muted-foreground"}`} />
+                        <div>
+                          <p className="text-xs font-medium text-foreground">{opt.label}</p>
+                          <p className="text-[10px] text-muted-foreground">{opt.sub}</p>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
               {/* Invite specific people */}
               {visibility === "invite_only" && connections.length > 0 && (
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-2">Invite crew</label>
+                  <label className="text-xs text-muted-foreground block mb-2">Invite crew members</label>
                   <div className="space-y-1.5">
                     {connections.map(c => {
                       const selected = selectedInvitees.includes(c.userId);
@@ -717,7 +929,7 @@ function CreateChallengeSheet({
 
               {visibility === "invite_only" && connections.length === 0 && (
                 <p className="text-xs text-muted-foreground/60 text-center py-2">
-                  No crew yet — add connections first, or set visibility to Open.
+                  No crew yet — add connections first, or switch to Open.
                 </p>
               )}
 
@@ -739,21 +951,16 @@ function CreateChallengeSheet({
 // ── Main export ───────────────────────────────────────────────────────────────
 export default function ChallengesTab({
   acceptedConnections,
+  viewerUserId,
 }: {
   acceptedConnections: { userId: number; username: string; displayName: string | null }[];
+  viewerUserId: number;
 }) {
   const [showCreate, setShowCreate] = useState(false);
   const { data: challenges = [], isLoading } = useQuery<ChallengeWithProgress[]>({
     queryKey: ["/api/challenges"],
     staleTime: 30000,
   });
-
-  const currentUserId = (() => {
-    try {
-      const me = challenges.find(c => c.myStatus === "joined");
-      return me?.creatorId ?? -1;
-    } catch { return -1; }
-  })();
 
   const invited = challenges.filter(c => c.myStatus === "invited");
   const active = challenges.filter(c => c.myStatus === "joined" && isActive(c));
@@ -763,9 +970,7 @@ export default function ChallengesTab({
     <div className="space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Challenges
-        </h2>
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Challenges</h2>
         <button
           onClick={() => { haptic("light"); setShowCreate(true); }}
           className="flex items-center gap-1 text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 px-3 py-1.5 rounded-lg transition-colors"
@@ -783,7 +988,7 @@ export default function ChallengesTab({
           </div>
           <div className="space-y-3">
             <AnimatePresence mode="popLayout">
-              {invited.map(ch => <ChallengeCard key={ch.id} challenge={ch} isMe={false} />)}
+              {invited.map(ch => <ChallengeCard key={ch.id} challenge={ch} viewerIsCreator={false} />)}
             </AnimatePresence>
           </div>
         </section>
@@ -799,7 +1004,7 @@ export default function ChallengesTab({
           <Target className="h-8 w-8 text-muted-foreground/40 mx-auto mb-3" />
           <p className="text-sm font-medium text-foreground mb-1">No active challenges</p>
           <p className="text-xs text-muted-foreground leading-relaxed max-w-xs mx-auto">
-            Start a challenge with your crew — habit or score — and compete together.
+            Compete with your crew — habit streaks or score battles.
           </p>
           <button
             onClick={() => { haptic("light"); setShowCreate(true); }}
@@ -812,7 +1017,7 @@ export default function ChallengesTab({
         <div className="space-y-3">
           <AnimatePresence mode="popLayout">
             {active.map(ch => (
-              <ChallengeCard key={ch.id} challenge={ch} isMe={ch.creatorId === challenges.find(c => c.id === ch.id)?.creatorId} />
+              <ChallengeCard key={ch.id} challenge={ch} viewerIsCreator={ch.creatorId === viewerUserId} />
             ))}
           </AnimatePresence>
         </div>
@@ -824,7 +1029,7 @@ export default function ChallengesTab({
           <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider mb-2 font-medium">Completed</p>
           <div className="space-y-3">
             <AnimatePresence mode="popLayout">
-              {past.map(ch => <ChallengeCard key={ch.id} challenge={ch} isMe={false} />)}
+              {past.map(ch => <ChallengeCard key={ch.id} challenge={ch} viewerIsCreator={false} />)}
             </AnimatePresence>
           </div>
         </section>

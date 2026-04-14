@@ -226,7 +226,7 @@ function AppLayoutInner({ children }: AppLayoutProps) {
   const tabs = [
     { href: "/calendar", label: "History", icon: CalendarDays },
     { href: "/trends", label: "Analytics", icon: TrendingUp },
-    { href: "/squad", label: "Squad", icon: Users },
+    { href: "/squad", label: "My Team", icon: Users },
   ];
 
   const isActive = (href: string) => location === href;
