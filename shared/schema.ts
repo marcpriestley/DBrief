@@ -459,6 +459,7 @@ export type ConnectionPublicStats = {
   sevenDayConsistency: number; // 0-100 %
   thirtyDayAvgScore: number | null;
   todayAvgScore: number | null;
+  points: number;
   lastLoggedDate: string | null;
   connectionId: number;
   status: string;

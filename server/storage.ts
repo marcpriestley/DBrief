@@ -14,7 +14,7 @@ import {
   type UserConnection, type ConnectionPublicStats,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, asc, desc, gte, lte, gt, or, ne, sql } from "drizzle-orm";
+import { eq, and, asc, desc, gte, lte, gt, or, ne, sql, inArray } from "drizzle-orm";
 import { encrypt, decrypt } from "./encryption";
 
 export interface IStorage {
@@ -1428,10 +1428,8 @@ export class DatabaseStorage implements IStorage {
     entries.sort((a, b) => {
       if (sortBy === "streak") return (b.currentStreak - a.currentStreak) || (b.sevenDayConsistency - a.sevenDayConsistency);
       if (sortBy === "consistency") return (b.sevenDayConsistency - a.sevenDayConsistency) || (b.currentStreak - a.currentStreak);
-      // score: null scores go to bottom
-      const bScore = b.todayAvgScore ?? b.thirtyDayAvgScore ?? -1;
-      const aScore = a.todayAvgScore ?? a.thirtyDayAvgScore ?? -1;
-      return bScore - aScore;
+      // score: rank by points, tiebreak by 7-day consistency
+      return (b.points - a.points) || (b.sevenDayConsistency - a.sevenDayConsistency);
     });
 
     // Assign ranks (ties share the same rank)
@@ -1444,13 +1442,75 @@ export class DatabaseStorage implements IStorage {
           ? prev.currentStreak === cur.currentStreak && prev.sevenDayConsistency === cur.sevenDayConsistency
           : sortBy === "consistency"
           ? prev.sevenDayConsistency === cur.sevenDayConsistency && prev.currentStreak === cur.currentStreak
-          : (prev.todayAvgScore ?? prev.thirtyDayAvgScore ?? -1) === (cur.todayAvgScore ?? cur.thirtyDayAvgScore ?? -1);
+          : prev.points === cur.points && prev.sevenDayConsistency === cur.sevenDayConsistency;
         if (!tied) rank = i + 1;
       }
       entries[i].rank = rank;
     }
 
     return entries;
+  }
+
+  private async _getUserPoints(userId: number): Promise<number> {
+    const MILESTONES = [3, 7, 14, 30, 50, 100, 365];
+    const thirtyAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    let pts = 0;
+
+    // 1. Streak points: 10 per active streak day
+    const streak = await this.getUserStreak(userId);
+    const currentStreak = streak?.currentStreak ?? 0;
+    const longestStreak = streak?.longestStreak ?? 0;
+    pts += currentStreak * 10;
+
+    // 2. Milestone bonuses: +50 for each milestone ever reached
+    for (const m of MILESTONES) {
+      if (longestStreak >= m) pts += 50;
+    }
+
+    // 3. Consistency: +10 per day in last 30 with any manual score
+    const allScores = await this.getDailyScoresByUser(userId);
+    const scoreDays = new Set(
+      allScores.filter(s => s.date >= thirtyAgo && s.value > 0 && !s.isAutoSynced).map(s => s.date)
+    );
+    pts += scoreDays.size * 10;
+
+    // 4. Habit completions in last 30 days: +5 per completion, +20 all-done bonus
+    const userHabits = await db.select({ id: habits.id }).from(habits).where(eq(habits.userId, userId));
+    if (userHabits.length > 0) {
+      const habitIds = userHabits.map(h => h.id);
+      const logs = await db.select().from(habitLogs)
+        .where(and(
+          inArray(habitLogs.habitId, habitIds),
+          gte(habitLogs.date, thirtyAgo),
+          eq(habitLogs.completed, true)
+        ));
+      const habitCountByDate = new Map<string, number>();
+      for (const log of logs) {
+        habitCountByDate.set(log.date, (habitCountByDate.get(log.date) ?? 0) + 1);
+      }
+      for (const [, count] of habitCountByDate) {
+        pts += count * 5;
+        if (count >= userHabits.length) pts += 20;
+      }
+    }
+
+    // 5. Goal completions in last 30 days: +5 per completion, +20 all-done bonus
+    const allGoals = await db.select().from(dailyGoals)
+      .where(and(eq(dailyGoals.userId, userId), gte(dailyGoals.date, thirtyAgo)));
+    const goalsByDate = new Map<string, { total: number; completed: number }>();
+    for (const goal of allGoals) {
+      const entry = goalsByDate.get(goal.date) ?? { total: 0, completed: 0 };
+      goalsByDate.set(goal.date, {
+        total: entry.total + 1,
+        completed: entry.completed + (goal.completed ? 1 : 0),
+      });
+    }
+    for (const [, { total, completed }] of goalsByDate) {
+      pts += completed * 5;
+      if (total > 0 && completed >= total) pts += 20;
+    }
+
+    return pts;
   }
 
   private async _buildPublicStats(targetUserId: number, conn: UserConnection, viewerId: number): Promise<ConnectionPublicStats | null> {
@@ -1483,6 +1543,8 @@ export class DatabaseStorage implements IStorage {
       .filter(s => s.value > 0 && !s.isAutoSynced)
       .sort((a, b) => b.date.localeCompare(a.date))[0]?.date ?? null;
 
+    const points = await this._getUserPoints(targetUserId);
+
     return {
       userId: targetUserId,
       username: user.username,
@@ -1492,6 +1554,7 @@ export class DatabaseStorage implements IStorage {
       sevenDayConsistency,
       thirtyDayAvgScore,
       todayAvgScore,
+      points,
       lastLoggedDate,
       connectionId: conn.id,
       status: conn.status,

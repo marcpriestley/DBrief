@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Users, Search, UserPlus, Check, X, Flame, Zap, Trophy,
-  UserMinus, Clock, Medal, Crown, TrendingUp, BarChart2, Swords,
+  Users, Search, UserPlus, Check, X, Flame, Trophy,
+  UserMinus, Clock, Medal, Crown, TrendingUp, Star, Swords,
 } from "lucide-react";
 import AppLayout from "@/components/AppLayout";
 import { Input } from "@/components/ui/input";
@@ -74,7 +74,7 @@ function LeaderboardRow({ entry, sortBy, idx }: { entry: LeaderboardEntry; sortB
     ? { value: entry.currentStreak, label: "streak", icon: <Flame className="h-3.5 w-3.5 text-orange-400" /> }
     : sortBy === "consistency"
     ? { value: `${entry.sevenDayConsistency}%`, label: "7-day", icon: <TrendingUp className="h-3.5 w-3.5 text-blue-400" /> }
-    : { value: entry.todayAvgScore ?? entry.thirtyDayAvgScore ?? "—", label: entry.todayAvgScore !== null ? "today" : "30d avg", icon: <Zap className="h-3.5 w-3.5 text-primary" /> };
+    : { value: entry.points.toLocaleString(), label: "pts", icon: <Star className="h-3.5 w-3.5 text-primary" /> };
 
   return (
     <motion.div
@@ -174,12 +174,12 @@ function ConnectionCard({ stats, onRemove }: { stats: ConnectionPublicStats; onR
           </div>
           <div className="bg-muted/40 rounded-xl p-2.5 text-center">
             <div className="flex items-center justify-center gap-1 mb-0.5">
-              <Zap className="h-3 w-3 text-primary" />
+              <Star className="h-3 w-3 text-primary" />
               <span className="text-base font-bold text-foreground tabular-nums">
-                {stats.todayAvgScore !== null ? stats.todayAvgScore : "—"}
+                {stats.points.toLocaleString()}
               </span>
             </div>
-            <p className="text-[10px] text-muted-foreground">today</p>
+            <p className="text-[10px] text-muted-foreground">pts</p>
           </div>
           <div className="bg-muted/40 rounded-xl p-2.5 text-center">
             <div className="flex items-center justify-center gap-1 mb-0.5">
@@ -198,9 +198,6 @@ function ConnectionCard({ stats, onRemove }: { stats: ConnectionPublicStats; onR
         <div className="flex items-center gap-1.5 mt-2.5">
           <Clock className="h-3 w-3 text-muted-foreground/50" />
           <span className="text-[11px] text-muted-foreground/70">{formatLastSeen(stats.lastLoggedDate)}</span>
-          {stats.thirtyDayAvgScore !== null && (
-            <span className="text-[11px] text-muted-foreground/50 ml-auto">30d avg {stats.thirtyDayAvgScore}</span>
-          )}
         </div>
       </div>
 
@@ -275,7 +272,7 @@ type SortBy = "streak" | "consistency" | "score";
 const SORT_OPTIONS: { key: SortBy; label: string; icon: React.ReactNode }[] = [
   { key: "streak",      label: "Streak",      icon: <Flame className="h-3 w-3" /> },
   { key: "consistency", label: "Consistency",  icon: <TrendingUp className="h-3 w-3" /> },
-  { key: "score",       label: "Score",        icon: <BarChart2 className="h-3 w-3" /> },
+  { key: "score",       label: "Points",       icon: <Star className="h-3 w-3" /> },
 ];
 
 // ── Main Squad page ───────────────────────────────────────────────────────────
@@ -572,7 +569,7 @@ export default function SquadPage() {
               </section>
 
               <p className="text-[11px] text-muted-foreground/40 text-center leading-relaxed px-4 pb-2">
-                Connections can see your streak, consistency %, and score average.
+                Connections can see your streak, consistency %, and points.
                 Journal, goal content, and debriefs stay completely private.
               </p>
             </motion.div>
