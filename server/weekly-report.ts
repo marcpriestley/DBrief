@@ -220,31 +220,33 @@ export async function generatePerformancePatterns(userId: number): Promise<Perfo
     .map(([k, v]) => `${k}: avg=${Math.round(v)}`)
     .join(", ");
 
-  const prompt = `You are a performance data analyst working with a race engineer. You have 30 days of daily performance data for a driver. Your job: find genuine statistical patterns in the data that the driver hasn't noticed yet.
+  const prompt = `You are a performance data analyst. You have 30 days of daily score data (0–100 scale) for a driver. Your job: find genuine, statistically grounded correlations directly in the daily score numbers. This is Data Pattern Analysis — focus on the raw scores.
 
 DAILY DATA (${allDates.length} days with logged data):
 ${scoreSummaryLines}
 
-METRIC AVERAGES: ${meansLine}
+METRIC AVERAGES OVER 30 DAYS: ${meansLine}
 
-TASK: Identify up to 3 genuine, specific correlations in this data. Examples of what you're looking for:
-- "On days following sleep ≥75, energy is on average 21 points higher"
-- "Goal completion rate is 40% higher on days when mood check-in was logged in the morning"  
-- "Your energy scores have trended up 15 points over the last 30 days"
+TASK: Identify up to 3 genuine, specific score-to-score correlations in this data. Lead with the numbers. Good examples:
+- "On days when Sleep Duration ≥ 70, Energy averages 18 points higher than on low-sleep days"
+- "HRV and Resting Heart Rate move inversely: on your 8 highest HRV days, resting HR averaged 58 vs 67 on low-HRV days"
+- "Energy scores have risen from an average of 54 in weeks 1–2 to 71 in weeks 3–4 — a 17-point upward trend"
+- "Goal completion is 43% higher on days where mood score is above 65"
 
 Rules:
-- Only report patterns with at least 5 data points supporting them
-- Be specific with numbers from the actual data
-- If the data is insufficient or noisy, report fewer patterns (even 0 is fine)
-- Do NOT invent patterns or make vague claims
+- Every pattern must cite actual numbers from the data above — no vague claims
+- Score-to-score relationships are the priority; goal completion and mood can appear if they show a clear score correlation
+- Only report patterns with at least 5 supporting data points
+- If data is insufficient or too noisy for a genuine pattern, return fewer (even 0 is correct)
+- Do NOT invent patterns
 
 Respond with valid JSON array only (no markdown, no explanation outside the JSON):
 [
   {
-    "insight": "One sentence describing the specific correlation with real numbers",
-    "metric1": "primary metric name or 'goals' or 'mood'",
-    "metric2": "secondary metric name or 'goals' or 'mood' or null",
-    "correlation": "the key stat e.g. '+21 points avg' or '40% higher' or 'trending up 15pts'",
+    "insight": "One specific sentence describing the correlation with real numbers from the data",
+    "metric1": "primary score metric name",
+    "metric2": "secondary score metric name, or 'goals', or null",
+    "correlation": "the key stat e.g. '+18 pts avg' or '43% higher' or 'up 17 pts over 30 days'",
     "confidence": "high or medium"
   }
 ]`;

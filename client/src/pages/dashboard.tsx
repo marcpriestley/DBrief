@@ -113,9 +113,9 @@ function DashboardContent() {
                 <ScoreDashboard selectedDate={selectedDate} />
               </AttentionRing>
 
-              <AIInsights />
               <WeeklyRaceReport />
               <PerformancePatterns />
+              <AIInsights />
             </>
           )}
         </motion.div>

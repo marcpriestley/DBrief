@@ -974,15 +974,20 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
       // Deactivate all old insights — we'll show only the freshly generated one
       await Promise.all(previousInsights.map(i => storage.deactivateAIInsight(i.id)));
 
-      const entries = await storage.getJournalEntriesByUser(userId);
-      const scores = await storage.getDailyScoresByUser(userId);
-      
       const now = new Date();
       const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-      const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      // 90-day window for long-range trajectory analysis
+      const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-      const recentEntries = entries.filter(e => e.date >= fourteenDaysAgo);
-      const recentScores = scores.filter(s => s.date >= fourteenDaysAgo);
+      const [allScores, moodCheckins, goals, infiniteGoalRows, longTermGoalRows] = await Promise.all([
+        storage.getDailyScoresByUser(userId),
+        storage.getMoodCheckinsForDateRange(userId, ninetyDaysAgo, todayStr),
+        storage.getGoalsForDateRange(userId, ninetyDaysAgo, todayStr),
+        db.select().from(infiniteGoals).where(eq(infiniteGoals.userId, userId)).orderBy(desc(infiniteGoals.updatedAt)).limit(1),
+        db.select().from(longTermGoals).where(and(eq(longTermGoals.userId, userId), eq(longTermGoals.isActive, true))),
+      ]);
+
+      const recentScores = allScores.filter(s => s.date >= ninetyDaysAgo);
 
       // Exclude zeros — a score of 0 almost always means no input was logged, not a
       // deliberate zero. Only include scores that were actually entered by the user.
@@ -992,20 +997,58 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
         scoresByDate[score.date][score.metricName] = score.value;
       });
 
-      const moodCheckins = await storage.getMoodCheckinsForDateRange(userId, fourteenDaysAgo, todayStr);
       const moodByDate: Record<string, number[]> = {};
       moodCheckins.forEach(m => {
         if (!moodByDate[m.date]) moodByDate[m.date] = [];
         moodByDate[m.date].push(m.value);
       });
 
-      const goals = await storage.getGoalsForDateRange(userId, fourteenDaysAgo, todayStr);
       const goalsByDate: Record<string, { total: number; completed: number }> = {};
       goals.forEach(g => {
         if (!goalsByDate[g.date]) goalsByDate[g.date] = { total: 0, completed: 0 };
         goalsByDate[g.date].total++;
         if (g.completed) goalsByDate[g.date].completed++;
       });
+
+      // Decrypt and extract goal text
+      const infiniteGoalText = infiniteGoalRows[0]
+        ? (() => { try { return decrypt(infiniteGoalRows[0].goal); } catch { return infiniteGoalRows[0].goal; } })()
+        : null;
+      const longTermGoalTexts = longTermGoalRows.map(g => {
+        try { return decrypt(g.goal); } catch { return g.goal; }
+      });
+
+      // Build a 90-day score trend: group by 30-day buckets for trajectory view
+      const buckets = [
+        { label: "Days 61–90 ago", start: ninetyDaysAgo, end: new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] },
+        { label: "Days 31–60 ago", start: new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], end: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] },
+        { label: "Last 30 days",   start: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], end: todayStr },
+      ];
+
+      const metricNames = [...new Set(recentScores.filter(s => s.value > 0).map(s => s.metricName))];
+
+      const trendTable = metricNames.map(metric => {
+        const bucketAverages = buckets.map(b => {
+          const vals = recentScores.filter(s => s.metricName === metric && s.date >= b.start && s.date <= b.end && s.value > 0).map(s => s.value);
+          if (vals.length === 0) return null;
+          return Math.round(vals.reduce((a, v) => a + v, 0) / vals.length);
+        });
+        const parts = buckets.map((b, i) => bucketAverages[i] !== null ? `${b.label}: avg ${bucketAverages[i]}` : null).filter(Boolean);
+        return parts.length > 0 ? `${metric}: ${parts.join(" → ")}` : null;
+      }).filter(Boolean).join("\n");
+
+      const goalCompletionRate = goals.length > 0
+        ? Math.round((goals.filter(g => g.completed).length / goals.length) * 100)
+        : null;
+
+      const moodTrend = (() => {
+        const recentMoods = moodCheckins.filter(m => m.date >= new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+        const olderMoods = moodCheckins.filter(m => m.date < new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+        if (recentMoods.length === 0) return null;
+        const recentAvg = Math.round(recentMoods.reduce((a, m) => a + m.value, 0) / recentMoods.length);
+        const olderAvg = olderMoods.length > 0 ? Math.round(olderMoods.reduce((a, m) => a + m.value, 0) / olderMoods.length) : null;
+        return olderAvg !== null ? `${olderAvg} (older) → ${recentAvg} (last 30 days)` : `${recentAvg} avg (last 30 days)`;
+      })();
 
       // Convert YYYY-MM-DD dates to relative human-friendly labels
       const relativeDate = (dateStr: string): string => {
@@ -1021,53 +1064,40 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
         return `${weekdays[target.getDay()]} (${target.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })})`;
       };
 
-      // Focus area rotates on each refresh to ensure variety
-      const focusAreas = [
-        "cross-metric correlations (e.g., how sleep scores affect mood or goal completion)",
-        "patterns in journal sentiment and how they correlate with score changes",
-        "goal completion consistency and what days look different to high-performing days",
-        "recovery and energy patterns across the week",
-        "habit streak momentum and its relationship to overall scores",
-      ];
-      const focusArea = focusAreas[Math.floor(Math.random() * focusAreas.length)];
-
       const prevInsightContext = previousInsights.length > 0
-        ? `\nPREVIOUS INSIGHTS (DO NOT REPEAT these — generate something fresh and different):\n${previousInsights.slice(0, 3).map(i => `- ${i.insight}`).join('\n')}\n`
+        ? `\nPREVIOUS ANALYSES (DO NOT REPEAT these — generate something fresh):\n${previousInsights.slice(0, 3).map(i => `- ${i.insight}`).join('\n')}\n`
         : '';
 
-      const prompt = `You are an experienced performance analyst. Analyze the user's daily tracking data below. All scores are on a 0-100 scale.${prevInsightContext}
+      const prompt = `You are a long-range performance strategist working with a driver who is pursuing a meaningful life mission. Your role is NOT to give short-term tips — it is to assess whether this driver's 90-day performance trajectory is genuinely pointing toward their stated goals, and to give them an honest strategic read on where they stand.${prevInsightContext}
 
-IMPORTANT: Only scores that were explicitly logged by the user are included below. A missing score for a date means the user did not log it that day — do NOT assume it was zero or poor performance. Only analyse dates and metrics that have actual data.
+DRIVER'S INFINITE GOAL (their overarching life mission — cannot be fully achieved, only pursued):
+${infiniteGoalText ?? "Not yet set."}
 
-JOURNAL ENTRIES (last 14 days):
-${recentEntries.length > 0 ? recentEntries.map(entry => `${relativeDate(entry.date)}: ${entry.content}`).join('\n') : 'No journal entries yet.'}
+LONG-TERM TARGETS (medium-term goals they are actively working toward):
+${longTermGoalTexts.length > 0 ? longTermGoalTexts.map((g, i) => `${i + 1}. ${g}`).join("\n") : "None set yet."}
 
-DAILY SCORES BY DATE (0-100 scale, only days with logged data):
-${Object.entries(scoresByDate).map(([date, s]) => 
-  `${relativeDate(date)}: ${Object.entries(s).map(([name, val]) => `${name}=${val}`).join(', ')}`
-).join('\n') || 'No scores logged yet.'}
+90-DAY PERFORMANCE SCORE TRAJECTORY (0–100 scale, grouped by period):
+${trendTable || "Insufficient data across this period."}
 
-MOOD CHECK-INS BY DATE (0-100 scale, daily averages):
-${Object.entries(moodByDate).map(([date, vals]) => 
-  `${relativeDate(date)}: avg=${Math.round(vals.reduce((a, b) => a + b, 0) / vals.length)} (${vals.length} check-ins)`
-).join('\n') || 'No mood check-ins yet.'}
+GOAL COMPLETION RATE (last 90 days): ${goalCompletionRate !== null ? `${goalCompletionRate}%` : "No goal data."}
 
-GOALS COMPLETION BY DATE:
-${Object.entries(goalsByDate).map(([date, g]) => 
-  `${relativeDate(date)}: ${g.completed}/${g.total} completed (${Math.round(g.completed / g.total * 100)}%)`
-).join('\n') || 'No goals data yet.'}
+MOOD TREND (0–100 scale): ${moodTrend ?? "No mood data."}
 
-STREAK: ${streak?.currentStreak || 0} days (longest: ${streak?.longestStreak || 0})
+CURRENT STREAK: ${streak?.currentStreak || 0} days
 
-THIS REFRESH'S FOCUS: ${focusArea}
+TASK: Write a strategic trajectory assessment — not a tip, not a weekly summary. Look at this driver's actual 90-day arc and tell them honestly whether their scores and behaviours are building the kind of compounding progress that leads to their long-term targets and infinite goal, or whether there is a drift they should be aware of.
 
-As a data analyst and performance engineer, provide ONE deep, actionable insight focused on the area above. Keep it specific to their actual data — no generic advice. One specific, practical recommendation they can implement immediately.
+Rules:
+- Be specific: reference actual metric names and numbers from the trajectory data
+- If a metric is trending up, say by how much and what that means over time
+- If there is a gap between their stated goals and their actual data pattern, name it directly — no softening
+- Do NOT give week-by-week tactical advice (that's the Race Report's job)
+- Do NOT describe correlations between metrics (that's Data Pattern Analysis's job)
+- This is the long view: 90 days, goal alignment, trajectory momentum
 
-IMPORTANT DATE LANGUAGE: When referencing when something happened, always use conversational relative references like "yesterday", "last Tuesday", "on Friday" — NEVER use numerical date formats like "2026-03-20" or "March 20". Write as if speaking to someone naturally.
+Write 3–5 concise sentences in an F1 engineer's voice: direct, data-grounded, forward-looking. Second person ("you", "your"). Suggest 2–3 tags.
 
-Keep the insight specific to THEIR data. 2-4 sentences. Suggest 2-3 tags relevant to the focus area.
-
-Respond in JSON: { "insight": "your insight here", "tags": ["tag1", "tag2", "tag3"] }`;
+Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", "tag2"] }`;
 
       const response = await openai.chat.completions.create({
         model: "gpt-4o",

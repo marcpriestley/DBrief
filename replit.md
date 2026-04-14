@@ -5,7 +5,7 @@ DBrief is a personal performance engineering app built around the F1 debrief fra
 
 ## User Preferences
 - Infinite goal banner always at the very top of the dashboard
-- Dashboard order: InfiniteGoalBanner → DebriefPanel → GoalsSection → HabitsSection → LongTermGoals → ScoreDashboard → AIInsights
+- Dashboard order: InfiniteGoalBanner → DebriefPanel → GoalsSection → HabitsSection → LongTermGoals → ScoreDashboard → WeeklyRaceReport → DataPatternAnalysis → MissionIntelligence
 - Attention rings: pulsing amber dot + glow ring shown on sections that need input (today only) — debrief (no session yet), goals (some incomplete), habits (some undone), scores (nothing logged)
 - All scores use a unified 0-100 scale (compatible with Apple Health)
 - Score input uses a slider (0-100) — dialog closes immediately after saving, no confirmation steps
@@ -41,7 +41,7 @@ The application uses a **React with TypeScript** frontend, styled with **Shadcn/
 - **Habit Lab**: A dedicated feature for habit formation with streak tracking, milestone progress, habit stacking, and AI-guided setup.
 - **Performance Telemetry**: Users track daily metric scores on a 0-100 scale.
 - **Streak Tracking**: A Duolingo-style system with milestone celebrations and motivational messages.
-- **AI Insights Access**: Gated access requiring streaks of active days, dynamically managed based on recent activity.
+- **Three-tier AI intelligence**: Weekly Race Report (7-day narrative debrief), Data Pattern Analysis (30-day score-to-score correlations), Mission Intelligence (90-day goal trajectory alignment against Infinite Goal and Long-Term Targets). Each gated by streak/data requirements.
 - **Retrospective Editing**: Users can input scores and journal entries for past dates.
 - **Mood Check-in**: Slider-based modal for daily mood tracking.
 - **Color Theme**: Uses a grey and yellow (amber primary) color scheme with dark mode support.

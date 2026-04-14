@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { Zap, TrendingUp, RefreshCw, X } from "lucide-react";
+import { BarChart2, TrendingUp, RefreshCw, X } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { haptic } from "@/lib/haptics";
 
@@ -57,18 +57,17 @@ export default function PerformancePatterns() {
 
   const hasPatterns = visiblePatterns.length > 0;
 
-  // Don't render the section if no patterns and never generated
   if (!hasPatterns && patterns.length === 0) {
     return (
       <div className="bg-card rounded-xl border border-dashed border-border/60 p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
-              <Zap className="h-4 w-4 text-muted-foreground" />
+              <BarChart2 className="h-4 w-4 text-muted-foreground" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-foreground">Pattern Analysis</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Your engineer scans for correlations in your data</p>
+              <p className="text-sm font-semibold text-foreground">Data Pattern Analysis</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Score correlations from your daily numbers · 30-day window</p>
             </div>
           </div>
           <button
@@ -87,12 +86,12 @@ export default function PerformancePatterns() {
                 <span key={d} className="w-0.5 h-3 bg-primary/50 rounded-full animate-pulse" style={{ animationDelay: `${d}ms` }} />
               ))}
             </div>
-            <p className="text-xs text-muted-foreground">Scanning telemetry for patterns…</p>
+            <p className="text-xs text-muted-foreground">Crunching 30 days of score data…</p>
           </div>
         ) : (
           <div className="mt-3 px-1 py-2 rounded-lg bg-muted/40 border border-border/40">
             <p className="text-xs text-muted-foreground leading-relaxed">
-              <span className="font-medium text-foreground">Needs at least 30 days of data.</span> Keep logging scores, debriefs, and habits daily — your engineer will start spotting correlations once there's enough telemetry to work with.
+              <span className="font-medium text-foreground">Needs 30 days of daily scores.</span> This runs statistical analysis directly on your logged numbers — finding which scores move together, which predict which, and where the real correlations are in your data. Keep logging daily scores and it will start surfacing patterns automatically.
             </p>
           </div>
         )}
@@ -107,8 +106,9 @@ export default function PerformancePatterns() {
       {/* Section header */}
       <div className="flex items-center justify-between px-1">
         <div className="flex items-center gap-2">
-          <Zap className="h-3.5 w-3.5 text-primary" />
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Engineer spotted something</span>
+          <BarChart2 className="h-3.5 w-3.5 text-primary" />
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Data Pattern Analysis</span>
+          <span className="text-[10px] text-muted-foreground/50 uppercase tracking-wider">· 30-day scores</span>
         </div>
         <button
           onClick={() => { haptic("light"); generateMutation.mutate(); }}
