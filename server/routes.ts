@@ -1777,6 +1777,18 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
     }
   });
 
+  app.get("/api/squad/leaderboard", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const sortBy = (["streak", "consistency", "score"].includes(req.query.sortBy as string)
+        ? req.query.sortBy : "streak") as "streak" | "consistency" | "score";
+      const board = await storage.getLeaderboard(userId, sortBy);
+      res.json(board);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch leaderboard" });
+    }
+  });
+
   app.post("/api/connections/request", async (req, res) => {
     try {
       const userId = getUserId(req);

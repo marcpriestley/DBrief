@@ -48,7 +48,7 @@ The application uses a **React with TypeScript** frontend, styled with **Shadcn/
 - **Weekly Race Report**: AI-generated summary of the past week, available on-demand or automatically.
 - **Performance Patterns**: AI analyzes 30 days of user data to identify correlations and insights.
 - **Haptics**: Implemented for tactile feedback on various UI interactions.
-- **Squad (Accountability Pairs)**: Users can connect with trusted people via username search. Accepted connections see each other's streak, 7-day consistency %, today's avg score, 30-day avg, and last logged date. Journal, goal content, debriefs stay private. Connection requests trigger push notifications. Found at `/squad` via the nav tab.
+- **Squad (Accountability Pairs + Leaderboard)**: Users can connect with trusted people via username search. Accepted connections see each other's streak, 7-day consistency %, today's avg score, 30-day avg, and last logged date. Journal, goal content, debriefs stay private. Connection requests trigger push notifications. Found at `/squad` via the nav tab. The "Board" tab shows a ranked leaderboard of yourself + all accepted connections, sortable by streak, 7-day consistency, or score. Ties broken by secondary metric. Rank badges for top 3 (crown, silver, bronze).
 
 ## External Dependencies
 - **PostgreSQL**: Primary database.

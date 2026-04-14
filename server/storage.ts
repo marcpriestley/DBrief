@@ -127,6 +127,7 @@ export interface IStorage {
   removeConnection(connectionId: number, userId: number): Promise<void>;
   getConnectionPublicStats(userId: number, viewerId: number): Promise<ConnectionPublicStats | null>;
   getAllConnectionStats(viewerId: number): Promise<ConnectionPublicStats[]>;
+  getLeaderboard(viewerId: number, sortBy: "streak" | "consistency" | "score"): Promise<import("@shared/schema").LeaderboardEntry[]>;
 
   // Account deletion
   deleteUser(userId: number): Promise<void>;
@@ -574,6 +575,7 @@ export class MemStorage implements IStorage {
   async removeConnection(_id: number, _userId: number): Promise<void> {}
   async getConnectionPublicStats(_userId: number, _viewerId: number): Promise<ConnectionPublicStats | null> { return null; }
   async getAllConnectionStats(_viewerId: number): Promise<ConnectionPublicStats[]> { return []; }
+  async getLeaderboard(_viewerId: number, _sortBy: "streak" | "consistency" | "score"): Promise<import("@shared/schema").LeaderboardEntry[]> { return []; }
 }
 
 // Database implementation
@@ -1377,6 +1379,65 @@ export class DatabaseStorage implements IStorage {
       if (stats) results.push(stats);
     }
     return results;
+  }
+
+  async getLeaderboard(viewerId: number, sortBy: "streak" | "consistency" | "score"): Promise<import("@shared/schema").LeaderboardEntry[]> {
+    // Collect self + all accepted connections
+    const conns = await db.select().from(userConnections)
+      .where(and(
+        eq(userConnections.status, "accepted"),
+        or(eq(userConnections.requesterId, viewerId), eq(userConnections.receiverId, viewerId))
+      ));
+
+    // Fake connection record representing the viewer themselves
+    const selfConn: UserConnection = {
+      id: -1,
+      requesterId: viewerId,
+      receiverId: viewerId,
+      status: "accepted",
+      createdAt: new Date(),
+    };
+
+    const entries: import("@shared/schema").LeaderboardEntry[] = [];
+
+    // Self
+    const selfStats = await this._buildPublicStats(viewerId, selfConn, viewerId);
+    if (selfStats) entries.push({ ...selfStats, isMe: true, rank: 0 });
+
+    // Accepted connections
+    for (const conn of conns) {
+      const targetId = conn.requesterId === viewerId ? conn.receiverId : conn.requesterId;
+      const stats = await this._buildPublicStats(targetId, conn, viewerId);
+      if (stats) entries.push({ ...stats, isMe: false, rank: 0 });
+    }
+
+    // Sort
+    entries.sort((a, b) => {
+      if (sortBy === "streak") return (b.currentStreak - a.currentStreak) || (b.sevenDayConsistency - a.sevenDayConsistency);
+      if (sortBy === "consistency") return (b.sevenDayConsistency - a.sevenDayConsistency) || (b.currentStreak - a.currentStreak);
+      // score: null scores go to bottom
+      const bScore = b.todayAvgScore ?? b.thirtyDayAvgScore ?? -1;
+      const aScore = a.todayAvgScore ?? a.thirtyDayAvgScore ?? -1;
+      return bScore - aScore;
+    });
+
+    // Assign ranks (ties share the same rank)
+    let rank = 1;
+    for (let i = 0; i < entries.length; i++) {
+      if (i > 0) {
+        const prev = entries[i - 1];
+        const cur = entries[i];
+        const tied = sortBy === "streak"
+          ? prev.currentStreak === cur.currentStreak && prev.sevenDayConsistency === cur.sevenDayConsistency
+          : sortBy === "consistency"
+          ? prev.sevenDayConsistency === cur.sevenDayConsistency && prev.currentStreak === cur.currentStreak
+          : (prev.todayAvgScore ?? prev.thirtyDayAvgScore ?? -1) === (cur.todayAvgScore ?? cur.thirtyDayAvgScore ?? -1);
+        if (!tied) rank = i + 1;
+      }
+      entries[i].rank = rank;
+    }
+
+    return entries;
   }
 
   private async _buildPublicStats(targetUserId: number, conn: UserConnection, viewerId: number): Promise<ConnectionPublicStats | null> {

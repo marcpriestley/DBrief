@@ -465,4 +465,10 @@ export type ConnectionPublicStats = {
   isRequester: boolean;
 };
 
+// Leaderboard entry — same stats but includes self + a rank position
+export type LeaderboardEntry = ConnectionPublicStats & {
+  isMe: boolean;
+  rank: number;
+};
+
 export * from "./models/chat";
