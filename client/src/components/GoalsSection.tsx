@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-motion";
 import { Check, Plus, X, Trash2, Edit2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,8 +55,13 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
   // All-goals celebration
   const [showCelebration, setShowCelebration] = useState(false);
   const [celebrationMsg, setCelebrationMsg] = useState(ALL_COMPLETE_MESSAGES[0]);
+  const celebrationY = useMotionValue(0);
+  const celebrationOpacity = useTransform(celebrationY, [-120, 0], [0, 1]);
   const prevCompletedCountRef = useRef<number>(-1);
   const prevTotalRef = useRef<number>(0);
+  // Tracks whether goals data has finished its first load — prevents false
+  // celebration fires when already-complete goals load in on mount/reopen.
+  const initialLoadSettledRef = useRef<boolean>(false);
 
   const { data: goals = [], isLoading } = useQuery<DailyGoal[]>({
     queryKey: ["/api/daily-goals", selectedDate],
@@ -82,10 +87,22 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
     goalToastTimerRef.current = setTimeout(() => setGoalToast(null), 1800);
   };
 
+  // Mark initial load as settled once goals data arrives so we don't fire on remount
+  useEffect(() => {
+    if (!isLoading) {
+      // Sync refs to current values without triggering celebration
+      prevCompletedCountRef.current = completedCount;
+      prevTotalRef.current = totalGoals;
+      initialLoadSettledRef.current = true;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading]);
+
   // Fire all-complete celebration when everything is done
   useEffect(() => {
+    if (!initialLoadSettledRef.current) return;
+
     const prev = prevCompletedCountRef.current;
-    const prevTotal = prevTotalRef.current;
     prevCompletedCountRef.current = completedCount;
     prevTotalRef.current = totalGoals;
 
@@ -94,18 +111,21 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
       showGoalReward();
       triggerHaptic();
 
-      // If all goals are now done, also show big celebration after a beat
-      if (allGoalsComplete && totalGoals > 0) {
+      // Big celebration only when the user ticks the very last goal,
+      // and only if we haven't already shown it for this date this session.
+      const celebratedKey = `dbrief_goals_celebrated_${selectedDate}`;
+      const alreadyCelebrated = localStorage.getItem(celebratedKey) === "1";
+      if (allGoalsComplete && totalGoals > 0 && !alreadyCelebrated) {
+        localStorage.setItem(celebratedKey, "1");
         const msg = ALL_COMPLETE_MESSAGES[Math.floor(Math.random() * ALL_COMPLETE_MESSAGES.length)];
         setCelebrationMsg(msg);
         setTimeout(() => {
           triggerCelebrationHaptic();
           setShowCelebration(true);
-          setTimeout(() => setShowCelebration(false), 3200);
         }, 600);
       }
     }
-  }, [completedCount, allGoalsComplete, totalGoals]);
+  }, [completedCount, allGoalsComplete, totalGoals, selectedDate]);
 
   useEffect(() => {
     if (showAddInput && addInputRef.current) addInputRef.current.focus();
@@ -404,6 +424,7 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.25 }}
+              onClick={() => { celebrationY.set(0); setShowCelebration(false); }}
               style={{
                 position: "fixed",
                 inset: 0,
@@ -412,15 +433,16 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
                 alignItems: "center",
                 justifyContent: "center",
                 backgroundColor: "rgba(0,0,0,0.5)",
-                pointerEvents: "none",
               }}
             >
               <motion.div
-                initial={{ scale: 0.7, opacity: 0, y: 20 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.85, opacity: 0, y: -10 }}
-                transition={{ type: "spring", stiffness: 340, damping: 26 }}
+                drag="y"
+                dragConstraints={{ top: -500, bottom: 0 }}
+                dragElastic={{ top: 1, bottom: 0 }}
                 style={{
+                  y: celebrationY,
+                  opacity: celebrationOpacity,
+                  touchAction: "none",
                   backgroundColor: "var(--card)",
                   border: "1px solid var(--border)",
                   borderRadius: "1.25rem",
@@ -429,6 +451,19 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
                   boxShadow: "0 24px 64px rgba(0,0,0,0.45)",
                   maxWidth: "290px",
                   width: "90%",
+                }}
+                initial={{ scale: 0.7, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.85, opacity: 0, y: -40 }}
+                transition={{ type: "spring", stiffness: 340, damping: 26 }}
+                onClick={(e) => e.stopPropagation()}
+                onDragEnd={(_e, info) => {
+                  if (info.offset.y < -60 || info.velocity.y < -400) {
+                    setShowCelebration(false);
+                    celebrationY.set(0);
+                  } else {
+                    celebrationY.set(0);
+                  }
                 }}
               >
                 <motion.div
@@ -443,6 +478,9 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
                 </p>
                 <p style={{ fontSize: "0.85rem", color: "var(--muted-foreground)", marginTop: "0.35rem" }}>
                   {celebrationMsg.sub}
+                </p>
+                <p style={{ fontSize: "0.72rem", color: "var(--muted-foreground)", marginTop: "0.5rem", opacity: 0.5 }}>
+                  swipe up to dismiss
                 </p>
 
                 {/* animated dots */}
