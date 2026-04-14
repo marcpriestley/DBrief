@@ -9,6 +9,7 @@ import AppLayout from "@/components/AppLayout";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { DailyScore, UserMetric, AIInsight, DailyGoal, MoodCheckin } from "@shared/schema";
+import PerformancePatterns from "@/components/PerformancePatterns";
 
 function getMoodColor(v: number) {
   if (v >= 80) return "#EC4899";
@@ -529,52 +530,7 @@ export default function TrendsEnhanced() {
 
         <MoodPatterns checkins={moodCheckins} />
 
-        <Card className="border-border/50 shadow-sm">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-primary" />
-                <span className="text-sm font-semibold text-foreground">AI Insights</span>
-              </div>
-              <Button 
-                size="sm"
-                variant="ghost"
-                className="h-7 text-xs"
-                onClick={() => generateInsightsMutation.mutate()}
-                disabled={generateInsightsMutation.isPending}
-              >
-                {generateInsightsMutation.isPending ? (
-                  <><Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> Analyzing</>
-                ) : (
-                  <><Sparkles className="mr-1.5 h-3 w-3" /> Generate</>
-                )}
-              </Button>
-            </div>
-            {aiInsights.length > 0 ? (
-              <div className="space-y-3">
-                {aiInsights.slice(0, 3).map((insight) => (
-                  <div key={insight.id} className="p-3 bg-primary/5 rounded-lg border border-primary/10">
-                    <p className="text-sm text-foreground leading-relaxed">{insight.insight}</p>
-                    {insight.tags && insight.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {insight.tags.map((tag, i) => (
-                          <span key={i} className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-6">
-                <Sparkles className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
-                <p className="text-xs text-muted-foreground">Add scores and complete debriefs to unlock AI insights.</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <PerformancePatterns />
 
         {displayMetrics.length > 0 && (
           <Card className="border-border/50 shadow-sm">

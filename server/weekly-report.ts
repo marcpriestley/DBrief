@@ -273,30 +273,45 @@ Respond with valid JSON array only (no markdown, no explanation outside the JSON
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [{ role: "user", content: prompt }],
-      max_tokens: 600,
+      max_tokens: 800,
       temperature: 0.3,
-      response_format: { type: "json_object" },
     });
 
-    const raw = completion.choices[0]?.message?.content?.trim() || "{}";
-    const parsed = JSON.parse(raw);
-    // response_format:json_object forces an object wrapper — find the first array value,
-    // regardless of the key name the model chose (patterns / correlations / results / data …)
-    const arr: any[] = Array.isArray(parsed)
-      ? parsed
-      : (Object.values(parsed).find(v => Array.isArray(v)) as any[] | undefined) ?? [];
+    const raw = completion.choices[0]?.message?.content?.trim() || "[]";
+    // Strip markdown code fences if the model wrapped the JSON
+    const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+
+    let arr: any[] = [];
+    try {
+      const parsed = JSON.parse(cleaned);
+      if (Array.isArray(parsed)) {
+        arr = parsed;
+      } else if (typeof parsed === "object" && parsed !== null) {
+        // Model may have wrapped it in an object — find the first array value
+        const found = Object.values(parsed).find(v => Array.isArray(v));
+        arr = (found as any[]) ?? [];
+      }
+    } catch {
+      // JSON parse failed — try extracting a JSON array with a regex
+      const match = cleaned.match(/\[[\s\S]*\]/);
+      if (match) {
+        try { arr = JSON.parse(match[0]); } catch {}
+      }
+    }
+
+    console.log("[Patterns] Raw response length:", cleaned.length, "| Parsed array length:", arr.length);
 
     patterns = arr.slice(0, 3).map((p: any) => ({
       userId,
       insight: String(p.insight || "").slice(0, 500),
-      metric1: p.metric1 ? String(p.metric1).slice(0, 100) : null,
-      metric2: p.metric2 ? String(p.metric2).slice(0, 100) : null,
+      metric1: p.metric1 && p.metric1 !== "null" ? String(p.metric1).slice(0, 100) : null,
+      metric2: p.metric2 && p.metric2 !== "null" ? String(p.metric2).slice(0, 100) : null,
       correlation: p.correlation ? String(p.correlation).slice(0, 200) : null,
       confidence: p.confidence === "high" ? "high" : "medium",
       isActive: true,
     }));
   } catch (err) {
-    console.error("[Patterns] AI parse error:", err);
+    console.error("[Patterns] AI error:", err);
     return [];
   }
 

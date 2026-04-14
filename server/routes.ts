@@ -2077,6 +2077,19 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
     }
   });
 
+  // Update participant's personal reminder time for a challenge
+  app.patch("/api/challenges/:id/reminder", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const challengeId = parseInt(req.params.id);
+      const { reminderTime } = req.body; // "HH:MM" string or null to disable
+      await storage.updateChallengeParticipantReminder(challengeId, userId, reminderTime ?? null);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update reminder" });
+    }
+  });
+
   // Log today's entry for a challenge
   app.post("/api/challenges/:id/log", async (req, res) => {
     try {

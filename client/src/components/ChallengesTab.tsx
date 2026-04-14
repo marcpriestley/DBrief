@@ -708,6 +708,8 @@ function EditChallengeSheet({
   const [extraDays, setExtraDays] = useState(0);
   const [inviting, setInviting] = useState<number[]>([]);
   const [isSending, setIsSending] = useState(false);
+  const [reminderEnabled, setReminderEnabled] = useState(!!challenge.myReminderTime);
+  const [reminderTime, setReminderTime] = useState(challenge.myReminderTime ?? "21:00");
 
   const editMutation = useMutation({
     mutationFn: (body: { title?: string; endDate?: string }) =>
@@ -732,6 +734,12 @@ function EditChallengeSheet({
           ...(titleChanged ? { title: title.trim() } : {}),
           ...(newEndDate ? { endDate: newEndDate } : {}),
         });
+      }
+      // Save reminder settings (always update so clearing also works)
+      const newReminderTime = reminderEnabled ? reminderTime : null;
+      if (newReminderTime !== challenge.myReminderTime) {
+        await apiRequest("PATCH", `/api/challenges/${challenge.id}/reminder`, { reminderTime: newReminderTime });
+        queryClient.invalidateQueries({ queryKey: ["/api/challenges"] });
       }
       // Send invites for newly selected connections
       if (inviting.length > 0) {
@@ -807,6 +815,35 @@ function EditChallengeSheet({
             </p>
           )}
         </div>
+
+        {/* Reminder toggle */}
+        <div className="flex items-center justify-between px-1">
+          <div>
+            <p className="text-xs font-medium text-foreground">Daily reminder</p>
+            <p className="text-[11px] text-muted-foreground">Get nudged when you haven't logged yet</p>
+          </div>
+          <button
+            onClick={() => { haptic("select"); setReminderEnabled(e => !e); }}
+            className="relative rounded-full transition-colors"
+            style={{ width: 40, height: 22, background: reminderEnabled ? "hsl(var(--primary))" : "hsl(var(--muted))" }}
+          >
+            <span
+              className="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform"
+              style={{ transform: reminderEnabled ? "translateX(18px)" : "translateX(0)" }}
+            />
+          </button>
+        </div>
+        {reminderEnabled && (
+          <div className="flex items-center gap-3 px-1">
+            <p className="text-xs text-muted-foreground flex-1">Remind me at</p>
+            <input
+              type="time"
+              value={reminderTime}
+              onChange={e => setReminderTime(e.target.value)}
+              className="text-sm font-semibold bg-card border border-border/50 rounded-lg px-2 py-1 text-foreground"
+            />
+          </div>
+        )}
 
         {/* Invite more crew */}
         {uninvited.length > 0 && (

@@ -142,6 +142,7 @@ export interface IStorage {
   leaveChallenge(challengeId: number, userId: number): Promise<void>;
   deleteChallenge(challengeId: number, userId: number): Promise<void>;
   updateChallenge(challengeId: number, userId: number, data: { title?: string; endDate?: string }): Promise<import("@shared/schema").Challenge | undefined>;
+  updateChallengeParticipantReminder(challengeId: number, userId: number, reminderTime: string | null): Promise<void>;
   logChallengeEntry(challengeId: number, userId: number, date: string, value: number): Promise<void>;
   getChallengeLeaderboard(challengeId: number, viewerId: number): Promise<import("@shared/schema").ChallengeLeaderboard>;
   inviteToChallenge(challengeId: number, inviteeUserId: number, inviterId: number): Promise<void>;
@@ -601,6 +602,7 @@ export class MemStorage implements IStorage {
   async leaveChallenge(): Promise<void> {}
   async deleteChallenge(): Promise<void> {}
   async updateChallenge(): Promise<any> { return undefined; }
+  async updateChallengeParticipantReminder(): Promise<void> {}
   async logChallengeEntry(): Promise<void> {}
   async getChallengeLeaderboard(): Promise<any> { return { entries: [], scoresHidden: false, submittedToday: 0, totalParticipants: 0 }; }
   async inviteToChallenge(): Promise<void> {}
@@ -1676,6 +1678,7 @@ export class DatabaseStorage implements IStorage {
         creatorUsername: creator?.username ?? "",
         creatorDisplayName: creator?.displayName ?? null,
         myCommitment: myPart?.commitment ?? null,
+        myReminderTime: myPart?.reminderTime ?? null,
       });
     }
     return results;
@@ -1739,6 +1742,13 @@ export class DatabaseStorage implements IStorage {
       .where(eq(challenges.id, challengeId))
       .returning();
     return updated;
+  }
+
+  async updateChallengeParticipantReminder(challengeId: number, userId: number, reminderTime: string | null): Promise<void> {
+    const { challengeParticipants } = await import("@shared/schema");
+    await db.update(challengeParticipants)
+      .set({ reminderTime })
+      .where(and(eq(challengeParticipants.challengeId, challengeId), eq(challengeParticipants.userId, userId)));
   }
 
   async logChallengeEntry(challengeId: number, userId: number, date: string, value: number): Promise<void> {

@@ -556,6 +556,8 @@ export type ChallengeWithProgress = Challenge & {
   creatorDisplayName: string | null;
   // For habit challenges: my personal commitment
   myCommitment: string | null;
+  // My reminder time for this challenge (e.g. "21:00"), null if not set
+  myReminderTime: string | null;
 };
 
 export * from "./models/chat";
