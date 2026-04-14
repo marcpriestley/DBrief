@@ -226,10 +226,13 @@ async function queryRawMetric(dataType: DataType, dateStr: string): Promise<numb
     let endDate: string;
 
     if (dataType === "sleep" || dataType === "sleep-quality") {
-      // Sleep samples span midnight. Use a 40-hour window to catch any overnight session.
-      const todayLocal = new Date(`${dateStr}T20:00:00`); // local time (no Z)
-      const prevLocal  = new Date(`${dateStr}T04:00:00`);
-      prevLocal.setDate(prevLocal.getDate() - 1);
+      // Sleep samples span midnight. Use an 18-hour window anchored to a single overnight
+      // period: 6 pm the previous evening → noon today. Wide enough for any realistic sleep
+      // schedule (even 7 pm bedtime or 11 am wake-up), but narrow enough to guarantee
+      // only ONE night's data is captured and previous nights cannot bleed in.
+      const todayLocal = new Date(`${dateStr}T12:00:00`); // noon today, local time (no Z)
+      const prevLocal  = new Date(`${dateStr}T18:00:00`); // 6 pm, local time (no Z)
+      prevLocal.setDate(prevLocal.getDate() - 1);          // → 6 pm yesterday
       startDate = prevLocal.toISOString();
       endDate   = todayLocal.toISOString();
     } else {
@@ -241,20 +244,28 @@ async function queryRawMetric(dataType: DataType, dateStr: string): Promise<numb
     if (dataType === "sleep-quality") {
       if (!onAndroid) {
         // iOS primary: Health.querySleepQuality
+        // Guard: efficiency ≥ 97 is almost certainly the iPhone motion-sensor fallback
+        // (which reports unrealistically high efficiency when a wearable isn't available).
+        // Fall through to other paths in that case and use the first plausible value found.
         try {
           const r = await (Health as any).querySleepQuality({ startDate, endDate });
-          if ((r?.efficiency ?? 0) > 0) {
-            console.log(`${tag} sleep-quality via querySleepQuality:`, r.efficiency);
-            return Math.min(100, Math.round(r.efficiency));
+          const eff = r?.efficiency ?? 0;
+          if (eff > 0 && eff < 97) {
+            console.log(`${tag} sleep-quality via querySleepQuality:`, eff);
+            return Math.min(96, Math.round(eff));
           }
-          if ((r?.minutes ?? 0) > 0) return Math.min(100, Math.round((r.minutes / 480) * 100));
+          if (eff >= 97) {
+            console.warn(`${tag} querySleepQuality efficiency=${eff} — looks like iPhone sensor fallback, trying other paths`);
+          }
+          // Only use minutes-based proxy from this path if efficiency is absent
+          if (eff === 0 && (r?.minutes ?? 0) > 0) return Math.min(96, Math.round((r.minutes / 480) * 100));
         } catch (e) { console.warn(`${tag} querySleepQuality failed:`, e); }
 
         // iOS fallback: ExtendedHealth Swift plugin
         try {
           const r = await ExtendedHealth.querySleepQuality({ startDate, endDate });
-          if (r.efficiency > 0) return Math.min(100, Math.round(r.efficiency));
-          if (r.minutes > 0)    return Math.min(100, Math.round((r.minutes / 480) * 100));
+          if (r.efficiency > 0 && r.efficiency < 97) return Math.min(96, Math.round(r.efficiency));
+          if (r.minutes > 0)    return Math.min(96, Math.round((r.minutes / 480) * 100));
         } catch (_) {}
 
         // iOS fallback: queryAggregated sleep-quality (patched HealthPlugin path)
@@ -262,7 +273,8 @@ async function queryRawMetric(dataType: DataType, dateStr: string): Promise<numb
           const r = await (Health as any).queryAggregated({ dataType: "sleep-quality", startDate, endDate, bucket: "day" });
           const agg: any[] = r?.aggregatedData ?? r?.data ?? [];
           const best = agg.reduce((b: any, d: any) => (d.value ?? 0) > (b?.value ?? 0) ? d : b, agg[0]);
-          if ((best?.value ?? 0) > 0) return Math.min(100, Math.round(best.value));
+          const val = best?.value ?? 0;
+          if (val > 0 && val < 97) return Math.min(96, Math.round(val));
         } catch (_) {}
       } else {
         // Android: queryAggregated with sleep-quality
@@ -461,9 +473,9 @@ export async function syncHealthData(dateStr: string, enabledMetricNames: string
  *  Use the "Sleep Diagnostic" button in Settings to run this. No rebuild required. */
 export async function diagnoseSleepSync(): Promise<string> {
   const dateStr = new Date().toISOString().split("T")[0];
-  const todayLocal = new Date(`${dateStr}T20:00:00`);
-  const prevLocal  = new Date(`${dateStr}T04:00:00`);
-  prevLocal.setDate(prevLocal.getDate() - 1);
+  const todayLocal = new Date(`${dateStr}T12:00:00`); // noon today
+  const prevLocal  = new Date(`${dateStr}T18:00:00`); // 6 pm, local
+  prevLocal.setDate(prevLocal.getDate() - 1);          // → 6 pm yesterday
   const startDate = prevLocal.toISOString();
   const endDate   = todayLocal.toISOString();
 

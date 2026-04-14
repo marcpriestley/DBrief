@@ -88,16 +88,17 @@ function CelebrationOverlay({ goal, onDismiss }: { goal: LongTermGoal; onDismiss
 
       <motion.div
         drag="y"
-        dragConstraints={{ top: 0, bottom: 0 }}
-        dragElastic={{ top: 0.6, bottom: 0.05 }}
+        dragConstraints={{ top: -500, bottom: 0 }}
+        dragElastic={{ top: 1, bottom: 0 }}
         onDragEnd={(_, info) => {
-          if (info.offset.y < -60) { haptic("light"); onDismiss(); }
+          if (info.offset.y < -60 || info.velocity.y < -400) { haptic("light"); onDismiss(); }
         }}
         initial={{ scale: 0.5, opacity: 0, y: 30 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
-        exit={{ scale: 0.9, opacity: 0, y: -40 }}
+        exit={{ scale: 0.9, opacity: 0, y: -60 }}
         transition={{ type: "spring", stiffness: 300, damping: 20, delay: 0.1 }}
-        className="text-center px-8 max-w-sm cursor-grab active:cursor-grabbing touch-none"
+        className="text-center px-8 max-w-sm cursor-grab active:cursor-grabbing"
+        style={{ touchAction: "none" }}
         onClick={(e) => e.stopPropagation()}
       >
         <p className="text-white/30 text-[11px] mb-3 select-none">swipe up to dismiss</p>

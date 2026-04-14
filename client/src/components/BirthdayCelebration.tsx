@@ -76,16 +76,17 @@ export default function BirthdayCelebration({ displayName, dateOfBirth }: Birthd
         >
           <motion.div
             drag="y"
-            dragConstraints={{ top: 0, bottom: 0 }}
-            dragElastic={{ top: 0.6, bottom: 0.05 }}
+            dragConstraints={{ top: -500, bottom: 0 }}
+            dragElastic={{ top: 1, bottom: 0 }}
             onDragEnd={(_, info) => {
-              if (info.offset.y < -60) { haptic("light"); handleDismiss(); }
+              if (info.offset.y < -60 || info.velocity.y < -400) { haptic("light"); handleDismiss(); }
             }}
             initial={{ scale: 0.8, opacity: 0, y: 40 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.9, opacity: 0, y: -40 }}
+            exit={{ scale: 0.9, opacity: 0, y: -60 }}
             transition={{ type: "spring", stiffness: 280, damping: 22 }}
-            className="relative bg-card border border-border rounded-2xl p-7 max-w-sm w-full text-center shadow-2xl cursor-grab active:cursor-grabbing touch-none"
+            className="relative bg-card border border-border rounded-2xl p-7 max-w-sm w-full text-center shadow-2xl cursor-grab active:cursor-grabbing"
+            style={{ touchAction: "none" }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Swipe hint */}
