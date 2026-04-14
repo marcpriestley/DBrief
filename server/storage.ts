@@ -133,10 +133,11 @@ export interface IStorage {
   deleteUser(userId: number): Promise<void>;
 
   // Challenge methods
-  createChallenge(creatorId: number, data: import("@shared/schema").InsertChallenge, creatorCommitment?: string): Promise<import("@shared/schema").Challenge>;
+  createChallenge(creatorId: number, data: import("@shared/schema").InsertChallenge, creatorCommitment?: string, creatorReminderTime?: string): Promise<import("@shared/schema").Challenge>;
   getChallengesForUser(userId: number): Promise<import("@shared/schema").ChallengeWithProgress[]>;
   getChallengeById(challengeId: number): Promise<import("@shared/schema").Challenge | undefined>;
-  joinChallenge(challengeId: number, userId: number, commitment?: string): Promise<void>;
+  joinChallenge(challengeId: number, userId: number, commitment?: string, reminderTime?: string): Promise<void>;
+  getChallengesNeedingReminders(dateStr: string): Promise<Array<{ userId: number; challengeId: number; challengeTitle: string; reminderTime: string; subscriptions: any[]; timezone: string | null; notificationsEnabled: boolean }>>;
   declineChallenge(challengeId: number, userId: number): Promise<void>;
   leaveChallenge(challengeId: number, userId: number): Promise<void>;
   deleteChallenge(challengeId: number, userId: number): Promise<void>;
@@ -603,6 +604,7 @@ export class MemStorage implements IStorage {
   async logChallengeEntry(): Promise<void> {}
   async getChallengeLeaderboard(): Promise<any> { return { entries: [], scoresHidden: false, submittedToday: 0, totalParticipants: 0 }; }
   async inviteToChallenge(): Promise<void> {}
+  async getChallengesNeedingReminders(): Promise<any[]> { return []; }
 }
 
 // Database implementation
@@ -1624,7 +1626,7 @@ export class DatabaseStorage implements IStorage {
 
   // ── Challenge methods ────────────────────────────────────────────────────────
 
-  async createChallenge(creatorId: number, data: import("@shared/schema").InsertChallenge, creatorCommitment?: string): Promise<import("@shared/schema").Challenge> {
+  async createChallenge(creatorId: number, data: import("@shared/schema").InsertChallenge, creatorCommitment?: string, creatorReminderTime?: string): Promise<import("@shared/schema").Challenge> {
     const { challenges, challengeParticipants } = await import("@shared/schema");
     const [ch] = await db.insert(challenges).values({ ...data, creatorId }).returning();
     await db.insert(challengeParticipants).values({
@@ -1632,6 +1634,7 @@ export class DatabaseStorage implements IStorage {
       userId: creatorId,
       status: "joined",
       commitment: creatorCommitment ?? null,
+      reminderTime: creatorReminderTime ?? null,
     });
     return ch;
   }
@@ -1684,15 +1687,22 @@ export class DatabaseStorage implements IStorage {
     return ch;
   }
 
-  async joinChallenge(challengeId: number, userId: number, commitment?: string): Promise<void> {
+  async joinChallenge(challengeId: number, userId: number, commitment?: string, reminderTime?: string): Promise<void> {
     const { challengeParticipants } = await import("@shared/schema");
     const existing = await db.select().from(challengeParticipants)
       .where(and(eq(challengeParticipants.challengeId, challengeId), eq(challengeParticipants.userId, userId)));
     if (existing.length > 0) {
-      await db.update(challengeParticipants).set({ status: "joined", ...(commitment !== undefined ? { commitment } : {}) })
-        .where(and(eq(challengeParticipants.challengeId, challengeId), eq(challengeParticipants.userId, userId)));
+      await db.update(challengeParticipants).set({
+        status: "joined",
+        ...(commitment !== undefined ? { commitment } : {}),
+        ...(reminderTime !== undefined ? { reminderTime } : {}),
+      }).where(and(eq(challengeParticipants.challengeId, challengeId), eq(challengeParticipants.userId, userId)));
     } else {
-      await db.insert(challengeParticipants).values({ challengeId, userId, status: "joined", commitment: commitment ?? null });
+      await db.insert(challengeParticipants).values({
+        challengeId, userId, status: "joined",
+        commitment: commitment ?? null,
+        reminderTime: reminderTime ?? null,
+      });
     }
   }
 
@@ -1829,6 +1839,80 @@ export class DatabaseStorage implements IStorage {
 
   async getUserPoints(userId: number): Promise<number> {
     return this._getUserPoints(userId);
+  }
+
+  /**
+   * Returns participants who: have a reminderTime set, are joined, challenge is active,
+   * and have NOT logged for the given date. Used by the notification scheduler.
+   */
+  async getChallengesNeedingReminders(dateStr: string): Promise<Array<{
+    userId: number;
+    challengeId: number;
+    challengeTitle: string;
+    reminderTime: string;
+    subscriptions: PushSubscription[];
+    timezone: string | null;
+    notificationsEnabled: boolean;
+  }>> {
+    const { challengeParticipants, challenges, challengeLogs } = await import("@shared/schema");
+
+    const participants = await db
+      .select({
+        userId: challengeParticipants.userId,
+        challengeId: challengeParticipants.challengeId,
+        reminderTime: challengeParticipants.reminderTime,
+        challengeTitle: challenges.title,
+      })
+      .from(challengeParticipants)
+      .innerJoin(challenges, eq(challengeParticipants.challengeId, challenges.id))
+      .where(
+        and(
+          eq(challengeParticipants.status, "joined"),
+          sql`${challengeParticipants.reminderTime} IS NOT NULL`,
+          sql`${challenges.startDate}::text <= ${dateStr}`,
+          sql`${challenges.endDate}::text >= ${dateStr}`
+        )
+      );
+
+    const results: Array<{
+      userId: number;
+      challengeId: number;
+      challengeTitle: string;
+      reminderTime: string;
+      subscriptions: PushSubscription[];
+      timezone: string | null;
+      notificationsEnabled: boolean;
+    }> = [];
+
+    for (const p of participants) {
+      if (!p.reminderTime) continue;
+
+      const logs = await db.select().from(challengeLogs)
+        .where(and(
+          eq(challengeLogs.challengeId, p.challengeId),
+          eq(challengeLogs.userId, p.userId),
+          sql`${challengeLogs.date}::text = ${dateStr}`
+        ));
+      if (logs.length > 0) continue;
+
+      const [user] = await db.select().from(users).where(eq(users.id, p.userId));
+      if (!user || !user.notificationsEnabled) continue;
+
+      const subs = await this.getPushSubscriptions(p.userId);
+      if (subs.length === 0) continue;
+
+      results.push({
+        userId: p.userId,
+        challengeId: p.challengeId,
+        challengeTitle: p.challengeTitle,
+        reminderTime: p.reminderTime,
+        subscriptions: subs,
+        timezone: user.timezone,
+        notificationsEnabled: user.notificationsEnabled ?? true,
+      });
+    }
+
+    return results;
   }
 }
 

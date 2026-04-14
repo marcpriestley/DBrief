@@ -419,6 +419,51 @@ async function sendWeeklyReportNotifications() {
   }
 }
 
+// ─── Challenge reminders ─────────────────────────────────────────────────────
+
+export async function sendChallengeReminders(windowMinutes = DELIVERY_WINDOW_MINUTES) {
+  try {
+    const now = new Date();
+    const participants = await storage.getChallengesNeedingReminders(
+      now.toISOString().split("T")[0]
+    );
+
+    for (const p of participants) {
+      if (!p.notificationsEnabled || !p.timezone) continue;
+
+      const userTimeStr = now.toLocaleString("en-US", {
+        timeZone: p.timezone,
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      });
+      const [currentHourStr, currentMinuteStr] = userTimeStr.split(":");
+      const currentHour   = parseInt(currentHourStr, 10);
+      const currentMinute = parseInt(currentMinuteStr, 10);
+
+      const [rh, rm] = p.reminderTime.split(":").map(Number);
+      if (!isWithinDeliveryWindow(rh, rm, currentHour, currentMinute, windowMinutes)) continue;
+
+      const dedupeKey = `challenge_reminder_${p.userId}_${p.challengeId}_${now.toLocaleDateString("en-CA", { timeZone: p.timezone })}`;
+      const alreadySent = lastReminderSentDate.get(dedupeKey);
+      if (alreadySent) continue;
+      lastReminderSentDate.set(dedupeKey, "sent");
+
+      const payload: PushNotificationPayload = {
+        title: "⚡ Challenge reminder",
+        body: `Don't forget to log your entry for "${p.challengeTitle}" today.`,
+        icon: "/icon-192.png",
+        url: "/squad?tab=challenges",
+        tag: dedupeKey,
+      };
+
+      await dispatchToSubscriptions(p.subscriptions as any, payload);
+    }
+  } catch (err) {
+    console.error("[Challenge Reminders] Error:", err);
+  }
+}
+
 // ─── Scheduler ──────────────────────────────────────────────────────────────
 
 // Startup catch-up: run once with a wide window to deliver any notifications
@@ -454,6 +499,7 @@ export function startNotificationScheduler() {
       sendMoodCheckinReminders(),
       sendHabitReminders(),
       sendWeeklyReportNotifications(),
+      sendChallengeReminders(),
     ]).catch(error => console.error('[Scheduler] Error:', error));
   });
 

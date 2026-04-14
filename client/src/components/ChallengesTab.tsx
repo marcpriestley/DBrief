@@ -191,6 +191,8 @@ function JoinWithCommitmentSheet({
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [commitment, setCommitment] = useState("");
+  const [reminderEnabled, setReminderEnabled] = useState(false);
+  const [reminderTime, setReminderTime] = useState("21:00");
 
   const joinMutation = useMutation({
     mutationFn: (body: object) =>
@@ -268,6 +270,35 @@ function JoinWithCommitmentSheet({
           </p>
         )}
 
+        {/* Reminder toggle */}
+        <div className="flex items-center justify-between px-1">
+          <div>
+            <p className="text-xs font-medium text-foreground">Daily reminder</p>
+            <p className="text-[11px] text-muted-foreground">Get nudged when you haven't logged yet</p>
+          </div>
+          <button
+            onClick={() => { haptic("select"); setReminderEnabled(e => !e); }}
+            className={`w-10 h-5.5 rounded-full transition-colors relative ${reminderEnabled ? "bg-primary" : "bg-muted"}`}
+            style={{ width: 40, height: 22 }}
+          >
+            <span
+              className="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform"
+              style={{ transform: reminderEnabled ? "translateX(18px)" : "translateX(0)" }}
+            />
+          </button>
+        </div>
+        {reminderEnabled && (
+          <div className="flex items-center gap-3 px-1">
+            <p className="text-xs text-muted-foreground flex-1">Remind me at</p>
+            <input
+              type="time"
+              value={reminderTime}
+              onChange={e => setReminderTime(e.target.value)}
+              className="text-sm font-semibold bg-card border border-border/50 rounded-lg px-2 py-1 text-foreground"
+            />
+          </div>
+        )}
+
         <div className="flex gap-3">
           <button
             onClick={onClose}
@@ -276,7 +307,10 @@ function JoinWithCommitmentSheet({
           <button
             onClick={() => {
               haptic("medium");
-              joinMutation.mutate({ commitment: commitment.trim() || undefined });
+              joinMutation.mutate({
+                commitment: commitment.trim() || undefined,
+                reminderTime: reminderEnabled ? reminderTime : undefined,
+              });
             }}
             disabled={joinMutation.isPending}
             className="flex-1 py-3 rounded-xl bg-primary text-white font-medium text-sm disabled:opacity-60"
@@ -841,6 +875,8 @@ function CreateChallengeSheet({
   const [frequency, setFrequency] = useState<"daily" | "every_other_day" | "weekly">("daily");
   const [visibility, setVisibility] = useState<"invite_only" | "open">("invite_only");
   const [selectedInvitees, setSelectedInvitees] = useState<number[]>([]);
+  const [reminderEnabled, setReminderEnabled] = useState(false);
+  const [reminderTime, setReminderTime] = useState("21:00");
 
   const createMutation = useMutation({
     mutationFn: (body: object) => apiRequest("POST", "/api/challenges", body).then(r => r.json()),
@@ -871,6 +907,7 @@ function CreateChallengeSheet({
       habitEmoji: type === "habit" ? habitEmoji : null,
       metricName: type === "score" ? metricName : null,
       creatorCommitment: type === "habit" && creatorCommitment.trim() ? creatorCommitment.trim() : undefined,
+      creatorReminderTime: reminderEnabled ? reminderTime : undefined,
       visibility,
       frequency,
       startDate: today,
@@ -1158,6 +1195,37 @@ function CreateChallengeSheet({
                   No crew yet — add connections first, or switch to Open.
                 </p>
               )}
+
+              {/* Reminder */}
+              <div className="space-y-2.5 pt-1">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-foreground">Daily reminder for me</p>
+                    <p className="text-[11px] text-muted-foreground">Get nudged when you haven't logged yet</p>
+                  </div>
+                  <button
+                    onClick={() => { haptic("select"); setReminderEnabled(e => !e); }}
+                    className="rounded-full transition-colors relative"
+                    style={{ width: 40, height: 22, background: reminderEnabled ? "hsl(var(--primary))" : "hsl(var(--muted))" }}
+                  >
+                    <span
+                      className="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform"
+                      style={{ transform: reminderEnabled ? "translateX(18px)" : "translateX(0)" }}
+                    />
+                  </button>
+                </div>
+                {reminderEnabled && (
+                  <div className="flex items-center gap-3">
+                    <p className="text-xs text-muted-foreground flex-1">Remind me at</p>
+                    <input
+                      type="time"
+                      value={reminderTime}
+                      onChange={e => setReminderTime(e.target.value)}
+                      className="text-sm font-semibold bg-card border border-border/50 rounded-lg px-2 py-1 text-foreground"
+                    />
+                  </div>
+                )}
+              </div>
 
               <button
                 onClick={() => { haptic("medium"); handleCreate(); }}

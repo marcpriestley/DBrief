@@ -1941,7 +1941,7 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
       if (type === "score" && !metricName) {
         return res.status(400).json({ message: "metricName is required for score challenges" });
       }
-      const { creatorCommitment } = req.body;
+      const { creatorCommitment, creatorReminderTime } = req.body;
       const challenge = await storage.createChallenge(userId, {
         creatorId: userId,
         title,
@@ -1953,7 +1953,7 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
         visibility: visibility ?? "invite_only",
         startDate,
         endDate,
-      }, creatorCommitment ?? undefined);
+      }, creatorCommitment ?? undefined, creatorReminderTime ?? undefined);
 
       // If open, auto-invite all accepted connections and notify them
       if (visibility === "open") {
@@ -1996,10 +1996,10 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
     try {
       const userId = getUserId(req);
       const challengeId = parseInt(req.params.id);
-      const { commitment } = req.body;
+      const { commitment, reminderTime } = req.body;
       const challenge = await storage.getChallengeById(challengeId);
       if (!challenge) return res.status(404).json({ message: "This challenge no longer exists" });
-      await storage.joinChallenge(challengeId, userId, commitment ?? undefined);
+      await storage.joinChallenge(challengeId, userId, commitment ?? undefined, reminderTime ?? undefined);
 
       // For score challenges, auto-install the metric in the user's daily scores panel
       let metricInstalled = false;

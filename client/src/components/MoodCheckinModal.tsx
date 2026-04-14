@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { haptic } from "@/lib/haptics";
 import { motion, AnimatePresence } from "framer-motion";
@@ -13,11 +13,11 @@ interface MoodCheckinModalProps {
 }
 
 function getMoodEmoji(value: number) {
-  if (value >= 80) return { icon: Heart, color: "text-pink-500", bg: "bg-pink-50", label: "Amazing" };
-  if (value >= 60) return { icon: Smile, color: "text-emerald-500", bg: "bg-emerald-50", label: "Good" };
-  if (value >= 40) return { icon: Meh, color: "text-amber-500", bg: "bg-amber-50", label: "Okay" };
-  if (value >= 20) return { icon: Frown, color: "text-orange-500", bg: "bg-orange-50", label: "Low" };
-  return { icon: Frown, color: "text-red-500", bg: "bg-red-50", label: "Struggling" };
+  if (value >= 80) return { icon: Heart, color: "text-pink-500", bg: "bg-pink-50 dark:bg-pink-950/30", label: "Amazing" };
+  if (value >= 60) return { icon: Smile, color: "text-emerald-500", bg: "bg-emerald-50 dark:bg-emerald-950/30", label: "Good" };
+  if (value >= 40) return { icon: Meh, color: "text-amber-500", bg: "bg-amber-50 dark:bg-amber-950/30", label: "Okay" };
+  if (value >= 20) return { icon: Frown, color: "text-orange-500", bg: "bg-orange-50 dark:bg-orange-950/30", label: "Low" };
+  return { icon: Frown, color: "text-red-500", bg: "bg-red-50 dark:bg-red-950/30", label: "Struggling" };
 }
 
 function getMoodColor(value: number) {
@@ -41,86 +41,18 @@ function getTimeOfDayLabel(): string {
   return "evening";
 }
 
-function MoodSlider({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  const trackRef = useRef<HTMLDivElement>(null);
-  const isDragging = useRef(false);
-  const lastHapticVal = useRef<number | null>(null);
-  // Keep a stable ref to the latest value so computeValue never rebuilds mid-drag
-  const valueRef = useRef(value);
-  useEffect(() => { valueRef.current = value; }, [value]);
-  const moodColor = getMoodColor(value);
-
-  // Stable: no reactive deps — reads from the DOM and the ref, never from closure-captured value
-  const computeValue = useCallback((clientX: number): number => {
-    if (!trackRef.current) return valueRef.current;
-    const rect = trackRef.current.getBoundingClientRect();
-    const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    return Math.round(pct * 100);
-  }, []);
-
-  const emitValue = useCallback((clientX: number) => {
-    const newVal = computeValue(clientX);
-    onChange(newVal);
-    if (lastHapticVal.current === null || Math.abs(newVal - lastHapticVal.current) >= 5) {
-      haptic("light");
-      lastHapticVal.current = newVal;
-    }
-  }, [computeValue, onChange]);
-
-  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    isDragging.current = true;
-    (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
-    emitValue(e.clientX);
-  }, [emitValue]);
-
-  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isDragging.current) return;
-    emitValue(e.clientX);
-  }, [emitValue]);
-
-  const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    isDragging.current = false;
-    emitValue(e.clientX);
-  }, [emitValue]);
-
-  return (
-    <div
-      ref={trackRef}
-      className="relative w-full select-none"
-      style={{ height: 48, touchAction: "none", cursor: "pointer" }}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerUp}
-    >
-      {/* Track background */}
-      <div className="absolute top-1/2 -translate-y-1/2 inset-x-0 h-2 rounded-full bg-border" />
-      {/* Filled portion */}
-      <div
-        className="absolute top-1/2 -translate-y-1/2 left-0 h-2 rounded-full pointer-events-none"
-        style={{ width: `${value}%`, backgroundColor: moodColor }}
-      />
-      {/* Thumb */}
-      <div
-        className="absolute top-1/2 -translate-y-1/2 w-7 h-7 rounded-full shadow-md border-2 border-white pointer-events-none"
-        style={{ left: `calc(${value}% - 14px)`, backgroundColor: moodColor }}
-      />
-    </div>
-  );
-}
-
 export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProps) {
   const [moodValue, setMoodValue] = useState(50);
   const seededRef = useRef(false);
+  const lastHapticVal = useRef<number | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const mood = getMoodEmoji(moodValue);
   const MoodIcon = mood.icon;
   const timeOfDay = getTimeOfDayLabel();
+  const moodColor = getMoodColor(moodValue);
 
-  // Fetch today's check-ins so we can pre-seed the slider with the last value
-  // logged for this session (morning / afternoon / evening).
   const todayStr = new Date().toLocaleDateString("en-CA");
   const { data: todayCheckins } = useQuery<Array<{ value: number; label: string }>>({
     queryKey: ["/api/mood-checkins", todayStr],
@@ -132,15 +64,10 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
     staleTime: 0,
   });
 
-  // When the modal opens (or once data arrives), seed the slider from the
-  // most recent check-in for this session — only on initial open, not mid-drag.
   useEffect(() => {
     if (!open) { seededRef.current = false; return; }
     if (seededRef.current || !todayCheckins) return;
-    // Find the most recent entry matching the current time-of-day label
-    const matching = [...todayCheckins]
-      .reverse()
-      .find(c => c.label === timeOfDay);
+    const matching = [...todayCheckins].reverse().find(c => c.label === timeOfDay);
     if (matching) setMoodValue(matching.value);
     seededRef.current = true;
   }, [open, todayCheckins, timeOfDay]);
@@ -164,15 +91,20 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
 
   useEffect(() => {
     if (open) {
-      // Prevent background scroll by hiding overflow on the root element.
-      // This avoids the visible "jump to top" that position:fixed causes on iOS.
       const prev = document.documentElement.style.overflow;
       document.documentElement.style.overflow = "hidden";
-      return () => {
-        document.documentElement.style.overflow = prev;
-      };
+      return () => { document.documentElement.style.overflow = prev; };
     }
   }, [open]);
+
+  function handleSliderChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const val = parseInt(e.target.value, 10);
+    setMoodValue(val);
+    if (lastHapticVal.current === null || Math.abs(val - lastHapticVal.current) >= 5) {
+      haptic("light");
+      lastHapticVal.current = val;
+    }
+  }
 
   return (
     <AnimatePresence>
@@ -206,30 +138,88 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
             </div>
 
             <div className="py-2 space-y-6">
+              {/* Emoji display — only animates when label category changes */}
               <div className="text-center">
-                <motion.div
-                  key={mood.label}
-                  initial={{ scale: 0.8, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ type: "spring", stiffness: 300 }}
-                  className={`inline-flex items-center justify-center w-16 h-16 rounded-2xl ${mood.bg}`}
-                >
-                  <MoodIcon className={`h-8 w-8 ${mood.color}`} />
-                </motion.div>
-                <motion.p
-                  key={`label-${mood.label}`}
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="text-sm font-semibold mt-2"
-                  style={{ color: getMoodColor(moodValue) }}
-                >
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={mood.label}
+                    initial={{ scale: 0.8, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.8, opacity: 0 }}
+                    transition={{ duration: 0.15 }}
+                    className={`inline-flex items-center justify-center w-16 h-16 rounded-2xl ${mood.bg}`}
+                  >
+                    <MoodIcon className={`h-8 w-8 ${mood.color}`} />
+                  </motion.div>
+                </AnimatePresence>
+                <p className="text-sm font-semibold mt-2 transition-colors duration-150" style={{ color: moodColor }}>
                   {mood.label}
-                </motion.p>
-                <p className="text-2xl font-bold text-foreground mt-0.5">{moodValue}</p>
+                </p>
+                <p className="text-2xl font-bold text-foreground mt-0.5 tabular-nums">{moodValue}</p>
               </div>
 
+              {/* Native range slider — GPU-accelerated, no JS thread blocking */}
               <div className="px-2">
-                <MoodSlider value={moodValue} onChange={setMoodValue} />
+                <style>{`
+                  .mood-slider {
+                    -webkit-appearance: none;
+                    appearance: none;
+                    width: 100%;
+                    height: 48px;
+                    background: transparent;
+                    cursor: pointer;
+                    touch-action: manipulation;
+                  }
+                  .mood-slider::-webkit-slider-runnable-track {
+                    height: 8px;
+                    border-radius: 9999px;
+                    background: linear-gradient(to right, ${moodColor} ${moodValue}%, hsl(var(--border)) ${moodValue}%);
+                  }
+                  .mood-slider::-moz-range-track {
+                    height: 8px;
+                    border-radius: 9999px;
+                    background: hsl(var(--border));
+                  }
+                  .mood-slider::-moz-range-progress {
+                    height: 8px;
+                    border-radius: 9999px;
+                    background: ${moodColor};
+                  }
+                  .mood-slider::-webkit-slider-thumb {
+                    -webkit-appearance: none;
+                    appearance: none;
+                    width: 28px;
+                    height: 28px;
+                    border-radius: 50%;
+                    background: ${moodColor};
+                    border: 2px solid white;
+                    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+                    margin-top: -10px;
+                    transition: transform 0.1s ease;
+                  }
+                  .mood-slider:active::-webkit-slider-thumb {
+                    transform: scale(1.15);
+                  }
+                  .mood-slider::-moz-range-thumb {
+                    width: 28px;
+                    height: 28px;
+                    border-radius: 50%;
+                    background: ${moodColor};
+                    border: 2px solid white;
+                    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+                    cursor: pointer;
+                  }
+                  .mood-slider:focus { outline: none; }
+                `}</style>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={moodValue}
+                  onChange={handleSliderChange}
+                  className="mood-slider"
+                />
                 <div className="flex justify-between mt-1 text-[10px] text-muted-foreground">
                   <span>0</span>
                   <span>50</span>
@@ -237,6 +227,7 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
                 </div>
               </div>
 
+              {/* Quick-pick presets */}
               <div className="flex gap-1.5 px-1">
                 {[20, 40, 60, 80].map((preset) => {
                   const p = getMoodEmoji(preset);
@@ -244,7 +235,7 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
                   return (
                     <button
                       key={preset}
-                      onClick={() => setMoodValue(preset)}
+                      onClick={() => { haptic("select"); setMoodValue(preset); }}
                       className={`flex-1 py-2 rounded-lg border text-center transition-all ${
                         Math.abs(moodValue - preset) < 10
                           ? "border-primary bg-primary/5 shadow-sm"

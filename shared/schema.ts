@@ -507,6 +507,8 @@ export const challengeParticipants = pgTable("challenge_participants", {
   status: text("status").notNull().default("joined"),
   // For habit challenges: personal commitment text (e.g. "20 pushups")
   commitment: text("commitment"),
+  // Optional daily reminder time for this challenge (e.g. "21:00")
+  reminderTime: text("reminder_time"),
   joinedAt: timestamp("joined_at").defaultNow(),
 });
 

@@ -104,6 +104,14 @@ function AppLayoutInner({ children }: AppLayoutProps) {
 
   const { data: streak } = useQuery<any>({ queryKey: ["/api/streak"] });
 
+  const { data: challenges = [] } = useQuery<any[]>({
+    queryKey: ["/api/challenges"],
+    refetchInterval: 120000,
+  });
+  const hasUnloggedChallenge = challenges.some(
+    (c: any) => c.myStats && !c.myStats.loggedToday
+  );
+
   const todayStr = new Date().toISOString().split("T")[0];
   const { data: todayMoods = [], isLoading: moodsLoading } = useQuery<any[]>({
     queryKey: ["/api/mood-checkins", todayStr],
@@ -319,21 +327,32 @@ function AppLayoutInner({ children }: AppLayoutProps) {
                 Dashboard
               </button>
             </Link>
-            {tabs.map(({ href, label, icon: Icon }) => (
-              <Link key={href} href={href}>
-                <button
-                  onClick={() => haptic("select")}
-                  className={`flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-semibold border-b-2 transition-all ${
-                    isActive(href)
-                      ? "border-primary text-foreground"
-                      : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
-                  }`}
-                >
-                  <Icon className={`h-3.5 w-3.5 ${isActive(href) ? "text-primary" : ""}`} />
-                  {label}
-                </button>
-              </Link>
-            ))}
+            {tabs.map(({ href, label, icon: Icon }) => {
+              const showChallengePulse = href === "/squad" && hasUnloggedChallenge && !isActive(href);
+              return (
+                <Link key={href} href={href}>
+                  <button
+                    onClick={() => haptic("select")}
+                    className={`relative flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-semibold border-b-2 transition-all ${
+                      isActive(href)
+                        ? "border-primary text-foreground"
+                        : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
+                    }`}
+                  >
+                    <span className="relative inline-flex">
+                      <Icon className={`h-3.5 w-3.5 ${isActive(href) ? "text-primary" : ""}`} />
+                      {showChallengePulse && (
+                        <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-70" />
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
+                        </span>
+                      )}
+                    </span>
+                    {label}
+                  </button>
+                </Link>
+              );
+            })}
           </div>
 
           <DateSelector />
