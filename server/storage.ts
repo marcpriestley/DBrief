@@ -144,6 +144,7 @@ export interface IStorage {
   logChallengeEntry(challengeId: number, userId: number, date: string, value: number): Promise<void>;
   getChallengeLeaderboard(challengeId: number, viewerId: number): Promise<import("@shared/schema").ChallengeLeaderboard>;
   inviteToChallenge(challengeId: number, inviteeUserId: number, inviterId: number): Promise<void>;
+  getUserPoints(userId: number): Promise<number>;
 }
 
 export class MemStorage implements IStorage {
@@ -589,6 +590,19 @@ export class MemStorage implements IStorage {
   async getConnectionPublicStats(_userId: number, _viewerId: number): Promise<ConnectionPublicStats | null> { return null; }
   async getAllConnectionStats(_viewerId: number): Promise<ConnectionPublicStats[]> { return []; }
   async getLeaderboard(_viewerId: number, _sortBy: "streak" | "consistency" | "score"): Promise<import("@shared/schema").LeaderboardEntry[]> { return []; }
+  async getUserPoints(_userId: number): Promise<number> { return 0; }
+  // Challenge stubs (MemStorage not used in production)
+  async createChallenge(): Promise<any> { throw new Error("Not implemented"); }
+  async getChallengesForUser(): Promise<any[]> { return []; }
+  async getChallengeById(): Promise<any> { return undefined; }
+  async joinChallenge(): Promise<void> {}
+  async declineChallenge(): Promise<void> {}
+  async leaveChallenge(): Promise<void> {}
+  async deleteChallenge(): Promise<void> {}
+  async updateChallenge(): Promise<any> { return undefined; }
+  async logChallengeEntry(): Promise<void> {}
+  async getChallengeLeaderboard(): Promise<any> { return { entries: [], scoresHidden: false, submittedToday: 0, totalParticipants: 0 }; }
+  async inviteToChallenge(): Promise<void> {}
 }
 
 // Database implementation
@@ -1811,6 +1825,10 @@ export class DatabaseStorage implements IStorage {
     if (existing.length === 0) {
       await db.insert(challengeParticipants).values({ challengeId, userId: inviteeUserId, status: "invited" });
     }
+  }
+
+  async getUserPoints(userId: number): Promise<number> {
+    return this._getUserPoints(userId);
   }
 }
 

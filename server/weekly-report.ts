@@ -253,8 +253,9 @@ Rules:
 - Every observation must cite actual numbers from the data above — no vague claims
 - Score-to-score relationships are the priority; goal completion and mood can appear if they show a clear score connection
 - Only report patterns with at least 3 supporting data points (early stage) or 5 (building/full)
-- If data is too noisy for even 1 genuine observation, return an empty array — that is correct
-- Do NOT invent patterns
+- Always return at least 1 observation — even if it's just a trend over time or a comparison of averages between two metrics
+- If no correlations exist, fall back to reporting the metric with the highest or most consistent scores, citing actual averages
+- Do NOT invent patterns — cite real numbers from the data
 
 Respond with valid JSON array only (no markdown, no explanation outside the JSON):
 [

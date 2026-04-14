@@ -11,6 +11,7 @@ import GoalsSection from "@/components/GoalsSection";
 import InfiniteGoalBanner from "@/components/InfiniteGoalBanner";
 import LongTermGoals from "@/components/LongTermGoals";
 import HabitsSection from "@/components/HabitsSection";
+import PointsBanner from "@/components/PointsBanner";
 import { useDateContext } from "@/contexts/DateContext";
 
 function AttentionRing({ active, children }: { active: boolean; children: React.ReactNode }) {
@@ -71,6 +72,7 @@ function DashboardContent() {
   return (
     <div className="space-y-3 pt-1">
       <InfiniteGoalBanner />
+      <PointsBanner />
 
       <AnimatePresence mode="wait">
         <motion.div

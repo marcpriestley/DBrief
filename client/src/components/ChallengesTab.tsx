@@ -195,10 +195,19 @@ function JoinWithCommitmentSheet({
   const joinMutation = useMutation({
     mutationFn: (body: object) =>
       apiRequest("POST", `/api/challenges/${challenge.id}/join`, body).then(r => r.json()),
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       haptic("success");
       queryClient.invalidateQueries({ queryKey: ["/api/challenges"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user-metrics"] });
       toast({ title: "You're in!", description: challenge.type === "habit" ? "Your commitment is set." : "Welcome to the challenge." });
+      if (data?.metricInstalled && data?.metricName) {
+        setTimeout(() => {
+          toast({
+            title: `"${data.metricName}" added to your daily scores`,
+            description: "Head to the dashboard to log your score for this challenge.",
+          });
+        }, 800);
+      }
       onJoined();
       onClose();
     },
@@ -499,7 +508,7 @@ function ChallengeCard({
           </div>
 
           {/* Stats */}
-          <div className="flex items-center gap-4 mb-3">
+          <div className="flex items-center gap-4 mb-3 flex-wrap">
             <div className="flex items-center gap-1">
               <Users className="h-3 w-3 text-muted-foreground/50" />
               <span className="text-[11px] text-muted-foreground">{challenge.participantCount}</span>
@@ -510,6 +519,11 @@ function ChallengeCard({
                 {past ? "Ended" : active ? `${left}d left` : `Starts ${challenge.startDate}`}
               </span>
             </div>
+            {challenge.frequency && challenge.frequency !== "daily" && (
+              <span className="text-[10px] px-1.5 py-0.5 bg-muted rounded-full text-muted-foreground">
+                {challenge.frequency === "every_other_day" ? "Alternate days" : "Weekly"}
+              </span>
+            )}
             {challenge.myStats && (
               <div className="flex items-center gap-1">
                 <CheckCircle2 className="h-3 w-3 text-primary/60" />
@@ -824,6 +838,7 @@ function CreateChallengeSheet({
   const [metricName, setMetricName] = useState("");
   const [creatorCommitment, setCreatorCommitment] = useState("");
   const [durationDays, setDurationDays] = useState(7);
+  const [frequency, setFrequency] = useState<"daily" | "every_other_day" | "weekly">("daily");
   const [visibility, setVisibility] = useState<"invite_only" | "open">("invite_only");
   const [selectedInvitees, setSelectedInvitees] = useState<number[]>([]);
 
@@ -857,6 +872,7 @@ function CreateChallengeSheet({
       metricName: type === "score" ? metricName : null,
       creatorCommitment: type === "habit" && creatorCommitment.trim() ? creatorCommitment.trim() : undefined,
       visibility,
+      frequency,
       startDate: today,
       endDate: end,
     });
@@ -1030,6 +1046,29 @@ function CreateChallengeSheet({
           {/* Step 3: Settings */}
           {step === "settings" && (
             <motion.div key="settings" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-5">
+              {/* Frequency */}
+              <div>
+                <label className="text-xs text-muted-foreground block mb-2">Log frequency</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { key: "daily" as const, label: "Daily", sub: "Every day" },
+                    { key: "every_other_day" as const, label: "Alternate", sub: "Every other day" },
+                    { key: "weekly" as const, label: "Weekly", sub: "Once a week" },
+                  ].map(opt => (
+                    <button
+                      key={opt.key}
+                      onClick={() => { haptic("select"); setFrequency(opt.key); }}
+                      className={`flex flex-col items-center gap-0.5 p-2.5 rounded-xl border text-center transition-all ${
+                        frequency === opt.key ? "border-primary bg-primary/5" : "border-border/50 bg-card"
+                      }`}
+                    >
+                      <p className={`text-xs font-semibold ${frequency === opt.key ? "text-primary" : "text-foreground"}`}>{opt.label}</p>
+                      <p className="text-[10px] text-muted-foreground leading-tight">{opt.sub}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Duration */}
               <div>
                 <div className="flex items-center justify-between mb-2">

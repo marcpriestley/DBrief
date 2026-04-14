@@ -488,6 +488,8 @@ export const challenges = pgTable("challenges", {
   metricName: text("metric_name"),
   // "invite_only" | "open"
   visibility: text("visibility").notNull().default("invite_only"),
+  // "daily" | "every_other_day" | "weekly"
+  frequency: text("frequency").notNull().default("daily"),
   startDate: date("start_date").notNull(),
   endDate: date("end_date").notNull(),
   createdAt: timestamp("created_at").defaultNow(),

@@ -260,6 +260,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/me/points", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const points = await storage.getUserPoints(userId);
+      res.json({ points });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch points" });
+    }
+  });
+
   app.post("/api/auth/logout", async (req, res) => {
     try {
       req.session.destroy((err) => {
@@ -1987,10 +1997,27 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
       const userId = getUserId(req);
       const challengeId = parseInt(req.params.id);
       const { commitment } = req.body;
-      const existing = await storage.getChallengeById(challengeId);
-      if (!existing) return res.status(404).json({ message: "This challenge no longer exists" });
+      const challenge = await storage.getChallengeById(challengeId);
+      if (!challenge) return res.status(404).json({ message: "This challenge no longer exists" });
       await storage.joinChallenge(challengeId, userId, commitment ?? undefined);
-      res.json({ success: true });
+
+      // For score challenges, auto-install the metric in the user's daily scores panel
+      let metricInstalled = false;
+      if (challenge.type === "score" && challenge.metricName) {
+        const existingMetrics = await storage.getUserMetrics(userId);
+        const alreadyExists = existingMetrics.some(
+          m => m.name.toLowerCase() === challenge.metricName!.toLowerCase() && m.isActive
+        );
+        if (!alreadyExists) {
+          const COLORS = ["#4F46E5","#10B981","#F59E0B","#EC4899","#8B5CF6","#EF4444","#06B6D4","#84CC16","#F97316","#6366F1"];
+          const usedColors = new Set(existingMetrics.map(m => m.color));
+          const color = COLORS.find(c => !usedColors.has(c)) || COLORS[existingMetrics.length % COLORS.length];
+          await storage.createUserMetric({ userId, name: challenge.metricName, color, maxValue: 100, isDefault: false, isActive: true });
+          metricInstalled = true;
+        }
+      }
+
+      res.json({ success: true, metricInstalled, metricName: challenge.metricName });
     } catch (error) {
       res.status(500).json({ message: "Failed to join challenge" });
     }

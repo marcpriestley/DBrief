@@ -97,11 +97,15 @@ export default function HabitsSection() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [motivationFlash, setMotivationFlash] = useState<string | null>(null);
   const [milestoneCelebration, setMilestoneCelebration] = useState<{ milestone: number; habitName: string } | null>(null);
+  const [allDoneCelebration, setAllDoneCelebration] = useState(false);
 
   const { data: habits = [], isLoading } = useQuery<HabitWithStatus[]>({
     queryKey: ["/api/habits", selectedDate],
     queryFn: () => fetch(`/api/habits?date=${selectedDate}`, { credentials: "include" }).then(r => r.json()),
   });
+
+  const completedToday = habits.filter(h => h.todayCompleted).length;
+  const totalHabits = habits.length;
 
   const toggleMutation = useMutation({
     mutationFn: ({ id, date }: { id: number; date: string }) =>
@@ -157,11 +161,22 @@ export default function HabitsSection() {
         setTimeout(() => {
           setMilestoneCelebration({ milestone: crossed, habitName: habit.name });
           haptic("success");
-        }, 600); // slight delay so toggle animation plays first
+        }, 600);
+      }
+      // Check if this completes ALL habits for the day
+      // We get the current state from the query cache indirectly via the habits array in closure
+      // completedToday is set before this callback, so if completedToday === totalHabits - 1, this is the last one
+      const willCompleteAll = completedToday === totalHabits - 1 && totalHabits > 1;
+      if (willCompleteAll) {
+        setTimeout(() => {
+          setAllDoneCelebration(true);
+          haptic("success");
+          setTimeout(() => setAllDoneCelebration(false), 3000);
+        }, 700);
       }
     }
     toggleMutation.mutate({ id: habit.id, date: selectedDate });
-  }, [toggleMutation, selectedDate]);
+  }, [toggleMutation, selectedDate, completedToday, totalHabits]);
 
   const handleCreate = useCallback(() => {
     if (!setup.name.trim()) return;
@@ -190,9 +205,6 @@ export default function HabitsSection() {
     { title: "Stack it", subtitle: "Attach it to an existing routine" },
     { title: "Remind me", subtitle: "Set a daily prompt (optional)" },
   ];
-
-  const completedToday = habits.filter(h => h.todayCompleted).length;
-  const totalHabits = habits.length;
 
   return (
     <div className="relative bg-card rounded-xl border border-border/50 shadow-sm p-4">
@@ -226,6 +238,35 @@ export default function HabitsSection() {
             habitName={milestoneCelebration.habitName}
             onClose={() => setMilestoneCelebration(null)}
           />
+        )}
+      </AnimatePresence>
+
+      {/* All-habits-done celebration */}
+      <AnimatePresence>
+        {allDoneCelebration && (
+          <motion.div
+            key="all-done"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            transition={{ type: "spring", damping: 20, stiffness: 300 }}
+            className="fixed bottom-24 left-4 right-4 z-50 bg-primary text-black rounded-2xl px-4 py-3.5 shadow-xl flex items-center gap-3"
+          >
+            <motion.span
+              animate={{ rotate: [0, -15, 15, -10, 10, 0] }}
+              transition={{ duration: 0.6, delay: 0.1 }}
+              className="text-2xl shrink-0"
+            >
+              🎯
+            </motion.span>
+            <div className="flex-1">
+              <p className="text-sm font-black leading-tight">All habits locked in!</p>
+              <p className="text-xs font-medium opacity-75 mt-0.5">Perfect day on the telemetry.</p>
+            </div>
+            <button onClick={() => setAllDoneCelebration(false)}>
+              <X className="h-4 w-4 opacity-50" />
+            </button>
+          </motion.div>
         )}
       </AnimatePresence>
 
