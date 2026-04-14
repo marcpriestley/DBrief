@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import { haptic, hapticSequence } from "@/lib/haptics";
 
 interface BirthdayCelebrationProps {
   displayName?: string | null;
@@ -43,6 +44,17 @@ export default function BirthdayCelebration({ displayName, dateOfBirth }: Birthd
     return () => clearTimeout(t);
   }, [dateOfBirth]);
 
+  useEffect(() => {
+    if (!visible) return;
+    // Celebratory haptic sequence when the card appears
+    hapticSequence([
+      { type: "heavy", delay: 0 },
+      { type: "success", delay: 250 },
+      { type: "heavy", delay: 600 },
+      { type: "success", delay: 1000 },
+    ]);
+  }, [visible]);
+
   const handleDismiss = () => {
     const year = new Date().getFullYear();
     localStorage.setItem(`dbrief_birthday_celebrated_${year}`, "true");
@@ -63,13 +75,22 @@ export default function BirthdayCelebration({ displayName, dateOfBirth }: Birthd
           onClick={handleDismiss}
         >
           <motion.div
+            drag="y"
+            dragConstraints={{ top: 0, bottom: 0 }}
+            dragElastic={{ top: 0.6, bottom: 0.05 }}
+            onDragEnd={(_, info) => {
+              if (info.offset.y < -60) { haptic("light"); handleDismiss(); }
+            }}
             initial={{ scale: 0.8, opacity: 0, y: 40 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.9, opacity: 0, y: 20 }}
+            exit={{ scale: 0.9, opacity: 0, y: -40 }}
             transition={{ type: "spring", stiffness: 280, damping: 22 }}
-            className="relative bg-card border border-border rounded-2xl p-7 max-w-sm w-full text-center shadow-2xl"
+            className="relative bg-card border border-border rounded-2xl p-7 max-w-sm w-full text-center shadow-2xl cursor-grab active:cursor-grabbing touch-none"
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Swipe hint */}
+            <p className="absolute top-2 left-0 right-0 text-center text-muted-foreground/40 text-[11px] select-none">swipe up to dismiss</p>
+
             {/* Confetti-style ambient ring */}
             <motion.div
               animate={{ rotate: 360 }}
@@ -82,7 +103,7 @@ export default function BirthdayCelebration({ displayName, dateOfBirth }: Birthd
               initial={{ scale: 0 }}
               animate={{ scale: [0, 1.3, 1] }}
               transition={{ delay: 0.2, duration: 0.5, times: [0, 0.6, 1] }}
-              className="text-6xl mb-4 leading-none"
+              className="text-6xl mb-4 leading-none mt-2"
             >
               🎂
             </motion.div>

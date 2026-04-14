@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
-import { Flame, Trophy, X, Zap, Target } from "lucide-react";
+import { Flame, Zap } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { haptic } from "@/lib/haptics";
+import { haptic, hapticSequence } from "@/lib/haptics";
 
 interface StreakDisplayProps {
   streak: any;
@@ -147,7 +147,14 @@ function MilestoneCelebration({
   onDismiss: () => void;
 }) {
   useEffect(() => {
-    haptic("success");
+    // Dramatic multi-step haptic sequence for milestone celebrations
+    hapticSequence([
+      { type: "heavy", delay: 0 },
+      { type: "success", delay: 180 },
+      { type: "heavy", delay: 450 },
+      { type: "success", delay: 750 },
+      { type: "heavy", delay: 1100 },
+    ]);
     const timer = setTimeout(onDismiss, 7000);
     return () => clearTimeout(timer);
   }, []);
@@ -168,13 +175,22 @@ function MilestoneCelebration({
       onClick={onDismiss}
     >
       <motion.div
+        drag="y"
+        dragConstraints={{ top: 0, bottom: 0 }}
+        dragElastic={{ top: 0.6, bottom: 0.05 }}
+        onDragEnd={(_, info) => {
+          if (info.offset.y < -60) { haptic("light"); onDismiss(); }
+        }}
         initial={{ scale: 0.5, opacity: 0, y: 40 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
-        exit={{ scale: 0.9, opacity: 0, y: -20 }}
+        exit={{ scale: 0.9, opacity: 0, y: -40 }}
         transition={{ type: "spring", damping: 16, stiffness: 280 }}
-        className="relative mx-6 max-w-sm w-full"
+        className="relative mx-6 max-w-sm w-full cursor-grab active:cursor-grabbing touch-none"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Swipe hint */}
+        <p className="text-center text-white/30 text-[11px] mb-2 select-none">swipe up to dismiss</p>
+
         <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-[#111] shadow-2xl">
           <div className={`absolute inset-0 bg-gradient-to-br ${milestone.color} opacity-10`} />
 
@@ -227,7 +243,11 @@ function MilestoneCelebration({
 
 function StreakIncrement({ onDone }: { onDone: () => void }) {
   useEffect(() => {
-    haptic("medium");
+    // Punchy double-tap haptic for the streak pill
+    hapticSequence([
+      { type: "heavy", delay: 0 },
+      { type: "success", delay: 220 },
+    ]);
     const t = setTimeout(onDone, 2500);
     return () => clearTimeout(t);
   }, []);
@@ -236,7 +256,7 @@ function StreakIncrement({ onDone }: { onDone: () => void }) {
     <motion.div
       drag="y"
       dragConstraints={{ top: -200, bottom: 0 }}
-      onDragEnd={(_, info) => { if (info.offset.y < -40) onDone(); }}
+      onDragEnd={(_, info) => { if (info.offset.y < -40) { haptic("light"); onDone(); } }}
       onClick={onDone}
       initial={{ opacity: 0, y: 60, x: "-50%" }}
       animate={{ opacity: 1, y: 0, x: "-50%" }}

@@ -61,3 +61,17 @@ export function haptic(type: HapticPattern = "light") {
     } catch {}
   }
 }
+
+/**
+ * Fire a choreographed sequence of haptic pulses at the given millisecond offsets.
+ * Great for celebrations — compose heavier hits with success notifications for drama.
+ */
+export function hapticSequence(sequence: Array<{ type: HapticPattern; delay: number }>) {
+  sequence.forEach(({ type, delay }) => {
+    if (delay === 0) {
+      haptic(type);
+    } else {
+      setTimeout(() => haptic(type), delay);
+    }
+  });
+}
