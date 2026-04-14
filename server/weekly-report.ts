@@ -142,20 +142,28 @@ Write in second person ("your", "you"). Be direct and specific — use the actua
 // ─── Performance Patterns generator ─────────────────────────────────────────
 
 export async function generatePerformancePatterns(userId: number): Promise<PerformancePattern[]> {
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+  // Use up to 90 days of data — the more history, the more reliable the patterns.
+  // The feature unlocks at just 5 distinct logging days (early read); it gets sharper over time.
+  const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
   const todayStr = new Date().toISOString().split("T")[0];
 
   const [allScores, allGoals, allHabits, moodCheckins] = await Promise.all([
     storage.getDailyScoresByUser(userId),
-    storage.getGoalsForDateRange(userId, thirtyDaysAgo, todayStr),
+    storage.getGoalsForDateRange(userId, ninetyDaysAgo, todayStr),
     storage.getHabitWithTodayStatus(userId, todayStr),
-    storage.getMoodCheckinsForDateRange(userId, thirtyDaysAgo, todayStr),
+    storage.getMoodCheckinsForDateRange(userId, ninetyDaysAgo, todayStr),
   ]);
 
-  const recentScores = allScores.filter(s => s.date >= thirtyDaysAgo && s.value > 0);
+  const recentScores = allScores.filter(s => s.date >= ninetyDaysAgo && s.value > 0);
+  const distinctDays = new Set(recentScores.map(s => s.date)).size;
 
-  // Need at least 7 data points to find meaningful patterns
-  if (recentScores.length < 7) return [];
+  // Minimum 5 distinct logging days for an early read
+  if (distinctDays < 5) return [];
+
+  // Confidence tier based on how many days of data we have
+  const confidenceTier: "early" | "building" | "full" =
+    distinctDays < 14 ? "early" :
+    distinctDays < 30 ? "building" : "full";
 
   // Build per-day metric map
   const metricsByDay: Record<string, Record<string, number>> = {};
@@ -220,33 +228,41 @@ export async function generatePerformancePatterns(userId: number): Promise<Perfo
     .map(([k, v]) => `${k}: avg=${Math.round(v)}`)
     .join(", ");
 
-  const prompt = `You are a performance data analyst. You have 30 days of daily score data (0–100 scale) for a driver. Your job: find genuine, statistically grounded correlations directly in the daily score numbers. This is Data Pattern Analysis — focus on the raw scores.
+  const tierNote = confidenceTier === "early"
+    ? `DATA NOTE: Only ${distinctDays} days of data so far. Surface the most notable patterns you can see even with limited data — clearly stating what you observed. Use "medium" confidence for all patterns at this stage.`
+    : confidenceTier === "building"
+    ? `DATA NOTE: ${distinctDays} days of data. Good enough for reliable patterns — prefer high confidence where data clearly supports it.`
+    : `DATA NOTE: ${distinctDays} days of data. Full analysis — surface the strongest 3 patterns with real statistical grounding.`;
 
-DAILY DATA (${allDates.length} days with logged data):
+  const prompt = `You are a performance data analyst. You have ${distinctDays} days of logged score data (0–100 scale) for a driver. Your job: find genuine correlations directly in the daily score numbers. This is Data Pattern Analysis — focus on the raw scores.
+
+${tierNote}
+
+DAILY DATA (${allDates.length} days with logged scores):
 ${scoreSummaryLines}
 
-METRIC AVERAGES OVER 30 DAYS: ${meansLine}
+METRIC AVERAGES: ${meansLine}
 
-TASK: Identify up to 3 genuine, specific score-to-score correlations in this data. Lead with the numbers. Good examples:
+TASK: Identify up to ${confidenceTier === "early" ? "2" : "3"} genuine, specific score-to-score observations in this data. Lead with the numbers. Good examples:
 - "On days when Sleep Duration ≥ 70, Energy averages 18 points higher than on low-sleep days"
 - "HRV and Resting Heart Rate move inversely: on your 8 highest HRV days, resting HR averaged 58 vs 67 on low-HRV days"
-- "Energy scores have risen from an average of 54 in weeks 1–2 to 71 in weeks 3–4 — a 17-point upward trend"
+- "Energy scores have trended from an average of 54 in your first week to 71 this week — a 17-point upward trend"
 - "Goal completion is 43% higher on days where mood score is above 65"
 
 Rules:
-- Every pattern must cite actual numbers from the data above — no vague claims
-- Score-to-score relationships are the priority; goal completion and mood can appear if they show a clear score correlation
-- Only report patterns with at least 5 supporting data points
-- If data is insufficient or too noisy for a genuine pattern, return fewer (even 0 is correct)
+- Every observation must cite actual numbers from the data above — no vague claims
+- Score-to-score relationships are the priority; goal completion and mood can appear if they show a clear score connection
+- Only report patterns with at least 3 supporting data points (early stage) or 5 (building/full)
+- If data is too noisy for even 1 genuine observation, return an empty array — that is correct
 - Do NOT invent patterns
 
 Respond with valid JSON array only (no markdown, no explanation outside the JSON):
 [
   {
-    "insight": "One specific sentence describing the correlation with real numbers from the data",
+    "insight": "One specific sentence describing the observation with real numbers from the data",
     "metric1": "primary score metric name",
     "metric2": "secondary score metric name, or 'goals', or null",
-    "correlation": "the key stat e.g. '+18 pts avg' or '43% higher' or 'up 17 pts over 30 days'",
+    "correlation": "the key stat e.g. '+18 pts avg' or '43% higher' or 'up 17 pts'",
     "confidence": "high or medium"
   }
 ]`;

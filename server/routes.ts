@@ -594,6 +594,10 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
     try {
       const userId = getUserId(req);
       const validatedData = insertDailyScoreSchema.parse({ ...req.body, userId });
+
+      // Capture streak BEFORE saving so we can detect when milestones are first crossed
+      const streakBefore = await storage.getUserStreak(userId);
+      const streakBeforeVal = streakBefore?.currentStreak ?? 0;
       
       const score = await storage.updateDailyScore(
         userId, 
@@ -605,6 +609,58 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
       // Update streak based on score inputs (only for user inputs, not auto-synced)
       if (!validatedData.isAutoSynced) {
         await updateUserStreak(userId, validatedData.date);
+
+        // ── Milestone notifications (fire-and-forget, non-blocking) ──────────
+        setImmediate(async () => {
+          try {
+            const subs = await storage.getPushSubscriptions(userId);
+            if (subs.length === 0) return;
+
+            const allScores = await storage.getDailyScoresByUser(userId);
+            const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+            const dataDays = new Set(
+              allScores.filter(s => s.date >= ninetyDaysAgo && s.value > 0).map(s => s.date)
+            ).size;
+
+            const sendMilestoneNotif = async (title: string, body: string) => {
+              const apnsSub = subs.filter(s => !!s.apnsToken).pop();
+              if (apnsSub?.apnsToken) {
+                await sendApnsNotification(apnsSub.apnsToken, { title, body, url: "/", tag: `milestone-${userId}-${Date.now()}` });
+              } else {
+                const webSub = subs.find(s => s.p256dh && s.auth);
+                if (webSub) {
+                  await sendPushNotification({ endpoint: webSub.endpoint, keys: { p256dh: webSub.p256dh!, auth: webSub.auth! } }, { title, body, url: "/", tag: `milestone-${userId}-${Date.now()}` });
+                }
+              }
+            };
+
+            // Pattern Analysis first unlock: just crossed 5 days of data
+            if (dataDays === 5) {
+              const existingPatterns = await storage.getActivePerformancePatterns(userId);
+              if (existingPatterns.length === 0) {
+                // Auto-trigger the first scan
+                const { generatePerformancePatterns } = await import("./weekly-report");
+                await generatePerformancePatterns(userId);
+                await sendMilestoneNotif(
+                  "📊 First Pattern Scan Ready",
+                  "You've logged enough data for your first Data Pattern Analysis. Tap to see what the numbers reveal."
+                );
+              }
+            }
+
+            // Mission Intelligence unlock: streak just hit 7 for the first time
+            const streakAfter = await storage.getUserStreak(userId);
+            const longestStreak = streakAfter?.longestStreak ?? 0;
+            if (streakBeforeVal < 7 && (streakAfter?.currentStreak ?? 0) >= 7 && longestStreak <= 7) {
+              await sendMilestoneNotif(
+                "🎯 Mission Intelligence Unlocked",
+                "7-day streak achieved. Long-term trajectory analysis is now active — tap to run your first assessment."
+              );
+            }
+          } catch (e) {
+            console.error("[Milestone notif] Error:", e);
+          }
+        });
       }
       
       res.json(score);
@@ -892,17 +948,20 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
   app.get("/api/streak", async (req, res) => {
     try {
       const userId = getUserId(req);
-      const [streak, recentActiveDays] = await Promise.all([
+      const [streak, recentActiveDays, allScores] = await Promise.all([
         storage.getUserStreak(userId),
         storage.getRecentActiveDays(userId),
+        storage.getDailyScoresByUser(userId),
       ]);
       const base = streak || { currentStreak: 0, longestStreak: 0, lastEntryDate: null };
-      // Insights unlock rules:
-      //   Phase 1 — initial unlock: longestStreak must reach 7 (one-time gate)
-      //   Phase 2 — ongoing access: recentActiveDays >= 5 (allows 1 missed day)
       const everUnlocked = (base.longestStreak ?? 0) >= 7;
       const insightsUnlocked = everUnlocked && recentActiveDays >= 5;
-      res.json({ ...base, recentActiveDays, insightsUnlocked });
+      // Count distinct days with any logged score in the last 90 days
+      const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+      const dataDays = new Set(
+        allScores.filter(s => s.date >= ninetyDaysAgo && s.value > 0).map(s => s.date)
+      ).size;
+      res.json({ ...base, recentActiveDays, insightsUnlocked, dataDays });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch streak" });
     }

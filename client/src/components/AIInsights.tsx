@@ -14,10 +14,19 @@ type StreakResponse = {
   lastEntryDate: string | null;
   recentActiveDays: number;
   insightsUnlocked: boolean;
+  dataDays: number;
 };
 
 const UNLOCK_THRESHOLD = 7;
 const MAINTAIN_THRESHOLD = 5;
+
+// Confidence tier for Mission Intelligence based on total data logged
+function getMissionTier(dataDays: number): { label: string; sublabel: string; color: string; next: number | null; nextLabel: string } {
+  if (dataDays < 14) return { label: "Trajectory Forming",  sublabel: "early read",       color: "text-amber-500",  next: 14, nextLabel: "Mid-Range View" };
+  if (dataDays < 30) return { label: "Mid-Range View",      sublabel: "14–29 days",        color: "text-blue-500",   next: 30, nextLabel: "Campaign View" };
+  if (dataDays < 60) return { label: "Campaign View",       sublabel: "30–59 days",        color: "text-green-500",  next: 60, nextLabel: "Deep Read" };
+  return               { label: "Deep Read",               sublabel: "60+ days",          color: "text-primary",    next: null, nextLabel: "" };
+}
 
 export default function AIInsights() {
   const { toast } = useToast();
@@ -69,11 +78,14 @@ export default function AIInsights() {
   const longestStreak    = streak?.longestStreak    ?? 0;
   const recentActiveDays = streak?.recentActiveDays ?? 0;
   const insightsUnlocked = streak?.insightsUnlocked ?? false;
+  const dataDays         = streak?.dataDays         ?? 0;
   const everUnlocked     = longestStreak >= UNLOCK_THRESHOLD;
+  const missionTier      = getMissionTier(dataDays);
 
-  // ── State 1: Never unlocked ───────────────────────────────────────────────
+  // ── State 1: Never unlocked — show streak progress ────────────────────────
   if (!everUnlocked) {
     const progress = Math.min(100, Math.round((currentStreak / UNLOCK_THRESHOLD) * 100));
+    const daysLeft = UNLOCK_THRESHOLD - currentStreak;
     return (
       <Card className="border-0 shadow-sm bg-card">
         <CardContent className="p-5">
@@ -82,11 +94,13 @@ export default function AIInsights() {
             <h3 className="text-sm font-semibold text-foreground">Mission Intelligence</h3>
             <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full ml-1">Locked</span>
           </div>
-          <p className="text-xs text-muted-foreground mb-1 opacity-70">90-day trajectory · goal alignment</p>
-          <p className="text-sm text-muted-foreground mb-3 mt-2">
-            Build a 7-day streak to unlock long-term analysis. Once unlocked, one missed day won't cost you access.
+          <p className="text-xs text-muted-foreground mb-3 opacity-70">90-day trajectory · goal alignment</p>
+          <p className="text-sm text-muted-foreground mb-3">
+            {daysLeft === 1
+              ? "Log tomorrow and Mission Intelligence activates — one more day."
+              : `Log for ${daysLeft} more consecutive days to unlock long-term trajectory analysis against your Infinite Goal.`}
           </p>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 mb-1">
             <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
               <div
                 className="h-full bg-gradient-to-r from-orange-400 to-amber-400 rounded-full transition-all duration-500"
@@ -95,15 +109,18 @@ export default function AIInsights() {
             </div>
             <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
               <Flame className="h-3.5 w-3.5 text-orange-400" />
-              {currentStreak}/{UNLOCK_THRESHOLD}
+              {currentStreak}/{UNLOCK_THRESHOLD} days
             </span>
           </div>
+          <p className="text-[11px] text-muted-foreground/50 mt-2">
+            Once unlocked, one missed day won't revoke access.
+          </p>
         </CardContent>
       </Card>
     );
   }
 
-  // ── State 2: Unlocked but data window thin ────────────────────────────────
+  // ── State 2: Unlocked but recent data thin ────────────────────────────────
   if (!insightsUnlocked) {
     const daysNeeded = MAINTAIN_THRESHOLD - recentActiveDays;
     const progress = Math.min(100, Math.round((recentActiveDays / MAINTAIN_THRESHOLD) * 100));
@@ -118,8 +135,8 @@ export default function AIInsights() {
           <p className="text-xs text-muted-foreground mb-3 opacity-70">90-day trajectory · goal alignment</p>
           <p className="text-sm text-muted-foreground mb-3">
             {daysNeeded === 1
-              ? "Log today's telemetry to bring long-term analysis back online."
-              : `Log data on ${daysNeeded} more day${daysNeeded !== 1 ? "s" : ""} this week to restore trajectory analysis.`
+              ? "Log today's scores to bring long-term analysis back online."
+              : `Log on ${daysNeeded} more day${daysNeeded !== 1 ? "s" : ""} this week to restore trajectory analysis.`
             }
           </p>
           <div className="flex items-center gap-3">
@@ -133,7 +150,7 @@ export default function AIInsights() {
               {recentActiveDays}/{MAINTAIN_THRESHOLD} days
             </span>
           </div>
-          <p className="text-xs text-muted-foreground mt-2 opacity-70">
+          <p className="text-xs text-muted-foreground mt-2 opacity-60">
             No need to rebuild your streak — just log today.
           </p>
         </CardContent>
@@ -151,7 +168,7 @@ export default function AIInsights() {
             <h3 className="text-sm font-semibold text-foreground">Mission Intelligence</h3>
           </div>
           <p className="text-xs text-muted-foreground mb-3 opacity-70">90-day trajectory · goal alignment</p>
-          <p className="text-sm text-muted-foreground mb-3">Scanning 90-day trajectory against your goals…</p>
+          <p className="text-sm text-muted-foreground mb-3">Scanning {dataDays}-day trajectory against your goals…</p>
           <div className="flex items-center gap-1.5">
             <div className="w-1.5 h-1.5 rounded-full bg-primary/40 animate-bounce" style={{ animationDelay: "0ms" }} />
             <div className="w-1.5 h-1.5 rounded-full bg-primary/40 animate-bounce" style={{ animationDelay: "150ms" }} />
@@ -162,7 +179,7 @@ export default function AIInsights() {
     );
   }
 
-  // ── State 4: Ready — no analysis yet ─────────────────────────────────────
+  // ── State 4: Active, no analysis run yet ─────────────────────────────────
   if (!latestInsight) {
     return (
       <Card className="border-0 shadow-sm bg-primary/5">
@@ -171,10 +188,32 @@ export default function AIInsights() {
             <Target className="h-4 w-4 text-primary" />
             <h3 className="text-sm font-semibold text-foreground">Mission Intelligence</h3>
           </div>
-          <p className="text-xs text-muted-foreground mb-3 opacity-70">90-day trajectory · goal alignment</p>
+          <div className="flex items-center gap-2 mb-3">
+            <p className="text-xs text-muted-foreground opacity-70">90-day trajectory · goal alignment</p>
+            <span className={`text-[10px] font-semibold uppercase tracking-wider ${missionTier.color}`}>
+              {missionTier.label}
+            </span>
+          </div>
           <p className="text-sm text-muted-foreground mb-3">
-            Analyses your 90-day performance arc against your Infinite Goal and Long-Term Targets — not a weekly summary, not a tip. A strategic read on whether your trajectory is pointing the right direction.
+            Analyses your {dataDays}-day performance arc against your Infinite Goal and Long-Term Targets.
+            {missionTier.next && (
+              <span className="text-muted-foreground/60"> Analysis deepens at {missionTier.next} logged days ({missionTier.nextLabel}).</span>
+            )}
           </p>
+          {missionTier.next && (
+            <div className="mb-3">
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-[11px] text-muted-foreground/60">→ {missionTier.nextLabel} at {missionTier.next} days</p>
+                <span className="text-[11px] text-muted-foreground/60">{dataDays}/{missionTier.next}</span>
+              </div>
+              <div className="h-1 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary/30 rounded-full transition-all duration-500"
+                  style={{ width: `${Math.min(100, Math.round((dataDays / missionTier.next) * 100))}%` }}
+                />
+              </div>
+            </div>
+          )}
           <Button size="sm" onClick={() => generateInsightMutation.mutate()}>
             Analyse Trajectory
           </Button>
@@ -199,19 +238,12 @@ export default function AIInsights() {
                 size="icon"
                 className={`h-7 w-7 ${tts.speaking ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
                 onClick={() => {
-                  if (tts.speaking) {
-                    tts.cancel();
-                  } else {
-                    tts.speakNow(latestInsight.insight);
-                  }
+                  if (tts.speaking) { tts.cancel(); }
+                  else { tts.speakNow(latestInsight.insight); }
                 }}
                 title={tts.speaking ? "Stop" : "Read aloud"}
               >
-                {tts.speaking ? (
-                  <Square className="h-3.5 w-3.5 fill-current" />
-                ) : (
-                  <Volume2 className="h-3.5 w-3.5" />
-                )}
+                {tts.speaking ? <Square className="h-3.5 w-3.5 fill-current" /> : <Volume2 className="h-3.5 w-3.5" />}
               </Button>
             )}
             <Button
@@ -224,10 +256,30 @@ export default function AIInsights() {
             </Button>
           </div>
         </div>
-        <p className="text-xs text-muted-foreground mb-3 opacity-70">90-day trajectory · goal alignment</p>
+        <div className="flex items-center gap-2 mb-3">
+          <p className="text-xs text-muted-foreground opacity-70">90-day trajectory · goal alignment</p>
+          <span className={`text-[10px] font-semibold uppercase tracking-wider ${missionTier.color}`}>
+            {missionTier.label}
+          </span>
+        </div>
         <p className="text-sm text-foreground leading-relaxed mb-3">
           {latestInsight.insight}
         </p>
+        {/* Progress to next tier */}
+        {missionTier.next && (
+          <div className="mb-3">
+            <div className="flex items-center justify-between mb-0.5">
+              <p className="text-[10px] text-muted-foreground/50">{missionTier.nextLabel} at {missionTier.next} days logged</p>
+              <span className="text-[10px] text-muted-foreground/50">{dataDays}/{missionTier.next}</span>
+            </div>
+            <div className="h-0.5 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary/30 rounded-full transition-all duration-500"
+                style={{ width: `${Math.min(100, Math.round((dataDays / missionTier.next) * 100))}%` }}
+              />
+            </div>
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           {latestInsight.tags?.map((tag, i) => (
             <Badge key={i} variant="secondary" className="text-xs">{tag}</Badge>
