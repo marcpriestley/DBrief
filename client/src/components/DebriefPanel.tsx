@@ -153,18 +153,20 @@ function useInlineVoice() {
     };
 
     recognition.onend = () => {
-      setInterimText("");
       // Guard: ignore stale onend callbacks from replaced/stopped instances
       if (recognitionRef.current !== recognition) return;
       // Clear ref FIRST so the next startRecognitionRef.current() sees a clean slate
       recognitionRef.current = null;
 
       if (shouldListenRef.current) {
+        // We're about to restart — DON'T wipe interimText so the transcript doesn't
+        // flash away during the 300ms gap between stop and the next start.
         // Give the browser 300ms to fully release the audio device before reopening
         restartTimerRef.current = setTimeout(() => {
           if (shouldListenRef.current) startRecognitionRef.current();
         }, 300);
       } else {
+        setInterimText("");
         setIsListening(false);
       }
     };
@@ -845,16 +847,16 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
       submitVoiceNoteRef.current();
     }, VOICE_NOTE_MAX_SECS * 1000);
     // Voice note mic strategy:
-    //   noSilenceStop: true  — never auto-stop on silence, only on explicit cancel/submit
-    //   restartPollMs: 300   — poll every 300 ms so we detect iOS killing recognition quickly
-    //   restartThresholdMs: 800 — restart once recognition has been silent for 800 ms.
-    //                             iOS typically delivers partials every 200-500 ms during speech,
-    //                             so 800 ms of silence reliably means iOS killed the session —
-    //                             not just a brief gap between words. This keeps the mic hot
-    //                             without accidentally restarting during fluent speech.
+    //   noSilenceStop: true     — never auto-stop on silence, only on explicit cancel/submit
+    //   restartPollMs: 500      — poll every 500 ms (less churn than 300 ms)
+    //   restartThresholdMs: 2500 — only restart after 2.5 s of silence. Normal speech pauses
+    //                              are 1–2 s between sentences; 800 ms was too short and caused
+    //                              a constant stop/start glitch mid-speech. iOS typically kills
+    //                              recognition after 2–3 s of silence, so 2.5 s reliably catches
+    //                              that case without disrupting natural pauses.
     voice.start(
       (text) => { voiceNoteTextRef.current = text; setUserInput(text); },
-      { noSilenceStop: true, restartPollMs: 300, restartThresholdMs: 800 },
+      { noSilenceStop: true, restartPollMs: 500, restartThresholdMs: 2500 },
     );
   }, [voice]);
 
@@ -1303,11 +1305,11 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     {/* Active session card — viewport-height constrained so header + input always visible */}
     <Card
       ref={debriefCardRef}
-      className="bg-card flex flex-col"
+      className="bg-card flex flex-col overflow-hidden"
       style={{
         border: '1px solid rgba(245,158,11,0.5)',
         boxShadow: '0 0 0 3px rgba(245,158,11,0.1), 0 4px 24px rgba(245,158,11,0.12)',
-        maxHeight: 'calc(var(--visual-height, 100dvh) - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 15rem)',
+        maxHeight: 'calc(var(--visual-height, 100dvh) - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 7rem)',
       }}
     >
       <CardContent className="p-0 flex flex-col flex-1 overflow-hidden">
@@ -1644,10 +1646,12 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                       style={{ width: `${Math.min(100, (voiceNoteSeconds / VOICE_NOTE_MAX_SECS) * 100)}%` }}
                     />
                   </div>
-                  {/* Live transcript preview */}
+                  {/* Live transcript preview — shows most recent speech */}
                   {(userInput || voice.interimText) ? (
-                    <p className="text-sm text-foreground leading-relaxed line-clamp-3">
-                      {userInput}{voice.interimText ? <span className="text-muted-foreground"> {voice.interimText}</span> : null}
+                    <p className="text-sm text-foreground leading-relaxed line-clamp-4">
+                      {/* Show tail of accumulated text so newest words always visible */}
+                      {userInput.length > 300 ? "…" + userInput.slice(-300) : userInput}
+                      {voice.interimText ? <span className="text-muted-foreground"> {voice.interimText}</span> : null}
                     </p>
                   ) : (
                     <p className="text-xs text-muted-foreground italic">Speak freely — pauses are fine, mic stays open until you submit…</p>
