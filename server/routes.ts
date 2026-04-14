@@ -1882,6 +1882,159 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
     }
   });
 
+  // ── Challenge routes ──────────────────────────────────────────────────────
+
+  // List challenges for current user
+  app.get("/api/challenges", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const challenges = await storage.getChallengesForUser(userId);
+      res.json(challenges);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch challenges" });
+    }
+  });
+
+  // Create a new challenge
+  app.post("/api/challenges", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { title, description, type, habitName, habitEmoji, metricName, visibility, startDate, endDate } = req.body;
+      if (!title || !type || !startDate || !endDate) {
+        return res.status(400).json({ message: "title, type, startDate, endDate are required" });
+      }
+      if (!["habit", "score"].includes(type)) {
+        return res.status(400).json({ message: "type must be habit or score" });
+      }
+      if (type === "habit" && !habitName) {
+        return res.status(400).json({ message: "habitName is required for habit challenges" });
+      }
+      if (type === "score" && !metricName) {
+        return res.status(400).json({ message: "metricName is required for score challenges" });
+      }
+      const challenge = await storage.createChallenge(userId, {
+        creatorId: userId,
+        title,
+        description: description ?? null,
+        type,
+        habitName: habitName ?? null,
+        habitEmoji: habitEmoji ?? null,
+        metricName: metricName ?? null,
+        visibility: visibility ?? "invite_only",
+        startDate,
+        endDate,
+      });
+
+      // If open, auto-invite all accepted connections
+      if (visibility === "open") {
+        const conns = await storage.getConnectionsByUser(userId);
+        const accepted = conns.filter(c => c.status === "accepted");
+        for (const conn of accepted) {
+          const targetId = conn.requesterId === userId ? conn.receiverId : conn.requesterId;
+          await storage.inviteToChallenge(challenge.id, targetId, userId);
+        }
+      }
+
+      res.json(challenge);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to create challenge" });
+    }
+  });
+
+  // Get leaderboard for a challenge
+  app.get("/api/challenges/:id/leaderboard", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const challengeId = parseInt(req.params.id);
+      const board = await storage.getChallengeLeaderboard(challengeId, userId);
+      res.json(board);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch challenge leaderboard" });
+    }
+  });
+
+  // Join a challenge
+  app.post("/api/challenges/:id/join", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const challengeId = parseInt(req.params.id);
+      await storage.joinChallenge(challengeId, userId);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to join challenge" });
+    }
+  });
+
+  // Decline a challenge invitation
+  app.post("/api/challenges/:id/decline", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const challengeId = parseInt(req.params.id);
+      await storage.declineChallenge(challengeId, userId);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to decline challenge" });
+    }
+  });
+
+  // Leave a challenge
+  app.post("/api/challenges/:id/leave", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const challengeId = parseInt(req.params.id);
+      await storage.leaveChallenge(challengeId, userId);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to leave challenge" });
+    }
+  });
+
+  // Delete a challenge (creator only)
+  app.delete("/api/challenges/:id", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const challengeId = parseInt(req.params.id);
+      await storage.deleteChallenge(challengeId, userId);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete challenge" });
+    }
+  });
+
+  // Log today's entry for a challenge
+  app.post("/api/challenges/:id/log", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const challengeId = parseInt(req.params.id);
+      const { date, value } = req.body;
+      if (value === undefined || value === null) {
+        return res.status(400).json({ message: "value is required" });
+      }
+      const today = new Date().toISOString().split("T")[0];
+      const logDate = date ?? today;
+      await storage.logChallengeEntry(challengeId, userId, logDate, value);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to log challenge entry" });
+    }
+  });
+
+  // Invite a connection to a challenge
+  app.post("/api/challenges/:id/invite", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const challengeId = parseInt(req.params.id);
+      const { username } = req.body;
+      if (!username) return res.status(400).json({ message: "username required" });
+      const target = await storage.getUserByUsername(username);
+      if (!target) return res.status(404).json({ message: "User not found" });
+      await storage.inviteToChallenge(challengeId, target.id, userId);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to invite user" });
+    }
+  });
+
   registerChatRoutes(app);
   registerDebriefRoutes(app);
   registerRealtimeVoiceWS(httpServer);

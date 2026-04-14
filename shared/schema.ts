@@ -471,4 +471,72 @@ export type LeaderboardEntry = ConnectionPublicStats & {
   rank: number;
 };
 
+// ── Group Challenges ─────────────────────────────────────────────────────────
+
+export const challenges = pgTable("challenges", {
+  id: serial("id").primaryKey(),
+  creatorId: integer("creator_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  description: text("description"),
+  // "habit" | "score"
+  type: text("type").notNull(),
+  // For habit challenges: the habit name everyone tracks
+  habitName: text("habit_name"),
+  habitEmoji: text("habit_emoji"),
+  // For score challenges: the metric name everyone must log
+  metricName: text("metric_name"),
+  // "invite_only" | "open"
+  visibility: text("visibility").notNull().default("invite_only"),
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertChallengeSchema = createInsertSchema(challenges).omit({ id: true, createdAt: true });
+export type Challenge = typeof challenges.$inferSelect;
+export type InsertChallenge = z.infer<typeof insertChallengeSchema>;
+
+export const challengeParticipants = pgTable("challenge_participants", {
+  id: serial("id").primaryKey(),
+  challengeId: integer("challenge_id").notNull().references(() => challenges.id, { onDelete: "cascade" }),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  // "invited" | "joined" | "declined"
+  status: text("status").notNull().default("joined"),
+  joinedAt: timestamp("joined_at").defaultNow(),
+});
+
+export const challengeLogs = pgTable("challenge_logs", {
+  id: serial("id").primaryKey(),
+  challengeId: integer("challenge_id").notNull().references(() => challenges.id, { onDelete: "cascade" }),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  date: date("date").notNull(),
+  // For habit: 1 = done. For score: the value logged.
+  value: real("value").notNull(),
+  loggedAt: timestamp("logged_at").defaultNow(),
+});
+
+export const insertChallengeLogs = createInsertSchema(challengeLogs).omit({ id: true, loggedAt: true });
+export type ChallengeLog = typeof challengeLogs.$inferSelect;
+
+// DTO for a participant's progress in a challenge
+export type ChallengeParticipantStats = {
+  userId: number;
+  username: string;
+  displayName: string | null;
+  isMe: boolean;
+  // habit: days completed in window | score: avg value
+  score: number;
+  daysLogged: number;
+  rank: number;
+  loggedToday: boolean;
+};
+
+export type ChallengeWithProgress = Challenge & {
+  participantCount: number;
+  myStatus: string; // joined | invited | declined
+  myStats: { score: number; daysLogged: number; loggedToday: boolean } | null;
+  creatorUsername: string;
+  creatorDisplayName: string | null;
+};
+
 export * from "./models/chat";

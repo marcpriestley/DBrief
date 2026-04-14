@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Users, Search, UserPlus, Check, X, Flame, Zap, Trophy,
-  UserMinus, Clock, Medal, Crown, TrendingUp, BarChart2,
+  UserMinus, Clock, Medal, Crown, TrendingUp, BarChart2, Swords,
 } from "lucide-react";
 import AppLayout from "@/components/AppLayout";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { ConnectionPublicStats, LeaderboardEntry } from "@shared/schema";
 import { haptic } from "@/lib/haptics";
+import ChallengesTab from "@/components/ChallengesTab";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -281,7 +282,7 @@ const SORT_OPTIONS: { key: SortBy; label: string; icon: React.ReactNode }[] = [
 export default function SquadPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<"crew" | "board">("crew");
+  const [activeTab, setActiveTab] = useState<"crew" | "challenges" | "board">("crew");
   const [sortBy, setSortBy] = useState<SortBy>("streak");
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
@@ -372,7 +373,8 @@ export default function SquadPage() {
         <div className="flex gap-1 p-1 bg-muted rounded-xl">
           {[
             { key: "crew" as const, label: "Crew", icon: <Users className="h-3.5 w-3.5" /> },
-            { key: "board" as const, label: "Leaderboard", icon: <Trophy className="h-3.5 w-3.5" /> },
+            { key: "challenges" as const, label: "Challenges", icon: <Swords className="h-3.5 w-3.5" /> },
+            { key: "board" as const, label: "Board", icon: <Trophy className="h-3.5 w-3.5" /> },
           ].map(tab => (
             <button
               key={tab.key}
@@ -542,6 +544,19 @@ export default function SquadPage() {
                 Connections can see your streak, consistency %, and score average.
                 Journal, goal content, and debriefs stay completely private.
               </p>
+            </motion.div>
+          )}
+
+          {/* ── CHALLENGES TAB ────────────────────────────────────────────────── */}
+          {activeTab === "challenges" && (
+            <motion.div key="challenges" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <ChallengesTab
+                acceptedConnections={accepted.map(s => ({
+                  userId: s.userId,
+                  username: s.username,
+                  displayName: s.displayName,
+                }))}
+              />
             </motion.div>
           )}
 
