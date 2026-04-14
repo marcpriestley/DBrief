@@ -846,12 +846,15 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     }, VOICE_NOTE_MAX_SECS * 1000);
     // Voice note mic strategy:
     //   noSilenceStop: true  — never auto-stop on silence, only on explicit cancel/submit
-    //   restartPollMs: 400   — poll every 400 ms so we detect iOS killing recognition quickly
-    //   restartThresholdMs: 1500 — restart once recognition has been dead for 1.5 s, giving
-    //                              iOS time to kill it naturally without us interrupting live speech
+    //   restartPollMs: 300   — poll every 300 ms so we detect iOS killing recognition quickly
+    //   restartThresholdMs: 800 — restart once recognition has been silent for 800 ms.
+    //                             iOS typically delivers partials every 200-500 ms during speech,
+    //                             so 800 ms of silence reliably means iOS killed the session —
+    //                             not just a brief gap between words. This keeps the mic hot
+    //                             without accidentally restarting during fluent speech.
     voice.start(
       (text) => { voiceNoteTextRef.current = text; setUserInput(text); },
-      { noSilenceStop: true, restartPollMs: 400, restartThresholdMs: 1_500 },
+      { noSilenceStop: true, restartPollMs: 300, restartThresholdMs: 800 },
     );
   }, [voice]);
 
