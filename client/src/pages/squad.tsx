@@ -12,6 +12,7 @@ import { apiRequest } from "@/lib/queryClient";
 import type { ConnectionPublicStats, LeaderboardEntry } from "@shared/schema";
 import { haptic } from "@/lib/haptics";
 import ChallengesTab from "@/components/ChallengesTab";
+import { consumePendingSquadNav } from "@/hooks/useNativeNotifications";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -287,6 +288,31 @@ export default function SquadPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Deep-link: honour ?tab= URL param (from notification taps) and
+  // in-memory / sessionStorage pending nav set by handleNotificationUrl.
+  useEffect(() => {
+    const validTabs = ["crew", "challenges", "board"] as const;
+    type Tab = typeof validTabs[number];
+    const isValid = (t: string | null): t is Tab => validTabs.includes(t as Tab);
+
+    // Check URL search param first (present when wouter navigated here via popstate)
+    const params = new URLSearchParams(window.location.search);
+    const urlTab = params.get("tab");
+    // Then fall back to the in-memory / sessionStorage signal
+    const pendingTab = consumePendingSquadNav();
+    const target = isValid(urlTab) ? urlTab : isValid(pendingTab) ? pendingTab : null;
+    if (target) setActiveTab(target);
+
+    // Also listen for the event in case the page is already mounted when the
+    // notification arrives (app was open in foreground)
+    function onSquadNav(e: Event) {
+      const tab = (e as CustomEvent<{ tab: string }>).detail?.tab;
+      if (isValid(tab)) setActiveTab(tab);
+    }
+    window.addEventListener("dbrief:open-squad", onSquadNav);
+    return () => window.removeEventListener("dbrief:open-squad", onSquadNav);
+  }, []);
 
   useEffect(() => {
     if (searchRef.current) clearTimeout(searchRef.current);

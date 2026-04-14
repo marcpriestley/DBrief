@@ -30,6 +30,30 @@ const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 
+// ── Push notification helper ───────────────────────────────────────────────
+// Sends a push to ALL registered devices for a user (APNs first, then web).
+// Silently swallows errors so callers don't need try/catch.
+async function notifyUser(
+  userId: number,
+  payload: { title: string; body: string; url: string; tag: string }
+): Promise<void> {
+  try {
+    const subs = await storage.getPushSubscriptions(userId);
+    const apnsSub = subs.filter(s => !!s.apnsToken).pop();
+    if (apnsSub?.apnsToken) {
+      await sendApnsNotification(apnsSub.apnsToken, payload);
+    } else {
+      const webSub = subs.find(s => s.p256dh && s.auth);
+      if (webSub) {
+        await sendPushNotification(
+          { endpoint: webSub.endpoint, keys: { p256dh: webSub.p256dh!, auth: webSub.auth! } },
+          payload
+        );
+      }
+    }
+  } catch { /* notification failure is non-critical */ }
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
 
@@ -1813,27 +1837,15 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
 
       const connection = await storage.sendConnectionRequest(userId, target.id);
 
-      // Notify the receiver if they have push subscriptions
-      try {
-        const subs = await storage.getPushSubscriptions(target.id);
-        const myUser = await storage.getUser(userId);
-        const senderName = myUser?.displayName || myUser?.username || "Someone";
-        const payload = {
-          title: "New Connection Request",
-          body: `${senderName} wants to connect with you on DBrief`,
-          url: "/squad",
-          tag: `conn-request-${connection.id}`,
-        };
-        const apnsSub = subs.filter(s => !!s.apnsToken).pop();
-        if (apnsSub?.apnsToken) {
-          await sendApnsNotification(apnsSub.apnsToken, payload);
-        } else {
-          const webSub = subs.find(s => s.p256dh && s.auth);
-          if (webSub) {
-            await sendPushNotification({ endpoint: webSub.endpoint, keys: { p256dh: webSub.p256dh!, auth: webSub.auth! } }, payload);
-          }
-        }
-      } catch (_) { /* notification failure is non-critical */ }
+      // Notify the receiver
+      const myUser = await storage.getUser(userId);
+      const senderName = myUser?.displayName || myUser?.username || "Someone";
+      await notifyUser(target.id, {
+        title: "New Connection Request",
+        body: `${senderName} wants to connect with you on DBrief`,
+        url: "/squad?tab=crew",
+        tag: `conn-request-${connection.id}`,
+      });
 
       res.json(connection);
     } catch (error) {
@@ -1926,13 +1938,21 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
         endDate,
       }, creatorCommitment ?? undefined);
 
-      // If open, auto-invite all accepted connections
+      // If open, auto-invite all accepted connections and notify them
       if (visibility === "open") {
         const conns = await storage.getConnectionsByUser(userId);
         const accepted = conns.filter(c => c.status === "accepted");
+        const creator = await storage.getUser(userId);
+        const creatorName = creator?.displayName || creator?.username || "Someone";
         for (const conn of accepted) {
           const targetId = conn.requesterId === userId ? conn.receiverId : conn.requesterId;
           await storage.inviteToChallenge(challenge.id, targetId, userId);
+          await notifyUser(targetId, {
+            title: "New Challenge Invite",
+            body: `${creatorName} invited you to "${challenge.title}"`,
+            url: "/squad?tab=challenges",
+            tag: `challenge-invite-${challenge.id}-${targetId}`,
+          });
         }
       }
 
@@ -2031,6 +2051,21 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
       const target = await storage.getUserByUsername(username);
       if (!target) return res.status(404).json({ message: "User not found" });
       await storage.inviteToChallenge(challengeId, target.id, userId);
+
+      // Notify the invitee
+      const [inviter, challenge] = await Promise.all([
+        storage.getUser(userId),
+        storage.getChallengeById(challengeId),
+      ]);
+      const inviterName = inviter?.displayName || inviter?.username || "Someone";
+      const challengeTitle = challenge?.title || "a challenge";
+      await notifyUser(target.id, {
+        title: "New Challenge Invite",
+        body: `${inviterName} invited you to "${challengeTitle}"`,
+        url: "/squad?tab=challenges",
+        tag: `challenge-invite-${challengeId}-${target.id}`,
+      });
+
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ message: "Failed to invite user" });

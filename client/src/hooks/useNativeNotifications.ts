@@ -116,6 +116,38 @@ export function consumePendingMoodOpen(): boolean {
   return false;
 }
 
+// ── Squad / My Team deep-link helpers ────────────────────────────────────────
+// Same three-signal pattern as mood: in-memory, sessionStorage, URL + popstate.
+// Navigating TO /squad via popstate is intentional — we WANT wouter to render
+// the squad page when the user taps a connection or challenge notification.
+let pendingSquadTab: string | null = null;
+
+function dispatchSquadNav(tab: string) {
+  pendingSquadTab = tab;
+  try { sessionStorage.setItem("dbrief:squad-tab", tab); } catch {}
+  const url = `/squad?tab=${tab}`;
+  if (typeof history !== "undefined") {
+    history.pushState(null, "", url);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }
+  window.dispatchEvent(new CustomEvent("dbrief:open-squad", { detail: { tab } }));
+}
+
+/**
+ * Called by SquadPage on mount to consume a pending deep-link tab switch.
+ * Returns the tab name if one is pending, or null.
+ */
+export function consumePendingSquadNav(): string | null {
+  let fromSession: string | null = null;
+  try { fromSession = sessionStorage.getItem("dbrief:squad-tab"); } catch {}
+  const tab = pendingSquadTab || fromSession;
+  if (tab) {
+    pendingSquadTab = null;
+    try { sessionStorage.removeItem("dbrief:squad-tab"); } catch {}
+  }
+  return tab;
+}
+
 // Handle a notification tap URL
 function handleNotificationUrl(url?: string) {
   if (!url) return;
@@ -131,6 +163,11 @@ function handleNotificationUrl(url?: string) {
       history.replaceState(null, "", "/?mood=checkin");
     }
     dispatchOpenMood();
+  } else if (url.includes("/squad")) {
+    // Navigate to My Team page; extract tab from URL param if present
+    const tabMatch = url.match(/tab=([^&#]+)/);
+    const tab = tabMatch ? tabMatch[1] : "crew";
+    dispatchSquadNav(tab);
   }
 }
 
