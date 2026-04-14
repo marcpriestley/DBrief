@@ -1956,7 +1956,7 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
           await storage.inviteToChallenge(challenge.id, targetId, userId);
           await notifyUser(targetId, {
             title: "New Challenge Invite",
-            body: `${creatorName} invited you to "${challenge.title}"`,
+            body: "You've been invited to a DBrief challenge",
             url: "/squad?tab=challenges",
             tag: `challenge-invite-${challenge.id}-${targetId}`,
           });
@@ -1987,6 +1987,8 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
       const userId = getUserId(req);
       const challengeId = parseInt(req.params.id);
       const { commitment } = req.body;
+      const existing = await storage.getChallengeById(challengeId);
+      if (!existing) return res.status(404).json({ message: "This challenge no longer exists" });
       await storage.joinChallenge(challengeId, userId, commitment ?? undefined);
       res.json({ success: true });
     } catch (error) {
@@ -2086,7 +2088,7 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
       const challengeTitle = challenge?.title || "a challenge";
       await notifyUser(target.id, {
         title: "New Challenge Invite",
-        body: `${inviterName} invited you to "${challengeTitle}"`,
+        body: "You've been invited to a DBrief challenge",
         url: "/squad?tab=challenges",
         tag: `challenge-invite-${challengeId}-${target.id}`,
       });

@@ -117,19 +117,15 @@ export function consumePendingMoodOpen(): boolean {
 }
 
 // ── Squad / My Team deep-link helpers ────────────────────────────────────────
-// Same three-signal pattern as mood: in-memory, sessionStorage, URL + popstate.
-// Navigating TO /squad via popstate is intentional — we WANT wouter to render
-// the squad page when the user taps a connection or challenge notification.
+// Two-signal pattern: in-memory + sessionStorage (consumed by App.tsx via
+// consumePendingSquadNav on mount) + custom event (for live navigation).
+// App.tsx handles the actual route change via wouter's setLocation().
 let pendingSquadTab: string | null = null;
 
 function dispatchSquadNav(tab: string) {
   pendingSquadTab = tab;
   try { sessionStorage.setItem("dbrief:squad-tab", tab); } catch {}
-  const url = `/squad?tab=${tab}`;
-  if (typeof history !== "undefined") {
-    history.pushState(null, "", url);
-    window.dispatchEvent(new PopStateEvent("popstate"));
-  }
+  // Fire custom event — App.tsx listens and calls setLocation("/squad?tab=X")
   window.dispatchEvent(new CustomEvent("dbrief:open-squad", { detail: { tab } }));
 }
 

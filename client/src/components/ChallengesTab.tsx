@@ -202,7 +202,7 @@ function JoinWithCommitmentSheet({
       onJoined();
       onClose();
     },
-    onError: () => toast({ title: "Failed to join", variant: "destructive" }),
+    onError: (err: any) => toast({ title: "Failed to join", description: err?.message || undefined, variant: "destructive" }),
   });
 
   const isHabit = challenge.type === "habit";
@@ -737,21 +737,27 @@ function EditChallengeSheet({
 
         {/* Extend duration */}
         <div>
-          <div className="flex items-center justify-between mb-2">
-            <label className="text-xs text-muted-foreground">Extend end date</label>
-            <span className="text-sm font-bold text-foreground tabular-nums">
-              {extraDays === 0 ? "No change" : `+${extraDays} days`}
-            </span>
+          <label className="text-xs text-muted-foreground block mb-2">Extend end date</label>
+          <div className="flex gap-2 flex-wrap">
+            {[0, 3, 7, 14, 21, 30].map(d => (
+              <button
+                key={d}
+                onClick={() => { haptic("select"); setExtraDays(d); }}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
+                  extraDays === d
+                    ? "border-primary bg-primary text-white"
+                    : "border-border/50 bg-card text-foreground"
+                }`}
+              >
+                {d === 0 ? "No change" : `+${d}d`}
+              </button>
+            ))}
           </div>
-          <Slider
-            value={[extraDays]}
-            onValueChange={([v]) => setExtraDays(v)}
-            min={0} max={14} step={1}
-          />
-          <p className="text-[11px] text-muted-foreground/60 mt-1">
-            Current end: {challenge.endDate}
-            {extraDays > 0 && ` → ${new Date(new Date(challenge.endDate).getTime() + extraDays * 86400000).toISOString().split("T")[0]}`}
-          </p>
+          {extraDays > 0 && (
+            <p className="text-[11px] text-muted-foreground/60 mt-1.5">
+              New end date: {new Date(new Date(challenge.endDate).getTime() + extraDays * 86400000).toISOString().split("T")[0]}
+            </p>
+          )}
         </div>
 
         {/* Invite more crew */}

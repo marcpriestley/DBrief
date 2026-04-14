@@ -15,11 +15,13 @@ import PrivacyPolicy from "@/pages/privacy";
 import BirthdayCelebration from "@/components/BirthdayCelebration";
 import MoodCheckinModal from "@/components/MoodCheckinModal";
 import { MoodProvider } from "@/contexts/MoodContext";
-import { registerNativePush, isNativePlatform, clearBadge, setupNotificationTapListener, consumePendingMoodOpen } from "@/hooks/useNativeNotifications";
+import { useLocation } from "wouter";
+import { registerNativePush, isNativePlatform, clearBadge, setupNotificationTapListener, consumePendingMoodOpen, consumePendingSquadNav } from "@/hooks/useNativeNotifications";
 import { useToast } from "@/hooks/use-toast";
 
 function AuthenticatedRouter() {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const { data: user, isLoading } = useQuery<any>({
     queryKey: ["/api/auth/me"],
     queryFn: getQueryFn({ on401: "returnNull" }),
@@ -59,6 +61,10 @@ function AuthenticatedRouter() {
     // Native notification tap that fired before this component mounted
     if (consumePendingMoodOpen()) setIsMoodOpen(true);
 
+    // Squad deep-link from notification tap (fires before React mounted)
+    const pendingSquadTab = consumePendingSquadNav();
+    if (pendingSquadTab) setLocation(`/squad?tab=${pendingSquadTab}`);
+
     const onOpenMood = () => {
       setIsMoodOpen(true);
       // dispatchOpenMood writes /?mood=checkin to history — clean it up now
@@ -79,11 +85,18 @@ function AuthenticatedRouter() {
       }
     };
 
+    const onOpenSquad = (e: Event) => {
+      const tab = (e as CustomEvent<{ tab: string }>).detail?.tab ?? "challenges";
+      setLocation(`/squad?tab=${tab}`);
+    };
+
     window.addEventListener("dbrief:open-mood", onOpenMood);
+    window.addEventListener("dbrief:open-squad", onOpenSquad);
     window.addEventListener("dbrief:notification", onForegroundNotification);
     window.addEventListener("popstate", checkMoodParam);
     return () => {
       window.removeEventListener("dbrief:open-mood", onOpenMood);
+      window.removeEventListener("dbrief:open-squad", onOpenSquad);
       window.removeEventListener("dbrief:notification", onForegroundNotification);
       window.removeEventListener("popstate", checkMoodParam);
     };
