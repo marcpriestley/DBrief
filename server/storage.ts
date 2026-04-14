@@ -1,7 +1,7 @@
 import { 
   users, journalEntries, dailyScores, userMetrics, streaks, aiInsights, pushSubscriptions,
   goalTemplates, dailyGoals, journalAttachments, moodCheckins, debriefs, debriefMessages, habits, habitLogs, serverConfig,
-  weeklyReports, performancePatterns, infiniteGoals, longTermGoals,
+  weeklyReports, performancePatterns, infiniteGoals, longTermGoals, userConnections,
   type User, type InsertUser, type JournalEntry, type InsertJournalEntry,
   type DailyScore, type InsertDailyScore, type UserMetric, type InsertUserMetric,
   type Streak, type InsertStreak, type AIInsight, type InsertAIInsight,
@@ -11,9 +11,10 @@ import {
   type Habit, type InsertHabit, type HabitLog,
   type WeeklyReport, type InsertWeeklyReport,
   type PerformancePattern, type InsertPerformancePattern,
+  type UserConnection, type ConnectionPublicStats,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, asc, desc, gte, lte, gt } from "drizzle-orm";
+import { eq, and, asc, desc, gte, lte, gt, or, ne, sql } from "drizzle-orm";
 import { encrypt, decrypt } from "./encryption";
 
 export interface IStorage {
@@ -115,6 +116,17 @@ export interface IStorage {
   // Performance pattern methods
   getActivePerformancePatterns(userId: number): Promise<PerformancePattern[]>;
   replacePerformancePatterns(userId: number, patterns: InsertPerformancePattern[]): Promise<PerformancePattern[]>;
+
+  // User connection methods (accountability pairs / squad)
+  searchUsers(query: string, excludeUserId: number): Promise<Pick<User, "id" | "username" | "displayName">[]>;
+  sendConnectionRequest(requesterId: number, receiverId: number): Promise<UserConnection>;
+  getConnectionsByUser(userId: number): Promise<UserConnection[]>;
+  getConnectionById(connectionId: number): Promise<UserConnection | undefined>;
+  acceptConnection(connectionId: number, receiverId: number): Promise<UserConnection | undefined>;
+  declineConnection(connectionId: number, receiverId: number): Promise<void>;
+  removeConnection(connectionId: number, userId: number): Promise<void>;
+  getConnectionPublicStats(userId: number, viewerId: number): Promise<ConnectionPublicStats | null>;
+  getAllConnectionStats(viewerId: number): Promise<ConnectionPublicStats[]>;
 
   // Account deletion
   deleteUser(userId: number): Promise<void>;
@@ -552,6 +564,16 @@ export class MemStorage implements IStorage {
   async getActivePerformancePatterns(_userId: number): Promise<PerformancePattern[]> { return []; }
   async replacePerformancePatterns(_userId: number, _patterns: InsertPerformancePattern[]): Promise<PerformancePattern[]> { return []; }
   async deleteUser(_userId: number): Promise<void> {}
+  // Connection stubs
+  async searchUsers(_q: string, _ex: number): Promise<Pick<User, "id" | "username" | "displayName">[]> { return []; }
+  async sendConnectionRequest(_rId: number, _rcId: number): Promise<UserConnection> { throw new Error("Not implemented"); }
+  async getConnectionsByUser(_userId: number): Promise<UserConnection[]> { return []; }
+  async getConnectionById(_id: number): Promise<UserConnection | undefined> { return undefined; }
+  async acceptConnection(_id: number, _rcId: number): Promise<UserConnection | undefined> { return undefined; }
+  async declineConnection(_id: number, _rcId: number): Promise<void> {}
+  async removeConnection(_id: number, _userId: number): Promise<void> {}
+  async getConnectionPublicStats(_userId: number, _viewerId: number): Promise<ConnectionPublicStats | null> { return null; }
+  async getAllConnectionStats(_viewerId: number): Promise<ConnectionPublicStats[]> { return []; }
 }
 
 // Database implementation
@@ -1265,6 +1287,142 @@ export class DatabaseStorage implements IStorage {
     if (patterns.length === 0) return [];
     const created = await db.insert(performancePatterns).values(patterns).returning();
     return created;
+  }
+
+  // ─── User Connections ────────────────────────────────────────────────────────
+
+  async searchUsers(query: string, excludeUserId: number): Promise<Pick<User, "id" | "username" | "displayName">[]> {
+    const q = `%${query.toLowerCase()}%`;
+    const rows = await db.select({ id: users.id, username: users.username, displayName: users.displayName })
+      .from(users)
+      .where(and(
+        ne(users.id, excludeUserId),
+        or(
+          sql`LOWER(${users.username}) LIKE ${q}`,
+          sql`LOWER(COALESCE(${users.displayName}, '')) LIKE ${q}`
+        )
+      ))
+      .limit(10);
+    return rows;
+  }
+
+  async sendConnectionRequest(requesterId: number, receiverId: number): Promise<UserConnection> {
+    const [row] = await db.insert(userConnections)
+      .values({ requesterId, receiverId, status: "pending" })
+      .returning();
+    return row;
+  }
+
+  async getConnectionsByUser(userId: number): Promise<UserConnection[]> {
+    return db.select().from(userConnections)
+      .where(or(
+        eq(userConnections.requesterId, userId),
+        eq(userConnections.receiverId, userId)
+      ));
+  }
+
+  async getConnectionById(connectionId: number): Promise<UserConnection | undefined> {
+    const [row] = await db.select().from(userConnections).where(eq(userConnections.id, connectionId));
+    return row;
+  }
+
+  async acceptConnection(connectionId: number, receiverId: number): Promise<UserConnection | undefined> {
+    const [row] = await db.update(userConnections)
+      .set({ status: "accepted" })
+      .where(and(eq(userConnections.id, connectionId), eq(userConnections.receiverId, receiverId)))
+      .returning();
+    return row;
+  }
+
+  async declineConnection(connectionId: number, receiverId: number): Promise<void> {
+    await db.update(userConnections)
+      .set({ status: "declined" })
+      .where(and(eq(userConnections.id, connectionId), eq(userConnections.receiverId, receiverId)));
+  }
+
+  async removeConnection(connectionId: number, userId: number): Promise<void> {
+    await db.delete(userConnections)
+      .where(and(
+        eq(userConnections.id, connectionId),
+        or(eq(userConnections.requesterId, userId), eq(userConnections.receiverId, userId))
+      ));
+  }
+
+  async getConnectionPublicStats(targetUserId: number, viewerId: number): Promise<ConnectionPublicStats | null> {
+    // Verify they are actually connected
+    const [conn] = await db.select().from(userConnections)
+      .where(and(
+        eq(userConnections.status, "accepted"),
+        or(
+          and(eq(userConnections.requesterId, viewerId), eq(userConnections.receiverId, targetUserId)),
+          and(eq(userConnections.requesterId, targetUserId), eq(userConnections.receiverId, viewerId))
+        )
+      ));
+    if (!conn) return null;
+
+    return this._buildPublicStats(targetUserId, conn, viewerId);
+  }
+
+  async getAllConnectionStats(viewerId: number): Promise<ConnectionPublicStats[]> {
+    const conns = await db.select().from(userConnections)
+      .where(or(
+        eq(userConnections.requesterId, viewerId),
+        eq(userConnections.receiverId, viewerId)
+      ));
+
+    const results: ConnectionPublicStats[] = [];
+    for (const conn of conns) {
+      const targetId = conn.requesterId === viewerId ? conn.receiverId : conn.requesterId;
+      const stats = await this._buildPublicStats(targetId, conn, viewerId);
+      if (stats) results.push(stats);
+    }
+    return results;
+  }
+
+  private async _buildPublicStats(targetUserId: number, conn: UserConnection, viewerId: number): Promise<ConnectionPublicStats | null> {
+    const user = await this.getUser(targetUserId);
+    if (!user) return null;
+
+    const streak = await this.getUserStreak(targetUserId);
+    const allScores = await this.getDailyScoresByUser(targetUserId);
+
+    const todayStr = new Date().toISOString().split("T")[0];
+    const sevenAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    const thirtyAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+
+    const recentScores = allScores.filter(s => s.date >= sevenAgo && s.value > 0 && !s.isAutoSynced);
+    const thirtyDayScores = allScores.filter(s => s.date >= thirtyAgo && s.value > 0 && !s.isAutoSynced);
+    const todayScores = allScores.filter(s => s.date === todayStr && s.value > 0 && !s.isAutoSynced);
+
+    const sevenDayDays = new Set(recentScores.map(s => s.date)).size;
+    const sevenDayConsistency = Math.round((sevenDayDays / 7) * 100);
+
+    const thirtyDayAvgScore = thirtyDayScores.length > 0
+      ? Math.round(thirtyDayScores.reduce((a, b) => a + b.value, 0) / thirtyDayScores.length)
+      : null;
+
+    const todayAvgScore = todayScores.length > 0
+      ? Math.round(todayScores.reduce((a, b) => a + b.value, 0) / todayScores.length)
+      : null;
+
+    const lastLoggedDate = allScores
+      .filter(s => s.value > 0 && !s.isAutoSynced)
+      .sort((a, b) => b.date.localeCompare(a.date))[0]?.date ?? null;
+
+    return {
+      userId: targetUserId,
+      username: user.username,
+      displayName: user.displayName,
+      currentStreak: streak?.currentStreak ?? 0,
+      longestStreak: streak?.longestStreak ?? 0,
+      sevenDayConsistency,
+      thirtyDayAvgScore,
+      todayAvgScore,
+      lastLoggedDate,
+      connectionId: conn.id,
+      status: conn.status,
+      isRequester: conn.requesterId === viewerId,
+    };
   }
 
   async deleteUser(userId: number): Promise<void> {

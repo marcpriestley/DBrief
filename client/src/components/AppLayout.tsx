@@ -1,7 +1,7 @@
 import { useLocation, Link } from "wouter";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { CalendarDays, TrendingUp, Settings, LogOut, Smile, ChevronLeft } from "lucide-react";
+import { CalendarDays, TrendingUp, Settings, LogOut, Smile, ChevronLeft, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import StreakDisplay from "@/components/StreakDisplay";
 import SettingsModal from "@/components/SettingsModal";
@@ -226,6 +226,7 @@ function AppLayoutInner({ children }: AppLayoutProps) {
   const tabs = [
     { href: "/calendar", label: "History", icon: CalendarDays },
     { href: "/trends", label: "Analytics", icon: TrendingUp },
+    { href: "/squad", label: "Squad", icon: Users },
   ];
 
   const isActive = (href: string) => location === href;

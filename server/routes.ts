@@ -1742,6 +1742,134 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
     }
   });
 
+  // ── User Connections (Squad / Accountability Pairs) ──────────────────────────
+
+  app.get("/api/users/search", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const q = String(req.query.q ?? "").trim();
+      if (q.length < 2) return res.json([]);
+      const results = await storage.searchUsers(q, userId);
+      // Never expose password field
+      res.json(results.map(u => ({ id: u.id, username: u.username, displayName: u.displayName })));
+    } catch (error) {
+      res.status(500).json({ message: "Search failed" });
+    }
+  });
+
+  app.get("/api/connections", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const connections = await storage.getConnectionsByUser(userId);
+      res.json(connections);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch connections" });
+    }
+  });
+
+  app.get("/api/connections/stats", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const stats = await storage.getAllConnectionStats(userId);
+      res.json(stats);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch connection stats" });
+    }
+  });
+
+  app.post("/api/connections/request", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { username } = req.body;
+      if (!username) return res.status(400).json({ message: "Username is required" });
+
+      const target = await storage.getUserByUsername(username);
+      if (!target) return res.status(404).json({ message: "User not found" });
+      if (target.id === userId) return res.status(400).json({ message: "You can't connect with yourself" });
+
+      // Check if connection already exists
+      const existing = await storage.getConnectionsByUser(userId);
+      const already = existing.find(c =>
+        (c.requesterId === userId && c.receiverId === target.id) ||
+        (c.requesterId === target.id && c.receiverId === userId)
+      );
+      if (already) {
+        const msg = already.status === "accepted" ? "Already connected" :
+                    already.status === "pending" ? "Request already sent" : "Request previously declined";
+        return res.status(409).json({ message: msg, status: already.status });
+      }
+
+      const connection = await storage.sendConnectionRequest(userId, target.id);
+
+      // Notify the receiver if they have push subscriptions
+      try {
+        const subs = await storage.getPushSubscriptions(target.id);
+        const myUser = await storage.getUser(userId);
+        const senderName = myUser?.displayName || myUser?.username || "Someone";
+        const payload = {
+          title: "New Connection Request",
+          body: `${senderName} wants to connect with you on DBrief`,
+          url: "/squad",
+          tag: `conn-request-${connection.id}`,
+        };
+        const apnsSub = subs.filter(s => !!s.apnsToken).pop();
+        if (apnsSub?.apnsToken) {
+          await sendApnsNotification(apnsSub.apnsToken, payload);
+        } else {
+          const webSub = subs.find(s => s.p256dh && s.auth);
+          if (webSub) {
+            await sendPushNotification({ endpoint: webSub.endpoint, keys: { p256dh: webSub.p256dh!, auth: webSub.auth! } }, payload);
+          }
+        }
+      } catch (_) { /* notification failure is non-critical */ }
+
+      res.json(connection);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to send connection request" });
+    }
+  });
+
+  app.post("/api/connections/:id/accept", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const connectionId = Number(req.params.id);
+      const conn = await storage.getConnectionById(connectionId);
+      if (!conn || conn.receiverId !== userId) {
+        return res.status(403).json({ message: "Not authorised to accept this request" });
+      }
+      const updated = await storage.acceptConnection(connectionId, userId);
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to accept connection" });
+    }
+  });
+
+  app.post("/api/connections/:id/decline", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const connectionId = Number(req.params.id);
+      const conn = await storage.getConnectionById(connectionId);
+      if (!conn || conn.receiverId !== userId) {
+        return res.status(403).json({ message: "Not authorised" });
+      }
+      await storage.declineConnection(connectionId, userId);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to decline connection" });
+    }
+  });
+
+  app.delete("/api/connections/:id", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const connectionId = Number(req.params.id);
+      await storage.removeConnection(connectionId, userId);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to remove connection" });
+    }
+  });
+
   registerChatRoutes(app);
   registerDebriefRoutes(app);
   registerRealtimeVoiceWS(httpServer);

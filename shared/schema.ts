@@ -432,4 +432,37 @@ export const serverConfig = pgTable("server_config", {
   value: text("value").notNull(),
 });
 
+// ── User Connections (accountability pairs / squad) ─────────────────────────
+export const userConnections = pgTable("user_connections", {
+  id: serial("id").primaryKey(),
+  requesterId: integer("requester_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  receiverId: integer("receiver_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  // pending | accepted | declined
+  status: text("status").notNull().default("pending"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertUserConnectionSchema = createInsertSchema(userConnections).omit({
+  id: true,
+  createdAt: true,
+});
+export type UserConnection = typeof userConnections.$inferSelect;
+export type InsertUserConnection = z.infer<typeof insertUserConnectionSchema>;
+
+// Public stats returned when viewing a connection's profile
+export type ConnectionPublicStats = {
+  userId: number;
+  username: string;
+  displayName: string | null;
+  currentStreak: number;
+  longestStreak: number;
+  sevenDayConsistency: number; // 0-100 %
+  thirtyDayAvgScore: number | null;
+  todayAvgScore: number | null;
+  lastLoggedDate: string | null;
+  connectionId: number;
+  status: string;
+  isRequester: boolean;
+};
+
 export * from "./models/chat";
