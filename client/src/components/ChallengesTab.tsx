@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus, Flame, Zap, Trophy, Calendar, Users, ChevronRight,
   Check, X, Trash2, Crown, Medal, Lock, Globe,
-  Target, Activity, CheckCircle2, Clock, EyeOff, Eye,
+  Target, Activity, CheckCircle2, Clock, EyeOff, Eye, Pencil,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -398,13 +398,22 @@ function LogEntrySheet({
 }
 
 // ── Challenge card ────────────────────────────────────────────────────────────
-function ChallengeCard({ challenge, viewerIsCreator }: { challenge: ChallengeWithProgress; viewerIsCreator: boolean }) {
+function ChallengeCard({
+  challenge,
+  viewerIsCreator,
+  connections = [],
+}: {
+  challenge: ChallengeWithProgress;
+  viewerIsCreator: boolean;
+  connections?: { userId: number; username: string; displayName: string | null }[];
+}) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [showLogSheet, setShowLogSheet] = useState(false);
   const [showJoinSheet, setShowJoinSheet] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showEditSheet, setShowEditSheet] = useState(false);
 
   const active = isActive(challenge);
   const past = isPast(challenge);
@@ -470,12 +479,22 @@ function ChallengeCard({ challenge, viewerIsCreator }: { challenge: ChallengeWit
               )}
             </div>
             {viewerIsCreator && !past && (
-              <button
-                onClick={() => { haptic("light"); setShowDeleteConfirm(v => !v); }}
-                className="p-1.5 text-muted-foreground/40 hover:text-red-400 transition-colors shrink-0"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
+              <div className="flex items-center gap-0.5 shrink-0">
+                <button
+                  onClick={() => { haptic("light"); setShowEditSheet(true); }}
+                  className="p-1.5 text-muted-foreground/40 hover:text-primary transition-colors"
+                  title="Edit challenge"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => { haptic("light"); setShowDeleteConfirm(v => !v); }}
+                  className="p-1.5 text-muted-foreground/40 hover:text-red-400 transition-colors"
+                  title="Delete challenge"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
             )}
           </div>
 
@@ -613,8 +632,170 @@ function ChallengeCard({ challenge, viewerIsCreator }: { challenge: ChallengeWit
             onJoined={() => {}}
           />
         )}
+        {showEditSheet && (
+          <EditChallengeSheet
+            challenge={challenge}
+            connections={connections}
+            onClose={() => setShowEditSheet(false)}
+          />
+        )}
       </AnimatePresence>
     </>
+  );
+}
+
+// ── Edit challenge sheet ───────────────────────────────────────────────────────
+function EditChallengeSheet({
+  challenge,
+  connections,
+  onClose,
+}: {
+  challenge: ChallengeWithProgress;
+  connections: { userId: number; username: string; displayName: string | null }[];
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [title, setTitle] = useState(challenge.title);
+  const [extraDays, setExtraDays] = useState(0);
+  const [inviting, setInviting] = useState<number[]>([]);
+  const [isSending, setIsSending] = useState(false);
+
+  const editMutation = useMutation({
+    mutationFn: (body: { title?: string; endDate?: string }) =>
+      apiRequest("PATCH", `/api/challenges/${challenge.id}`, body).then(r => r.json()),
+    onSuccess: () => {
+      haptic("success");
+      queryClient.invalidateQueries({ queryKey: ["/api/challenges"] });
+    },
+    onError: () => toast({ title: "Failed to save changes", variant: "destructive" }),
+  });
+
+  async function handleSave() {
+    setIsSending(true);
+    try {
+      const newEndDate = extraDays > 0
+        ? new Date(new Date(challenge.endDate).getTime() + extraDays * 86400000)
+            .toISOString().split("T")[0]
+        : undefined;
+      const titleChanged = title.trim() !== challenge.title;
+      if (titleChanged || newEndDate) {
+        await editMutation.mutateAsync({
+          ...(titleChanged ? { title: title.trim() } : {}),
+          ...(newEndDate ? { endDate: newEndDate } : {}),
+        });
+      }
+      // Send invites for newly selected connections
+      if (inviting.length > 0) {
+        const targets = connections.filter(c => inviting.includes(c.userId));
+        await Promise.all(
+          targets.map(t =>
+            apiRequest("POST", `/api/challenges/${challenge.id}/invite`, { username: t.username })
+          )
+        );
+        queryClient.invalidateQueries({ queryKey: ["/api/challenges"] });
+      }
+      toast({ title: "Challenge updated", description: inviting.length > 0 ? "Invites sent." : undefined });
+      onClose();
+    } catch {
+      toast({ title: "Failed to save", variant: "destructive" });
+    } finally {
+      setIsSending(false);
+    }
+  }
+
+  // Show all connections — server deduplicates if they're already in the challenge
+  const uninvited = connections;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 30 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 30 }}
+      className="fixed inset-0 z-50 flex items-end"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-2xl mx-auto bg-background rounded-t-3xl border-t border-x border-border/60 shadow-2xl p-6 pb-10 space-y-5 max-h-[80vh] overflow-y-auto"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-foreground">Edit Challenge</h3>
+          <button onClick={onClose} className="p-1.5 text-muted-foreground"><X className="h-4 w-4" /></button>
+        </div>
+
+        {/* Title */}
+        <div>
+          <label className="text-xs text-muted-foreground block mb-1.5">Challenge name</label>
+          <Input
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            className="bg-card border-border/50"
+            maxLength={80}
+          />
+        </div>
+
+        {/* Extend duration */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-xs text-muted-foreground">Extend end date</label>
+            <span className="text-sm font-bold text-foreground tabular-nums">
+              {extraDays === 0 ? "No change" : `+${extraDays} days`}
+            </span>
+          </div>
+          <Slider
+            value={[extraDays]}
+            onValueChange={([v]) => setExtraDays(v)}
+            min={0} max={14} step={1}
+          />
+          <p className="text-[11px] text-muted-foreground/60 mt-1">
+            Current end: {challenge.endDate}
+            {extraDays > 0 && ` → ${new Date(new Date(challenge.endDate).getTime() + extraDays * 86400000).toISOString().split("T")[0]}`}
+          </p>
+        </div>
+
+        {/* Invite more crew */}
+        {uninvited.length > 0 && (
+          <div>
+            <label className="text-xs text-muted-foreground block mb-2">Invite more crew</label>
+            <div className="space-y-1.5">
+              {uninvited.map(c => {
+                const selected = inviting.includes(c.userId);
+                const name = c.displayName || c.username;
+                return (
+                  <button
+                    key={c.userId}
+                    onClick={() => {
+                      haptic("select");
+                      setInviting(prev =>
+                        prev.includes(c.userId) ? prev.filter(id => id !== c.userId) : [...prev, c.userId]
+                      );
+                    }}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all text-left ${
+                      selected ? "border-primary bg-primary/5" : "border-border/50 bg-card"
+                    }`}
+                  >
+                    <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                      <span className="text-[10px] font-bold text-primary">{name.slice(0, 2).toUpperCase()}</span>
+                    </div>
+                    <span className="text-sm text-foreground flex-1">{name}</span>
+                    {selected && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <button
+          onClick={handleSave}
+          disabled={isSending}
+          className="w-full py-3 rounded-xl bg-primary text-white font-medium text-sm disabled:opacity-50"
+        >
+          {isSending ? "Saving…" : "Save changes"}
+        </button>
+      </div>
+    </motion.div>
   );
 }
 
@@ -1017,7 +1198,7 @@ export default function ChallengesTab({
         <div className="space-y-3">
           <AnimatePresence mode="popLayout">
             {active.map(ch => (
-              <ChallengeCard key={ch.id} challenge={ch} viewerIsCreator={ch.creatorId === viewerUserId} />
+              <ChallengeCard key={ch.id} challenge={ch} viewerIsCreator={ch.creatorId === viewerUserId} connections={acceptedConnections} />
             ))}
           </AnimatePresence>
         </div>

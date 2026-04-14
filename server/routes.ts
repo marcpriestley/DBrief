@@ -39,9 +39,11 @@ async function notifyUser(
 ): Promise<void> {
   try {
     const subs = await storage.getPushSubscriptions(userId);
+    console.log(`[Notify] user=${userId} subs=${subs.length} title="${payload.title}"`);
     const apnsSub = subs.filter(s => !!s.apnsToken).pop();
     if (apnsSub?.apnsToken) {
-      await sendApnsNotification(apnsSub.apnsToken, payload);
+      const ok = await sendApnsNotification(apnsSub.apnsToken, payload);
+      console.log(`[Notify] APNs result for user=${userId}: ${ok}`);
     } else {
       const webSub = subs.find(s => s.p256dh && s.auth);
       if (webSub) {
@@ -49,9 +51,14 @@ async function notifyUser(
           { endpoint: webSub.endpoint, keys: { p256dh: webSub.p256dh!, auth: webSub.auth! } },
           payload
         );
+        console.log(`[Notify] Web push sent for user=${userId}`);
+      } else {
+        console.log(`[Notify] No usable subscription for user=${userId}`);
       }
     }
-  } catch { /* notification failure is non-critical */ }
+  } catch (err) {
+    console.error(`[Notify] Error notifying user=${userId}:`, err);
+  }
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -2020,6 +2027,24 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ message: "Failed to delete challenge" });
+    }
+  });
+
+  // Edit a challenge (creator only — title and/or end date)
+  app.patch("/api/challenges/:id", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const challengeId = parseInt(req.params.id);
+      const { title, endDate } = req.body;
+      if (!title && !endDate) return res.status(400).json({ message: "Nothing to update" });
+      const updated = await storage.updateChallenge(challengeId, userId, {
+        ...(title ? { title: String(title).trim() } : {}),
+        ...(endDate ? { endDate: String(endDate) } : {}),
+      });
+      if (!updated) return res.status(403).json({ message: "Not found or not authorised" });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update challenge" });
     }
   });
 

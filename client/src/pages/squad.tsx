@@ -395,7 +395,7 @@ export default function SquadPage() {
         {/* Header */}
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-xl font-bold text-foreground">My Team</h1>
+            <h1 className="text-xl font-bold text-foreground">Team</h1>
             <p className="text-sm text-muted-foreground mt-0.5">Accountability partners</p>
           </div>
         </div>

@@ -140,6 +140,7 @@ export interface IStorage {
   declineChallenge(challengeId: number, userId: number): Promise<void>;
   leaveChallenge(challengeId: number, userId: number): Promise<void>;
   deleteChallenge(challengeId: number, userId: number): Promise<void>;
+  updateChallenge(challengeId: number, userId: number, data: { title?: string; endDate?: string }): Promise<import("@shared/schema").Challenge | undefined>;
   logChallengeEntry(challengeId: number, userId: number, date: string, value: number): Promise<void>;
   getChallengeLeaderboard(challengeId: number, viewerId: number): Promise<import("@shared/schema").ChallengeLeaderboard>;
   inviteToChallenge(challengeId: number, inviteeUserId: number, inviterId: number): Promise<void>;
@@ -1636,6 +1637,23 @@ export class DatabaseStorage implements IStorage {
     const { challenges } = await import("@shared/schema");
     await db.delete(challenges)
       .where(and(eq(challenges.id, challengeId), eq(challenges.creatorId, userId)));
+  }
+
+  async updateChallenge(
+    challengeId: number,
+    userId: number,
+    data: { title?: string; endDate?: string }
+  ): Promise<import("@shared/schema").Challenge | undefined> {
+    const { challenges } = await import("@shared/schema");
+    const ch = await this.getChallengeById(challengeId);
+    if (!ch || ch.creatorId !== userId) return undefined;
+    const updates: Partial<typeof challenges.$inferInsert> = {};
+    if (data.title !== undefined) updates.title = data.title;
+    if (data.endDate !== undefined) updates.endDate = data.endDate as unknown as Date;
+    const [updated] = await db.update(challenges).set(updates)
+      .where(eq(challenges.id, challengeId))
+      .returning();
+    return updated;
   }
 
   async logChallengeEntry(challengeId: number, userId: number, date: string, value: number): Promise<void> {
