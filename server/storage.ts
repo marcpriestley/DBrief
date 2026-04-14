@@ -14,7 +14,7 @@ import {
   type UserConnection, type ConnectionPublicStats,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, asc, desc, gte, lte, gt, or, ne, sql, inArray } from "drizzle-orm";
+import { eq, and, asc, desc, gte, lte, gt, or, ne, sql } from "drizzle-orm";
 import { encrypt, decrypt } from "./encryption";
 
 export interface IStorage {
@@ -1475,23 +1475,21 @@ export class DatabaseStorage implements IStorage {
     pts += scoreDays.size * 10;
 
     // 4. Habit completions in last 30 days: +5 per completion, +20 all-done bonus
-    const userHabits = await db.select({ id: habits.id }).from(habits).where(eq(habits.userId, userId));
-    if (userHabits.length > 0) {
-      const habitIds = userHabits.map(h => h.id);
-      const logs = await db.select().from(habitLogs)
-        .where(and(
-          inArray(habitLogs.habitId, habitIds),
-          gte(habitLogs.date, thirtyAgo),
-          eq(habitLogs.completed, true)
-        ));
-      const habitCountByDate = new Map<string, number>();
-      for (const log of logs) {
-        habitCountByDate.set(log.date, (habitCountByDate.get(log.date) ?? 0) + 1);
-      }
-      for (const [, count] of habitCountByDate) {
-        pts += count * 5;
-        if (count >= userHabits.length) pts += 20;
-      }
+    // (Every habitLog row IS a completion — there is no completed field)
+    const activeHabits = await db.select({ id: habits.id }).from(habits)
+      .where(and(eq(habits.userId, userId), eq(habits.isArchived, false)));
+    const totalActiveHabits = activeHabits.length;
+    const habitLogsRecent = await db.select({ date: habitLogs.date, habitId: habitLogs.habitId })
+      .from(habitLogs)
+      .where(and(eq(habitLogs.userId, userId), gte(habitLogs.date, thirtyAgo)));
+    const habitByDate = new Map<string, Set<number>>();
+    for (const log of habitLogsRecent) {
+      if (!habitByDate.has(log.date)) habitByDate.set(log.date, new Set());
+      habitByDate.get(log.date)!.add(log.habitId);
+    }
+    for (const [, habitsDone] of habitByDate) {
+      pts += habitsDone.size * 5;
+      if (totalActiveHabits > 0 && habitsDone.size >= totalActiveHabits) pts += 20;
     }
 
     // 5. Goal completions in last 30 days: +5 per completion, +20 all-done bonus
