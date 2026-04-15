@@ -869,8 +869,13 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     }, VOICE_NOTE_MAX_SECS * 1000);
     // Primary path: MediaRecorder — records continuously with no silence cutoffs.
     // No restart loops, no session limits — just raw audio until submit.
+    // onUnexpectedStop fires only if the mic truly cannot be recovered after an iOS interruption.
     if (voiceNoteRecorder.isSupported) {
-      const started = await voiceNoteRecorder.start();
+      const started = await voiceNoteRecorder.start(() => {
+        // Mic became permanently unavailable mid-session — submit whatever we have
+        toast({ title: "Mic interrupted", description: "Recording stopped. Submitting what was captured.", variant: "default" });
+        submitVoiceNoteRef.current();
+      });
       if (started) {
         setUsingMediaRecorder(true);
         return;
