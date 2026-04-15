@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
+import { storage, todayInTz } from "./storage";
 import { authLimiter, aiLimiter, generalLimiter } from "./rate-limit";
 import { 
   insertJournalEntrySchema, insertDailyScoreSchema, 
@@ -1652,10 +1652,10 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
   async function updateUserStreak(userId: number, entryDate: string) {
     try {
       let streak = await storage.getUserStreak(userId);
-      const today = new Date().toISOString().split('T')[0];
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = yesterday.toISOString().split('T')[0];
+      const user = await storage.getUser(userId);
+      const today = todayInTz(user?.timezone);
+      const yesterdayDate = new Date(new Date(today + "T12:00:00Z").getTime() - 86400000);
+      const yesterdayStr = yesterdayDate.toISOString().split("T")[0];
 
       if (!streak) {
         // Create new streak

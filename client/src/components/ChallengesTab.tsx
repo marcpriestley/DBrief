@@ -28,18 +28,20 @@ function daysTotal(startDate: string, endDate: string): number {
   return Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 86400000) + 1);
 }
 
+// Always use the local calendar date so timezone shifts don't cause off-by-one day errors
+function localToday(): string { return new Date().toLocaleDateString("en-CA"); }
+
 function isActive(ch: ChallengeWithProgress): boolean {
-  const today = new Date().toISOString().split("T")[0];
+  const today = localToday();
   return ch.startDate <= today && ch.endDate >= today;
 }
 
 function isPast(ch: ChallengeWithProgress): boolean {
-  const today = new Date().toISOString().split("T")[0];
-  return ch.endDate < today;
+  return ch.endDate < localToday();
 }
 
 function progressPct(ch: ChallengeWithProgress): number {
-  const today = new Date().toISOString().split("T")[0];
+  const today = localToday();
   if (today < ch.startDate) return 0;
   if (today >= ch.endDate) return 100;
   const elapsed = Math.ceil((new Date(today).getTime() - new Date(ch.startDate).getTime()) / 86400000) + 1;
@@ -338,7 +340,7 @@ function LogEntrySheet({
   const logMutation = useMutation({
     mutationFn: (value: number) =>
       apiRequest("POST", `/api/challenges/${challenge.id}/log`, {
-        date: new Date().toISOString().split("T")[0],
+        date: localToday(),
         value,
       }).then(r => r.json()),
     onSuccess: () => {
@@ -811,7 +813,7 @@ function EditChallengeSheet({
           </div>
           {extraDays > 0 && (
             <p className="text-[11px] text-muted-foreground/60 mt-1.5">
-              New end date: {new Date(new Date(challenge.endDate).getTime() + extraDays * 86400000).toISOString().split("T")[0]}
+              New end date: {new Date(new Date(challenge.endDate).getTime() + extraDays * 86400000).toLocaleDateString("en-CA")}
             </p>
           )}
         </div>
@@ -935,8 +937,8 @@ function CreateChallengeSheet({
   });
 
   function handleCreate() {
-    const today = new Date().toISOString().split("T")[0];
-    const end = new Date(Date.now() + durationDays * 86400000).toISOString().split("T")[0];
+    const today = localToday();
+    const end = new Date(new Date(today + "T12:00:00").getTime() + durationDays * 86400000).toLocaleDateString("en-CA");
     createMutation.mutate({
       title: title.trim() || (type === "habit" ? habitName : `${metricName} challenge`),
       type,

@@ -112,7 +112,7 @@ function AppLayoutInner({ children }: AppLayoutProps) {
     (c: any) => c.myStats && !c.myStats.loggedToday
   );
 
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = new Date().toLocaleDateString("en-CA");
   const { data: todayMoods = [], isLoading: moodsLoading } = useQuery<any[]>({
     queryKey: ["/api/mood-checkins", todayStr],
     queryFn: async () => {

@@ -1647,6 +1647,10 @@ export class DatabaseStorage implements IStorage {
       .where(eq(challengeParticipants.userId, userId));
     if (participations.length === 0) return [];
 
+    // Use the user's stored timezone so "today" respects their local clock
+    const userRecord = await this.getUser(userId);
+    const today = todayInTz(userRecord?.timezone);
+
     const challengeIds = participations.map(p => p.challengeId);
     const allChallenges = await db.select().from(challenges)
       .where(sql`${challenges.id} = ANY(ARRAY[${sql.join(challengeIds.map(id => sql`${id}`), sql`, `)}]::int[])`);
@@ -1663,7 +1667,6 @@ export class DatabaseStorage implements IStorage {
           eq(challengeLogs.challengeId, ch.id),
           eq(challengeLogs.userId, userId),
         ));
-      const today = new Date().toISOString().split("T")[0];
       const loggedToday = myLogs.some(l => l.date === today);
       const daysLogged = new Set(myLogs.map(l => l.date)).size;
       const avgScore = ch.type === "score" && myLogs.length > 0
@@ -1778,7 +1781,8 @@ export class DatabaseStorage implements IStorage {
 
     const participants = await db.select().from(challengeParticipants)
       .where(and(eq(challengeParticipants.challengeId, challengeId), eq(challengeParticipants.status, "joined")));
-    const today = new Date().toISOString().split("T")[0];
+    const viewerRecord = await this.getUser(viewerId);
+    const today = todayInTz(viewerRecord?.timezone);
 
     const raw: Array<{
       userId: number; username: string; displayName: string | null;
@@ -1926,11 +1930,32 @@ export class DatabaseStorage implements IStorage {
   }
 }
 
+// ─── Timezone-aware "today" helper ──────────────────────────────────────────
+// Returns YYYY-MM-DD in the given IANA timezone (e.g. "America/New_York").
+// Falls back to UTC when the timezone is null/invalid.
+export function todayInTz(tz: string | null | undefined): string {
+  try {
+    if (tz) {
+      return new Intl.DateTimeFormat("en-CA", {
+        timeZone: tz,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date());
+    }
+  } catch {}
+  return new Date().toISOString().split("T")[0];
+}
+
 // ─── Streak computation helper ──────────────────────────────────────────────
 function computeHabitStreak(sortedDatesDesc: string[]): { currentStreak: number; longestStreak: number; lastDate: string | null } {
   if (sortedDatesDesc.length === 0) return { currentStreak: 0, longestStreak: 0, lastDate: null };
   
   const sorted = [...sortedDatesDesc].sort((a, b) => b.localeCompare(a));
+  // Use the most recent log date as the reference: if the latest log IS today or yesterday
+  // (in UTC) we treat the streak as active.  We deliberately keep UTC here because
+  // habit logs are always written with the date the client sends; using UTC avoids
+  // a double-correction if the calling route already applied a tz offset.
   const today = new Date().toISOString().split('T')[0];
   const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
   
