@@ -14,7 +14,7 @@ type HabitWithStatus = Habit & { todayCompleted: boolean; last7Days: boolean[] }
 
 // ─── Emoji + category options ────────────────────────────────────────────────
 
-const EMOJIS = ["⭐", "🏃", "💧", "📚", "🧘", "💪", "🥗", "😴", "✍️", "🎯", "🧠", "🎵", "🚴", "🌅", "💊", "🫁", "❤️", "🌿"];
+const EMOJIS = ["⭐", "🏃", "💧", "📚", "🧘", "💪", "🥗", "😴", "✍️", "🎯", "🧠", "🎵", "🚴", "🌅", "💊", "🫁", "❤️", "🌿", "🐶"];
 
 const CATEGORIES = [
   { value: "health", label: "Health" },
