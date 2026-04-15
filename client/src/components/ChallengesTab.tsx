@@ -1292,6 +1292,8 @@ export default function ChallengesTab({
   const [showCreate, setShowCreate] = useState(false);
   const { data: challenges = [], isLoading } = useQuery<ChallengeWithProgress[]>({
     queryKey: ["/api/challenges"],
+    queryFn: () =>
+      fetch(`/api/challenges?date=${localToday()}`, { credentials: "include" }).then(r => r.json()),
     staleTime: 30000,
   });
 

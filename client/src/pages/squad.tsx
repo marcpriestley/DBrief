@@ -322,6 +322,15 @@ export default function SquadPage() {
     staleTime: Infinity,
   });
 
+  // Use the cached challenge list (already fetched by AppLayout) to drive the pulse dot.
+  const { data: challengeList = [] } = useQuery<any[]>({
+    queryKey: ["/api/challenges"],
+    staleTime: 30000,
+  });
+  const hasUnloggedChallenge = challengeList.some(
+    (c: any) => c.myStats && !c.myStats.loggedToday && c.myStatus === "joined"
+  );
+
   const { data: stats = [], isLoading: statsLoading } = useQuery<ConnectionPublicStats[]>({
     queryKey: ["/api/connections/stats"],
     staleTime: 30000,
@@ -403,25 +412,35 @@ export default function SquadPage() {
             { key: "crew" as const, label: "Crew", icon: <Users className="h-3.5 w-3.5" /> },
             { key: "challenges" as const, label: "Challenges", icon: <Swords className="h-3.5 w-3.5" /> },
             { key: "board" as const, label: "Board", icon: <Trophy className="h-3.5 w-3.5" /> },
-          ].map(tab => (
-            <button
-              key={tab.key}
-              onClick={() => { haptic("select"); setActiveTab(tab.key); }}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium transition-all ${
-                activeTab === tab.key
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {tab.icon}
-              {tab.label}
-              {tab.key === "crew" && incoming.length > 0 && (
-                <span className="ml-0.5 w-4 h-4 bg-primary rounded-full text-[10px] font-bold text-white flex items-center justify-center">
-                  {incoming.length}
-                </span>
-              )}
-            </button>
-          ))}
+          ].map(tab => {
+            const showCrewBadge = tab.key === "crew" && incoming.length > 0;
+            const showChallengePulse = tab.key === "challenges" && hasUnloggedChallenge && activeTab !== "challenges";
+            return (
+              <button
+                key={tab.key}
+                onClick={() => { haptic("select"); setActiveTab(tab.key); }}
+                className={`relative flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium transition-all ${
+                  activeTab === tab.key
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {showChallengePulse && (
+                  <span className="absolute top-1 right-2 flex h-2 w-2 pointer-events-none">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-70" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
+                  </span>
+                )}
+                {tab.icon}
+                {tab.label}
+                {showCrewBadge && (
+                  <span className="ml-0.5 w-4 h-4 bg-primary rounded-full text-[10px] font-bold text-white flex items-center justify-center">
+                    {incoming.length}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {/* ── CREW TAB ──────────────────────────────────────────────────────── */}

@@ -1917,7 +1917,10 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
   app.get("/api/challenges", async (req, res) => {
     try {
       const userId = getUserId(req);
-      const challenges = await storage.getChallengesForUser(userId);
+      // Client passes its local date as ?date=YYYY-MM-DD so "today" is always correct
+      // regardless of the stored timezone (handles travel / timezone changes immediately).
+      const clientDate = typeof req.query.date === "string" ? req.query.date : undefined;
+      const challenges = await storage.getChallengesForUser(userId, clientDate);
       res.json(challenges);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch challenges" });

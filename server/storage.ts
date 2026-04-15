@@ -134,7 +134,7 @@ export interface IStorage {
 
   // Challenge methods
   createChallenge(creatorId: number, data: import("@shared/schema").InsertChallenge, creatorCommitment?: string, creatorReminderTime?: string): Promise<import("@shared/schema").Challenge>;
-  getChallengesForUser(userId: number): Promise<import("@shared/schema").ChallengeWithProgress[]>;
+  getChallengesForUser(userId: number, today?: string): Promise<import("@shared/schema").ChallengeWithProgress[]>;
   getChallengeById(challengeId: number): Promise<import("@shared/schema").Challenge | undefined>;
   joinChallenge(challengeId: number, userId: number, commitment?: string, reminderTime?: string): Promise<void>;
   getChallengesNeedingReminders(dateStr: string): Promise<Array<{ userId: number; challengeId: number; challengeTitle: string; reminderTime: string; subscriptions: any[]; timezone: string | null; notificationsEnabled: boolean }>>;
@@ -1641,15 +1641,15 @@ export class DatabaseStorage implements IStorage {
     return ch;
   }
 
-  async getChallengesForUser(userId: number): Promise<import("@shared/schema").ChallengeWithProgress[]> {
+  async getChallengesForUser(userId: number, clientToday?: string): Promise<import("@shared/schema").ChallengeWithProgress[]> {
     const { challenges, challengeParticipants, challengeLogs } = await import("@shared/schema");
     const participations = await db.select().from(challengeParticipants)
       .where(eq(challengeParticipants.userId, userId));
     if (participations.length === 0) return [];
 
-    // Use the user's stored timezone so "today" respects their local clock
+    // Prefer the client-supplied local date (most accurate); fall back to user's stored timezone.
     const userRecord = await this.getUser(userId);
-    const today = todayInTz(userRecord?.timezone);
+    const today = clientToday ?? todayInTz(userRecord?.timezone);
 
     const challengeIds = participations.map(p => p.challengeId);
     const allChallenges = await db.select().from(challenges)

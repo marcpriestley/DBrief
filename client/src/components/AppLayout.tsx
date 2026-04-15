@@ -106,6 +106,8 @@ function AppLayoutInner({ children }: AppLayoutProps) {
 
   const { data: challenges = [] } = useQuery<any[]>({
     queryKey: ["/api/challenges"],
+    queryFn: () =>
+      fetch(`/api/challenges?date=${new Date().toLocaleDateString("en-CA")}`, { credentials: "include" }).then(r => r.json()),
     refetchInterval: 120000,
   });
   const hasUnloggedChallenge = challenges.some(
@@ -141,10 +143,9 @@ function AppLayoutInner({ children }: AppLayoutProps) {
   }, [moodsLoading, hasMoodForPeriod, currentPeriod]);
 
   // Silently keep the server's timezone record up-to-date on every app launch.
-  // The notification scheduler needs a valid timezone to send mood/daily reminders.
+  // No sessionStorage guard — we always sync so a timezone change (e.g. travel) is
+  // picked up immediately on the next load.
   useEffect(() => {
-    if (sessionStorage.getItem("tz_synced")) return;
-    sessionStorage.setItem("tz_synced", "1");
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
     fetch("/api/user/timezone", {
       method: "POST",
