@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { haptic } from "@/lib/haptics";
 import { motion, AnimatePresence } from "framer-motion";
@@ -41,67 +41,74 @@ function getTimeOfDayLabel(): string {
   return "evening";
 }
 
-// Static style — never regenerated. Track fill + thumb colour come from CSS vars
-// set directly on the slider wrapper via ref, avoiding per-frame style recalculation.
-const SLIDER_STYLE = `
-  .mood-slider {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 100%;
-    height: 48px;
-    background: transparent;
-    cursor: pointer;
-    touch-action: none;
-  }
-  .mood-slider::-webkit-slider-runnable-track {
-    height: 8px;
-    border-radius: 9999px;
-    background: linear-gradient(
-      to right,
-      var(--mood-color) var(--mood-pct),
-      hsl(var(--border)) var(--mood-pct)
-    );
-  }
-  .mood-slider::-moz-range-track {
-    height: 8px;
-    border-radius: 9999px;
-    background: hsl(var(--border));
-  }
-  .mood-slider::-moz-range-progress {
-    height: 8px;
-    border-radius: 9999px;
-    background: var(--mood-color);
-  }
-  .mood-slider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    background: var(--mood-color);
-    border: 2px solid white;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
-    margin-top: -10px;
-    transition: transform 0.1s ease;
-  }
-  .mood-slider:active::-webkit-slider-thumb { transform: scale(1.15); }
-  .mood-slider::-moz-range-thumb {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    background: var(--mood-color);
-    border: 2px solid white;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
-    cursor: pointer;
-  }
-  .mood-slider:focus { outline: none; }
-`;
+// Composite slider: a visible track+fill+thumb built from divs with the native
+// <input type="range"> layered transparently on top. Avoids all style-tag and
+// CSS-var pitfalls — works reliably in every browser and in Capacitor WebViews.
+function MoodSlider({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  const color = getMoodColor(value);
+  const thumbSize = 28;
+
+  return (
+    <div className="relative flex items-center h-12 select-none">
+      {/* Track background */}
+      <div className="absolute inset-x-0 h-2 rounded-full bg-muted">
+        {/* Colored fill */}
+        <div
+          className="h-full rounded-full"
+          style={{ width: `${value}%`, background: color, transition: "width 0s" }}
+        />
+      </div>
+
+      {/* Thumb */}
+      <div
+        style={{
+          position: "absolute",
+          left: `calc(${thumbSize / 2}px + ${value / 100} * (100% - ${thumbSize}px))`,
+          width: thumbSize,
+          height: thumbSize,
+          borderRadius: "50%",
+          background: color,
+          border: "2.5px solid white",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.28)",
+          pointerEvents: "none",
+          transform: "translateX(-50%)",
+          transition: "left 0s, background 0.15s",
+        }}
+      />
+
+      {/* Native input — invisible but handles all interaction */}
+      <input
+        type="range"
+        min={0}
+        max={100}
+        step={1}
+        value={value}
+        onChange={(e) => onChange(parseInt(e.target.value, 10))}
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          opacity: 0,
+          cursor: "pointer",
+          margin: 0,
+          touchAction: "none",
+        }}
+      />
+    </div>
+  );
+}
 
 export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProps) {
   const [moodValue, setMoodValue] = useState(50);
   const seededRef = useRef(false);
   const lastHapticVal = useRef<number | null>(null);
-  const sliderWrapRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -154,26 +161,8 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
     }
   }, [open]);
 
-  // Directly update CSS vars on the wrapper element — no style tag recreation, no forced layout.
-  const syncCssVars = useCallback((val: number) => {
-    const el = sliderWrapRef.current;
-    if (!el) return;
-    const color = getMoodColor(val);
-    el.style.setProperty("--mood-color", color);
-    el.style.setProperty("--mood-pct", `${val}%`);
-  }, []);
-
-  // Sync CSS vars before paint whenever the modal opens or the value changes.
-  // useLayoutEffect ensures vars are set synchronously after the ref div mounts,
-  // preventing the transparent-slider flash caused by useEffect running post-paint.
-  useLayoutEffect(() => {
-    if (open) syncCssVars(moodValue);
-  }, [open, moodValue, syncCssVars]);
-
-  function handleSliderChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const val = parseInt(e.target.value, 10);
-    syncCssVars(val);   // update track/thumb instantly via CSS vars — no layout stall
-    setMoodValue(val);  // update displayed number + emoji (less frequent re-render cost)
+  function handleSliderChange(val: number) {
+    setMoodValue(val);
     if (lastHapticVal.current === null || Math.abs(val - lastHapticVal.current) >= 5) {
       haptic("light");
       lastHapticVal.current = val;
@@ -212,7 +201,7 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
             </div>
 
             <div className="py-2 space-y-6">
-              {/* Emoji display — only animates when label category changes */}
+              {/* Emoji display */}
               <div className="text-center">
                 <AnimatePresence mode="wait">
                   <motion.div
@@ -232,19 +221,9 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
                 <p className="text-2xl font-bold text-foreground mt-0.5 tabular-nums">{moodValue}</p>
               </div>
 
-              {/* Range slider — track fill/thumb colour driven by CSS vars on the wrapper, */}
-              {/* updated directly via DOM ref to avoid per-frame style tag recreation.      */}
-              <div className="px-2" ref={sliderWrapRef}>
-                <style dangerouslySetInnerHTML={{ __html: SLIDER_STYLE }} />
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  step={1}
-                  value={moodValue}
-                  onChange={handleSliderChange}
-                  className="mood-slider"
-                />
+              {/* Composite slider */}
+              <div className="px-2">
+                <MoodSlider value={moodValue} onChange={handleSliderChange} />
                 <div className="flex justify-between mt-1 text-[10px] text-muted-foreground">
                   <span>0</span>
                   <span>50</span>

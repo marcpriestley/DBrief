@@ -975,7 +975,8 @@ function CreateChallengeSheet({
     onSuccess: async (ch) => {
       if (visibility === "invite_only" && selectedInvitees.length > 0) {
         const targets = connections.filter(c => selectedInvitees.includes(c.userId));
-        await Promise.all(
+        // Use allSettled so a single failed invite doesn't abort the rest of the flow
+        await Promise.allSettled(
           targets.map(t =>
             apiRequest("POST", `/api/challenges/${ch.id}/invite`, { username: t.username }).then(r => r.json())
           )
