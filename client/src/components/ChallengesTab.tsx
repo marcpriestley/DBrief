@@ -966,9 +966,7 @@ function CreateChallengeSheet({
   const [durationDays, setDurationDays] = useState(7);
   const [frequency, setFrequency] = useState<"daily" | "every_other_day" | "weekly">("daily");
   const [visibility, setVisibility] = useState<"invite_only" | "open">("invite_only");
-  // Pre-select everyone in the crew so invites go out by default.
-  // The user can deselect specific people if needed.
-  const [selectedInvitees, setSelectedInvitees] = useState<number[]>(() => connections.map(c => c.userId));
+  const [selectedInvitees, setSelectedInvitees] = useState<number[]>([]);
   const [reminderEnabled, setReminderEnabled] = useState(false);
   const [reminderTime, setReminderTime] = useState("21:00");
 
