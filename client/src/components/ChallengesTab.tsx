@@ -256,7 +256,7 @@ function JoinWithCommitmentSheet({
             <Input
               value={commitment}
               onChange={e => setCommitment(e.target.value)}
-              placeholder={`e.g. ${challenge.habitName ? `20 ${challenge.habitName.toLowerCase()}` : "10 reps, 20 mins…"}`}
+              placeholder="e.g. 20 mins each session, once every morning, 3× per week…"
               className="bg-card border-border/50"
               maxLength={80}
             />
@@ -1119,7 +1119,7 @@ function CreateChallengeSheet({
                     <Input
                       value={creatorCommitment}
                       onChange={e => setCreatorCommitment(e.target.value)}
-                      placeholder={habitName ? `e.g. 30 mins of ${habitName.toLowerCase()}` : "e.g. 100 pushups, 20 mins…"}
+                      placeholder="e.g. 5 mins daily, once every morning, 3× per week…"
                       className="bg-card border-border/50"
                       maxLength={80}
                     />

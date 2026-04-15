@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useDateContext } from "@/contexts/DateContext";
@@ -589,6 +589,30 @@ function SetupModal({
   const isLast = step === steps.length - 1;
   const canNext = step === 0 ? setup.name.trim().length > 0 : true;
 
+  const [aiSentence, setAiSentence] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const name = setup.name.trim();
+    const anchor = setup.anchorHabit.trim();
+    if (!name || !anchor) { setAiSentence(null); setAiLoading(false); return; }
+    setAiLoading(true);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const res = await apiRequest("POST", "/api/habits/suggest-stacking", { anchor, habitName: name });
+        const data = await res.json();
+        if (data.sentence) setAiSentence(data.sentence);
+      } catch {
+        setAiSentence(null);
+      } finally {
+        setAiLoading(false);
+      }
+    }, 700);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [setup.name, setup.anchorHabit]);
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -640,7 +664,7 @@ function SetupModal({
               {step === 0 && <Step1 setup={setup} setSetup={setSetup} />}
               {step === 1 && <Step2 setup={setup} setSetup={setSetup} />}
               {step === 2 && <Step3 setup={setup} setSetup={setSetup} />}
-              {step === 3 && <Step4 setup={setup} setSetup={setSetup} />}
+              {step === 3 && <Step4 setup={setup} setSetup={setSetup} aiSentence={aiSentence} />}
             </motion.div>
           </AnimatePresence>
 
@@ -648,9 +672,13 @@ function SetupModal({
           {step >= 2 && setup.anchorHabit && (
             <div className="mt-3 bg-primary/10 rounded-xl px-3 py-2.5 border border-primary/20">
               <p className="text-xs text-muted-foreground mb-0.5">Your implementation intention:</p>
-              <p className="text-xs font-medium text-foreground">
-                "{stackingSentence(setup.anchorHabit, setup.name || "…")}"
-              </p>
+              {aiLoading ? (
+                <div className="h-3.5 bg-primary/25 rounded-full animate-pulse w-4/5 mt-1" />
+              ) : (
+                <p className="text-xs font-medium text-foreground">
+                  "{aiSentence || stackingSentence(setup.anchorHabit, setup.name || "…")}"
+                </p>
+              )}
             </div>
           )}
 
@@ -886,10 +914,11 @@ const INTERVAL_OPTIONS = [
   { value: 240, label: "Every 4 hours" },
 ];
 
-function Step4({ setup, setSetup }: { setup: SetupState; setSetup: (s: SetupState) => void }) {
-  const previewBody = setup.anchorHabit
+function Step4({ setup, setSetup, aiSentence }: { setup: SetupState; setSetup: (s: SetupState) => void; aiSentence?: string | null }) {
+  const staticBody = setup.anchorHabit
     ? `After ${normalizeAnchor(setup.anchorHabit)}, time to ${normalizeHabitName(setup.name || "…")}.`
     : `Time to ${normalizeHabitName(setup.name || "…")}.`;
+  const previewBody = aiSentence || staticBody;
 
   return (
     <div className="space-y-4">

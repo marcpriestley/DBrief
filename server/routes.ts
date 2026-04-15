@@ -1693,6 +1693,36 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
 
   // ─── Habit routes ─────────────────────────────────────────────────────────
 
+  app.post("/api/habits/suggest-stacking", async (req, res) => {
+    const userId = (req.session as any)?.userId;
+    if (!userId) return res.status(401).json({ message: "Not authenticated" });
+    const { anchor, habitName } = req.body;
+    if (!habitName?.trim()) return res.status(400).json({ message: "Habit name required" });
+    const userPrompt = anchor?.trim()
+      ? `Write one implementation intention sentence for the habit "${habitName}" anchored after "${anchor}".
+Format: "After ${anchor}, I will [verb phrase]."
+Rules:
+- Use the anchor phrase "${anchor}" exactly as written
+- Convert the habit name to a clean, natural English verb phrase (e.g. "cold shower" → "take a cold shower", "meditation" → "meditate", "100 pushups" → "do 100 pushups", "no phone" → "avoid my phone")
+- Return ONLY the sentence, no quotes, no explanation`
+      : `Write one implementation intention sentence for the habit "${habitName}".
+Format: "I will [verb phrase]."
+Convert the habit to a natural English verb phrase. Return ONLY the sentence, no quotes.`;
+    try {
+      const aiResp = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: userPrompt }],
+        max_tokens: 60,
+        temperature: 0.2,
+      });
+      const sentence = aiResp.choices[0]?.message?.content?.trim() ?? "";
+      res.json({ sentence });
+    } catch (err) {
+      console.error("suggest-stacking error:", err);
+      res.status(500).json({ message: "Generation failed" });
+    }
+  });
+
   app.get("/api/habits", async (req, res) => {
     const userId = (req.session as any)?.userId;
     if (!userId) return res.status(401).json({ message: "Not authenticated" });
