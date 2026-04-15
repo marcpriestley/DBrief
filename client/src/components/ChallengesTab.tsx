@@ -475,7 +475,11 @@ function ChallengeCard({
   // Pending invitees — only fetched when viewer is the creator and challenge is still active
   const { data: pendingInvites = [] } = useQuery<{ userId: number; username: string; displayName: string | null }[]>({
     queryKey: ["/api/challenges", challenge.id, "invited"],
-    queryFn: () => fetch(`/api/challenges/${challenge.id}/invited`, { credentials: "include" }).then(r => r.json()),
+    queryFn: async () => {
+      const res = await fetch(`/api/challenges/${challenge.id}/invited`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
     enabled: viewerIsCreator && !past,
     staleTime: 30000,
   });

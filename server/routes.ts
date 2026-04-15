@@ -1931,7 +1931,7 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
   app.post("/api/challenges", async (req, res) => {
     try {
       const userId = getUserId(req);
-      const { title, description, type, habitName, habitEmoji, metricName, visibility, startDate, endDate } = req.body;
+      const { title, description, type, habitName, habitEmoji, metricName, visibility, startDate, endDate, frequency } = req.body;
       if (!title || !type || !startDate || !endDate) {
         return res.status(400).json({ message: "title, type, startDate, endDate are required" });
       }
@@ -1954,6 +1954,7 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
         habitEmoji: habitEmoji ?? null,
         metricName: metricName ?? null,
         visibility: visibility ?? "invite_only",
+        frequency: frequency ?? "daily",
         startDate,
         endDate,
       }, creatorCommitment ?? undefined, creatorReminderTime ?? undefined);

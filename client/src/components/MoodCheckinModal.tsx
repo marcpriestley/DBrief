@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { haptic } from "@/lib/haptics";
 import { motion, AnimatePresence } from "framer-motion";
@@ -163,8 +163,12 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
     el.style.setProperty("--mood-pct", `${val}%`);
   }, []);
 
-  // Sync on mount and whenever moodValue changes (e.g. seeded from today's check-in)
-  useEffect(() => { syncCssVars(moodValue); }, [moodValue, syncCssVars]);
+  // Sync CSS vars before paint whenever the modal opens or the value changes.
+  // useLayoutEffect ensures vars are set synchronously after the ref div mounts,
+  // preventing the transparent-slider flash caused by useEffect running post-paint.
+  useLayoutEffect(() => {
+    if (open) syncCssVars(moodValue);
+  }, [open, moodValue, syncCssVars]);
 
   function handleSliderChange(e: React.ChangeEvent<HTMLInputElement>) {
     const val = parseInt(e.target.value, 10);
