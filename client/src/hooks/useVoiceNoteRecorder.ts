@@ -38,8 +38,11 @@ export function useVoiceNoteRecorder(): VoiceNoteRecorder {
   const mimeTypeRef = useRef("");
   const isRestartingRef = useRef(false);
   const onUnexpectedStopRef = useRef<(() => void) | undefined>(undefined);
+  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const keepAliveOscRef = useRef<OscillatorNode | null>(null);
 
-  // Forward ref so tryRestart can call attachRecorder without circular deps
+  // tryRestart lives in a ref so heartbeat + track.onended can call it without circular deps
   const tryRestartRef = useRef<() => Promise<void>>(async () => {});
 
   const isSupported =
@@ -48,14 +51,64 @@ export function useVoiceNoteRecorder(): VoiceNoteRecorder {
     typeof MediaRecorder !== "undefined" &&
     !!navigator.mediaDevices?.getUserMedia;
 
+  // ── Keep-alive oscillator ──────────────────────────────────────────────────
+  // Prevents iOS from suspending the WebKit audio session mid-recording.
+  // The gain is set to an inaudible level so it produces no sound.
+  const startKeepAlive = useCallback(() => {
+    try {
+      const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx: AudioContext = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.00001, ctx.currentTime);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      audioCtxRef.current = ctx;
+      keepAliveOscRef.current = osc;
+    } catch { /* not critical — skip silently */ }
+  }, []);
+
+  const stopKeepAlive = useCallback(() => {
+    try { keepAliveOscRef.current?.stop(); } catch { /* ignore */ }
+    keepAliveOscRef.current = null;
+    try { audioCtxRef.current?.close(); } catch { /* ignore */ }
+    audioCtxRef.current = null;
+  }, []);
+
+  // ── Heartbeat ──────────────────────────────────────────────────────────────
+  // Polls every 1.5 s. If the MediaRecorder is no longer in "recording" state
+  // (iOS can kill it silently without firing any event), it triggers a restart.
+  const stopHeartbeat = useCallback(() => {
+    if (heartbeatRef.current) {
+      clearInterval(heartbeatRef.current);
+      heartbeatRef.current = null;
+    }
+  }, []);
+
+  const startHeartbeat = useCallback(() => {
+    stopHeartbeat();
+    heartbeatRef.current = setInterval(() => {
+      if (!isActiveRef.current) { stopHeartbeat(); return; }
+      if (isRestartingRef.current) return;
+      const state = mediaRecorderRef.current?.state;
+      if (state !== "recording") {
+        console.warn("[VoiceNote] heartbeat: recorder state=" + state + " — restarting");
+        tryRestartRef.current();
+      }
+    }, 1500);
+  }, [stopHeartbeat]);
+
+  // ── attachStream ───────────────────────────────────────────────────────────
   const attachStream = useCallback((stream: MediaStream) => {
     streamRef.current = stream;
 
-    // Watch for iOS killing the audio track mid-session
+    // Watch for iOS terminating individual audio tracks
     stream.getAudioTracks().forEach((track) => {
       track.onended = () => {
         if (!isActiveRef.current || isRestartingRef.current) return;
-        console.warn("[VoiceNoteRecorder] audio track ended unexpectedly — restarting");
+        console.warn("[VoiceNote] audio track ended — restarting");
         tryRestartRef.current();
       };
     });
@@ -74,53 +127,42 @@ export function useVoiceNoteRecorder(): VoiceNoteRecorder {
     }
 
     recorder.ondataavailable = (e) => {
-      if (e.data && e.data.size > 0) {
-        chunksRef.current.push(e.data);
-      }
+      if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
     };
 
     recorder.onerror = () => {
       if (!isActiveRef.current || isRestartingRef.current) return;
-      console.warn("[VoiceNoteRecorder] MediaRecorder error — restarting");
+      console.warn("[VoiceNote] MediaRecorder error — restarting");
       tryRestartRef.current();
     };
 
     try {
       recorder.start(500);
     } catch (err) {
-      console.error("[VoiceNoteRecorder] recorder.start() failed:", err);
-      // Will be caught by onerror or the caller
+      console.error("[VoiceNote] recorder.start() threw:", err);
     }
 
     mediaRecorderRef.current = recorder;
   }, []);
 
-  // Defined as a plain async fn stored in a ref to avoid circular useCallback deps
+  // ── tryRestart (ref-stored, no deps) ──────────────────────────────────────
   tryRestartRef.current = async () => {
     if (!isActiveRef.current || isRestartingRef.current) return;
     isRestartingRef.current = true;
+    console.log("[VoiceNote] restarting stream...");
 
-    // Gracefully stop the current recorder (don't flush chunks — keep what we have)
-    const oldRecorder = mediaRecorderRef.current;
-    if (oldRecorder && oldRecorder.state !== "inactive") {
-      try {
-        oldRecorder.onstop = null;
-        oldRecorder.stop();
-      } catch { /* ignore */ }
+    // Flush and discard old recorder — keep accumulated chunks
+    const old = mediaRecorderRef.current;
+    if (old && old.state !== "inactive") {
+      try { old.onstop = null; old.stop(); } catch { /* ignore */ }
     }
     mediaRecorderRef.current = null;
-
-    // Stop old stream tracks
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       });
 
       if (!isActiveRef.current) {
@@ -130,9 +172,13 @@ export function useVoiceNoteRecorder(): VoiceNoteRecorder {
       }
 
       attachStream(stream);
+      console.log("[VoiceNote] restart OK");
     } catch (err) {
-      console.error("[VoiceNoteRecorder] restart failed — mic unavailable:", err);
+      // Mic genuinely unavailable — notify the parent so it can submit/cancel gracefully
+      console.error("[VoiceNote] restart failed:", err);
       isActiveRef.current = false;
+      stopHeartbeat();
+      stopKeepAlive();
       setIsRecording(false);
       onUnexpectedStopRef.current?.();
     } finally {
@@ -140,14 +186,12 @@ export function useVoiceNoteRecorder(): VoiceNoteRecorder {
     }
   };
 
+  // ── Public API ─────────────────────────────────────────────────────────────
+
   const start = useCallback(async (onUnexpectedStop?: () => void): Promise<boolean> => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       });
 
       chunksRef.current = [];
@@ -156,20 +200,24 @@ export function useVoiceNoteRecorder(): VoiceNoteRecorder {
       onUnexpectedStopRef.current = onUnexpectedStop;
 
       attachStream(stream);
+      startHeartbeat();
+      startKeepAlive();
       setIsRecording(true);
       return true;
     } catch (err) {
-      console.error("[VoiceNoteRecorder] start error:", err);
+      console.error("[VoiceNote] start error:", err);
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
       isActiveRef.current = false;
       return false;
     }
-  }, [attachStream]);
+  }, [attachStream, startHeartbeat, startKeepAlive]);
 
   const stop = useCallback((): Promise<VoiceNoteRecorderResult | null> => {
     return new Promise((resolve) => {
       isActiveRef.current = false;
+      stopHeartbeat();
+      stopKeepAlive();
       const recorder = mediaRecorderRef.current;
       setIsRecording(false);
 
@@ -195,30 +243,28 @@ export function useVoiceNoteRecorder(): VoiceNoteRecorder {
       }
 
       recorder.onstop = finish;
-
       try {
         recorder.stop();
       } catch {
         finish();
       }
     });
-  }, []);
+  }, [stopHeartbeat, stopKeepAlive]);
 
   const cancel = useCallback(() => {
     isActiveRef.current = false;
+    stopHeartbeat();
+    stopKeepAlive();
     const recorder = mediaRecorderRef.current;
     setIsRecording(false);
     chunksRef.current = [];
     if (recorder && recorder.state !== "inactive") {
-      try {
-        recorder.onstop = null;
-        recorder.stop();
-      } catch { /* ignore */ }
+      try { recorder.onstop = null; recorder.stop(); } catch { /* ignore */ }
     }
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
     mediaRecorderRef.current = null;
-  }, []);
+  }, [stopHeartbeat, stopKeepAlive]);
 
   return { isRecording, isSupported, start, stop, cancel };
 }
