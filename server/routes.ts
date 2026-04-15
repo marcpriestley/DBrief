@@ -8,6 +8,7 @@ import {
   insertUserMetricSchema, insertAIInsightSchema,
   insertPushSubscriptionSchema, insertHabitSchema,
   infiniteGoals, longTermGoals, challengeParticipants,
+  habits, habitLogs, dailyGoals,
 } from "@shared/schema";
 import OpenAI from "openai";
 import type { HealthData } from "./oura";
@@ -23,7 +24,7 @@ import { registerDebriefRoutes } from "./debrief-routes";
 import { registerRealtimeVoiceWS } from "./realtime-voice";
 import { generateWeeklyReport, generatePerformancePatterns } from "./weekly-report";
 import { db } from "./db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, gte } from "drizzle-orm";
 import { encrypt, decrypt } from "./encryption";
 
 const openai = new OpenAI({ 
@@ -264,10 +265,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/me/points", async (req, res) => {
     try {
       const userId = getUserId(req);
-      const points = await storage.getUserPoints(userId);
-      res.json({ points });
+      const [points, weeklyPoints] = await Promise.all([
+        storage.getUserPoints(userId),
+        storage.getWeeklyActivityPoints(userId),
+      ]);
+      res.json({ points, weeklyPoints });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch points" });
+    }
+  });
+
+  app.get("/api/me/daily-points", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const days = Math.min(365, parseInt((req.query.days as string) || "30"));
+      const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+
+      const [allScores, habitLogsAll, allGoals, activeHabitsAll] = await Promise.all([
+        storage.getDailyScoresByUser(userId),
+        db.select({ date: habitLogs.date, habitId: habitLogs.habitId })
+          .from(habitLogs)
+          .where(and(eq(habitLogs.userId, userId), gte(habitLogs.date, startDate))),
+        db.select().from(dailyGoals)
+          .where(and(eq(dailyGoals.userId, userId), gte(dailyGoals.date, startDate))),
+        db.select({ id: habits.id }).from(habits)
+          .where(and(eq(habits.userId, userId), eq(habits.isArchived, false))),
+      ]);
+
+      const totalActiveHabits = activeHabitsAll.length;
+      const scoreDays = new Set(
+        allScores.filter(s => s.date >= startDate && s.value > 0 && !s.isAutoSynced).map(s => s.date)
+      );
+
+      const habitByDate = new Map<string, Set<number>>();
+      for (const log of habitLogsAll) {
+        if (!habitByDate.has(log.date)) habitByDate.set(log.date, new Set());
+        habitByDate.get(log.date)!.add(log.habitId);
+      }
+
+      const goalsByDate = new Map<string, { total: number; completed: number }>();
+      for (const goal of allGoals) {
+        const entry = goalsByDate.get(goal.date) ?? { total: 0, completed: 0 };
+        goalsByDate.set(goal.date, {
+          total: entry.total + 1,
+          completed: entry.completed + (goal.completed ? 1 : 0),
+        });
+      }
+
+      const result: { date: string; points: number }[] = [];
+      const current = new Date(startDate + "T12:00:00");
+      const end = new Date();
+      end.setHours(23, 59, 59, 999);
+
+      while (current <= end) {
+        const d = current.toISOString().split("T")[0];
+        let pts = 0;
+        if (scoreDays.has(d)) pts += 10;
+        const habitsForDay = habitByDate.get(d);
+        if (habitsForDay) {
+          pts += habitsForDay.size * 5;
+          if (totalActiveHabits > 0 && habitsForDay.size >= totalActiveHabits) pts += 20;
+        }
+        const goalsForDay = goalsByDate.get(d);
+        if (goalsForDay && goalsForDay.completed > 0) {
+          pts += goalsForDay.completed * 5;
+          if (goalsForDay.completed >= goalsForDay.total) pts += 20;
+        }
+        result.push({ date: d, points: pts });
+        current.setDate(current.getDate() + 1);
+      }
+
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch daily points" });
     }
   });
 

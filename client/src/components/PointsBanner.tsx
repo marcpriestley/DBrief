@@ -47,13 +47,14 @@ function PointsCelebration({ onDone }: { onDone: () => void }) {
 }
 
 export default function PointsBanner() {
-  const { data } = useQuery<{ points: number }>({
+  const { data } = useQuery<{ points: number; weeklyPoints: number }>({
     queryKey: ["/api/me/points"],
     staleTime: 30 * 1000,
     refetchInterval: 60 * 1000,
   });
 
   const points = data?.points ?? null;
+  const weeklyPoints = data?.weeklyPoints ?? null;
   const prevPointsRef = useRef<number | null>(null);
   const [celebrating, setCelebrating] = useState(false);
   const [displayPoints, setDisplayPoints] = useState<number | null>(null);
@@ -80,7 +81,6 @@ export default function PointsBanner() {
     if (points > prev) {
       haptic("success");
       setCelebrating(true);
-      // Animate the counter from prev to new
       const diff = points - prev;
       const duration = Math.min(diff * 30, 1200);
       const start = Date.now();
@@ -116,12 +116,24 @@ export default function PointsBanner() {
         <span className="text-base">🏆</span>
         <span className="text-xs font-medium text-muted-foreground">Performance Points</span>
       </div>
-      <motion.span
-        key={displayPoints}
-        className="text-sm font-bold text-primary tabular-nums"
-      >
-        {displayPoints.toLocaleString()} pts
-      </motion.span>
+      <div className="flex items-center gap-3">
+        {weeklyPoints !== null && (
+          <div className="flex flex-col items-end">
+            <span className="text-[10px] font-medium text-muted-foreground leading-none">This week</span>
+            <span className="text-xs font-bold text-foreground tabular-nums">{weeklyPoints.toLocaleString()} pts</span>
+          </div>
+        )}
+        <div className="w-px h-6 bg-border/60" />
+        <div className="flex flex-col items-end">
+          <span className="text-[10px] font-medium text-muted-foreground leading-none">Lifetime</span>
+          <motion.span
+            key={displayPoints}
+            className="text-xs font-bold text-primary tabular-nums"
+          >
+            {displayPoints.toLocaleString()} pts
+          </motion.span>
+        </div>
+      </div>
     </div>
   );
 }

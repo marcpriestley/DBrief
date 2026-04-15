@@ -1,7 +1,7 @@
 import { useLocation, Link } from "wouter";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { CalendarDays, TrendingUp, Settings, LogOut, Smile, ChevronLeft, Users } from "lucide-react";
+import { CalendarDays, TrendingUp, Settings, LogOut, Smile, ChevronLeft, Users, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import StreakDisplay from "@/components/StreakDisplay";
 import SettingsModal from "@/components/SettingsModal";
@@ -232,13 +232,49 @@ function AppLayoutInner({ children }: AppLayoutProps) {
     onSuccess: () => { queryClient.clear(); window.location.href = "/"; },
   });
 
-  const tabs = [
+  const PAGE_ORDER = ["/", "/calendar", "/trends", "/squad"];
+
+  const allTabs = [
+    { href: "/", label: "Home", icon: LayoutDashboard },
     { href: "/calendar", label: "History", icon: CalendarDays },
-    { href: "/trends", label: "Analytics", icon: TrendingUp },
+    { href: "/trends", label: "Trends", icon: TrendingUp },
     { href: "/squad", label: "Team", icon: Users },
   ];
 
-  const isActive = (href: string) => location === href;
+  const isActive = (href: string) =>
+    href === "/" ? (location === "/" || location === "/dashboard") : location === href;
+
+  const touchStart = useRef<{ x: number; y: number; cancelled: boolean } | null>(null);
+  const [, navigate] = useLocation();
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, cancelled: false };
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchStart.current || touchStart.current.cancelled) return;
+    const dy = Math.abs(e.touches[0].clientY - touchStart.current.y);
+    const dx = Math.abs(e.touches[0].clientX - touchStart.current.x);
+    if (dy > 12 && dy > dx) touchStart.current.cancelled = true;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStart.current || touchStart.current.cancelled) return;
+    const dx = e.changedTouches[0].clientX - touchStart.current.x;
+    const dy = e.changedTouches[0].clientY - touchStart.current.y;
+    touchStart.current = null;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy)) return;
+    const currentPath = location === "/dashboard" ? "/" : location;
+    const idx = PAGE_ORDER.indexOf(currentPath);
+    if (idx === -1) return;
+    if (dx < 0 && idx < PAGE_ORDER.length - 1) {
+      haptic("select");
+      navigate(PAGE_ORDER[idx + 1]);
+    } else if (dx > 0 && idx > 0) {
+      haptic("select");
+      navigate(PAGE_ORDER[idx - 1]);
+    }
+  };
 
   return (
     <div className="bg-background" style={{ minHeight: '100dvh' }}>
@@ -316,32 +352,21 @@ function AppLayoutInner({ children }: AppLayoutProps) {
           </div>
 
           <div className="flex gap-0 -mb-px">
-            <Link href="/">
-              <button
-                onClick={() => haptic("select")}
-                className={`flex items-center gap-1.5 px-3.5 py-2.5 text-[11px] font-black uppercase tracking-wider border-b-2 transition-all ${
-                  location === "/" || location === "/dashboard"
-                    ? "border-primary text-foreground"
-                    : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
-                }`}
-              >
-                Dashboard
-              </button>
-            </Link>
-            {tabs.map(({ href, label, icon: Icon }) => {
-              const showChallengePulse = href === "/squad" && hasUnloggedChallenge && !isActive(href);
+            {allTabs.map(({ href, label, icon: Icon }) => {
+              const active = isActive(href);
+              const showChallengePulse = href === "/squad" && hasUnloggedChallenge && !active;
               return (
                 <Link key={href} href={href}>
                   <button
                     onClick={() => haptic("select")}
-                    className={`relative flex items-center gap-1.5 px-3.5 py-2.5 text-[11px] font-black uppercase tracking-wider border-b-2 transition-all ${
-                      isActive(href)
+                    className={`relative flex flex-col items-center justify-center px-3 py-2 border-b-2 transition-all min-w-[52px] ${
+                      active
                         ? "border-primary text-foreground"
                         : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
                     }`}
                   >
                     <span className="relative inline-flex">
-                      <Icon className={`h-3.5 w-3.5 ${isActive(href) ? "text-primary" : ""}`} />
+                      <Icon className={`h-4 w-4 transition-colors ${active ? "text-primary" : ""}`} />
                       {showChallengePulse && (
                         <span className="absolute -top-1 -right-1 flex h-2 w-2">
                           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-70" />
@@ -349,7 +374,11 @@ function AppLayoutInner({ children }: AppLayoutProps) {
                         </span>
                       )}
                     </span>
-                    {label}
+                    {active && (
+                      <span className="text-[9px] font-black uppercase tracking-wider mt-0.5 text-primary leading-none">
+                        {label}
+                      </span>
+                    )}
                   </button>
                 </Link>
               );
@@ -360,7 +389,12 @@ function AppLayoutInner({ children }: AppLayoutProps) {
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-4 py-4 pb-8">
+      <main
+        className="max-w-2xl mx-auto px-4 py-4 pb-8"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
         {children}
       </main>
 

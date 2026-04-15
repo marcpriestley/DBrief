@@ -181,6 +181,17 @@ export default function TrendsEnhanced() {
     queryKey: ["/api/mood-checkins-range", goalsStartDate, goalsEndDate],
     queryFn: () => fetch(`/api/mood-checkins-range?startDate=${goalsStartDate}&endDate=${goalsEndDate}`, { credentials: "include" }).then(r => r.json()),
   });
+
+  const pointsDays = timeRange === "all" ? 365 : parseInt(timeRange);
+  const { data: dailyPointsData = [] } = useQuery<{ date: string; points: number }[]>({
+    queryKey: ["/api/me/daily-points", pointsDays],
+    queryFn: () => fetch(`/api/me/daily-points?days=${pointsDays}`, { credentials: "include" }).then(r => r.json()),
+  });
+
+  const { data: pointsSummary } = useQuery<{ points: number; weeklyPoints: number }>({
+    queryKey: ["/api/me/points"],
+    staleTime: 30 * 1000,
+  });
   
   const allScores = allScoresRaw.filter(score => !score.isAutoSynced);
 
@@ -527,6 +538,53 @@ export default function TrendsEnhanced() {
             )}
           </CardContent>
         </Card>
+
+        {dailyPointsData.length > 0 && (
+          <Card className="border-border/50 shadow-sm">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <div className="text-xs font-black uppercase tracking-wider text-foreground">Activity Points</div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">Habits · Goals · Consistency</div>
+                </div>
+                <div className="flex items-center gap-3 text-right">
+                  {pointsSummary?.weeklyPoints !== undefined && (
+                    <div>
+                      <div className="text-[10px] text-muted-foreground">This week</div>
+                      <div className="text-sm font-black text-foreground tabular-nums">{pointsSummary.weeklyPoints.toLocaleString()}</div>
+                    </div>
+                  )}
+                  {pointsSummary?.points !== undefined && (
+                    <div>
+                      <div className="text-[10px] text-muted-foreground">Lifetime</div>
+                      <div className="text-sm font-black text-primary tabular-nums">{pointsSummary.points.toLocaleString()}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <ResponsiveContainer width="100%" height={120}>
+                <BarChart data={dailyPointsData} barCategoryGap="20%">
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 14%, 92%)" vertical={false} />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: 10, fill: 'hsl(220, 10%, 46%)' }}
+                    tickFormatter={(v) => { const d = new Date(v); return `${d.getMonth()+1}/${d.getDate()}`; }}
+                    axisLine={false}
+                    tickLine={false}
+                    interval={Math.max(0, Math.floor(dailyPointsData.length / 6) - 1)}
+                  />
+                  <YAxis tick={{ fontSize: 10, fill: 'hsl(220, 10%, 46%)' }} axisLine={false} tickLine={false} width={28} />
+                  <Tooltip
+                    labelFormatter={(v) => new Date(v).toLocaleDateString()}
+                    formatter={(v: number) => [`${v} pts`, "Points"]}
+                    contentStyle={{ borderRadius: '8px', border: '1px solid hsl(220, 14%, 90%)', fontSize: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}
+                  />
+                  <Bar dataKey="points" fill="hsl(45, 93%, 47%)" radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        )}
 
         <MoodPatterns checkins={moodCheckins} />
 

@@ -147,6 +147,7 @@ export interface IStorage {
   getChallengeLeaderboard(challengeId: number, viewerId: number): Promise<import("@shared/schema").ChallengeLeaderboard>;
   inviteToChallenge(challengeId: number, inviteeUserId: number, inviterId: number): Promise<void>;
   getUserPoints(userId: number): Promise<number>;
+  getWeeklyActivityPoints(userId: number): Promise<number>;
 }
 
 export class MemStorage implements IStorage {
@@ -593,6 +594,7 @@ export class MemStorage implements IStorage {
   async getAllConnectionStats(_viewerId: number): Promise<ConnectionPublicStats[]> { return []; }
   async getLeaderboard(_viewerId: number, _sortBy: "streak" | "consistency" | "score"): Promise<import("@shared/schema").LeaderboardEntry[]> { return []; }
   async getUserPoints(_userId: number): Promise<number> { return 0; }
+  async getWeeklyActivityPoints(_userId: number): Promise<number> { return 0; }
   // Challenge stubs (MemStorage not used in production)
   async createChallenge(): Promise<any> { throw new Error("Not implemented"); }
   async getChallengesForUser(): Promise<any[]> { return []; }
@@ -1863,6 +1865,50 @@ export class DatabaseStorage implements IStorage {
 
   async getUserPoints(userId: number): Promise<number> {
     return this._getUserPoints(userId);
+  }
+
+  async getWeeklyActivityPoints(userId: number): Promise<number> {
+    const sevenAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    let pts = 0;
+
+    const allScores = await this.getDailyScoresByUser(userId);
+    const scoreDays = new Set(
+      allScores.filter(s => s.date >= sevenAgo && s.value > 0 && !s.isAutoSynced).map(s => s.date)
+    );
+    pts += scoreDays.size * 10;
+
+    const activeHabits = await db.select({ id: habits.id }).from(habits)
+      .where(and(eq(habits.userId, userId), eq(habits.isArchived, false)));
+    const totalActiveHabits = activeHabits.length;
+    const habitLogsRecent = await db.select({ date: habitLogs.date, habitId: habitLogs.habitId })
+      .from(habitLogs)
+      .where(and(eq(habitLogs.userId, userId), gte(habitLogs.date, sevenAgo)));
+    const habitByDate = new Map<string, Set<number>>();
+    for (const log of habitLogsRecent) {
+      if (!habitByDate.has(log.date)) habitByDate.set(log.date, new Set());
+      habitByDate.get(log.date)!.add(log.habitId);
+    }
+    for (const [, habitsDone] of habitByDate) {
+      pts += habitsDone.size * 5;
+      if (totalActiveHabits > 0 && habitsDone.size >= totalActiveHabits) pts += 20;
+    }
+
+    const allGoals = await db.select().from(dailyGoals)
+      .where(and(eq(dailyGoals.userId, userId), gte(dailyGoals.date, sevenAgo)));
+    const goalsByDate = new Map<string, { total: number; completed: number }>();
+    for (const goal of allGoals) {
+      const entry = goalsByDate.get(goal.date) ?? { total: 0, completed: 0 };
+      goalsByDate.set(goal.date, {
+        total: entry.total + 1,
+        completed: entry.completed + (goal.completed ? 1 : 0),
+      });
+    }
+    for (const [, { total, completed }] of goalsByDate) {
+      pts += completed * 5;
+      if (total > 0 && completed >= total) pts += 20;
+    }
+
+    return pts;
   }
 
   /**
