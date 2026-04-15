@@ -11,6 +11,7 @@ import { Capacitor } from "@capacitor/core";
 import { openAppSettings } from "@/hooks/useNativeNotifications";
 import { useTTS, warmAudioCtx } from "@/hooks/useTTS";
 import { useRealtimeVoice, type RealtimeTranscript } from "@/hooks/useRealtimeVoice";
+import { useVoiceNoteRecorder } from "@/hooks/useVoiceNoteRecorder";
 
 interface DebriefMessage {
   id: number;
@@ -459,11 +460,14 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   // Voice note mode — long-form voice dump that only sends on explicit Submit
   const [voiceNoteMode, setVoiceNoteMode] = useState(false);
   const [voiceNoteSeconds, setVoiceNoteSeconds] = useState(0);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [usingMediaRecorder, setUsingMediaRecorder] = useState(false);
   const voiceNoteTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const voiceNoteAutoStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const voiceNoteTextRef = useRef(""); // accumulated transcript (mirrors voice.interimText continuously)
   // Forward ref so startVoiceNote can call submitVoiceNote without circular dependency
-  const submitVoiceNoteRef = useRef<() => void>(() => {});
+  const submitVoiceNoteRef = useRef<() => void | Promise<void>>(() => {});
+  const voiceNoteRecorder = useVoiceNoteRecorder();
 
   const VISIBLE_MESSAGES = 6;
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -846,35 +850,39 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
 
   const VOICE_NOTE_MAX_SECS = 300; // 5-minute hard limit
 
-  const startVoiceNote = useCallback(() => {
+  const startVoiceNote = useCallback(async () => {
     haptic("medium");
     voiceNoteTextRef.current = "";
     setVoiceNoteSeconds(0);
     setVoiceNoteMode(true);
+    setIsTranscribing(false);
     setUserInput("");
     // Seconds counter
     if (voiceNoteTimerRef.current) clearInterval(voiceNoteTimerRef.current);
     voiceNoteTimerRef.current = setInterval(() => {
       setVoiceNoteSeconds(s => s + 1);
     }, 1000);
-    // 5-minute hard stop — auto-submits whatever has been transcribed
+    // 5-minute hard stop — auto-submits the recording
     if (voiceNoteAutoStopRef.current) clearTimeout(voiceNoteAutoStopRef.current);
     voiceNoteAutoStopRef.current = setTimeout(() => {
       submitVoiceNoteRef.current();
     }, VOICE_NOTE_MAX_SECS * 1000);
-    // Voice note mic strategy:
-    //   noSilenceStop: true     — never auto-stop on silence, only on explicit cancel/submit
-    //   restartPollMs: 500      — poll every 500 ms (less churn than 300 ms)
-    //   restartThresholdMs: 2500 — only restart after 2.5 s of silence. Normal speech pauses
-    //                              are 1–2 s between sentences; 800 ms was too short and caused
-    //                              a constant stop/start glitch mid-speech. iOS typically kills
-    //                              recognition after 2–3 s of silence, so 2.5 s reliably catches
-    //                              that case without disrupting natural pauses.
+    // Primary path: MediaRecorder — records continuously with no silence cutoffs.
+    // No restart loops, no session limits — just raw audio until submit.
+    if (voiceNoteRecorder.isSupported) {
+      const started = await voiceNoteRecorder.start();
+      if (started) {
+        setUsingMediaRecorder(true);
+        return;
+      }
+    }
+    // Fallback: STT restart loop (older devices / unsupported browsers)
+    setUsingMediaRecorder(false);
     voice.start(
       (text) => { voiceNoteTextRef.current = text; setUserInput(text); },
       { noSilenceStop: true, restartPollMs: 500, restartThresholdMs: 2500 },
     );
-  }, [voice]);
+  }, [voice, voiceNoteRecorder]);
 
   const stopVoiceNoteTimers = () => {
     if (voiceNoteTimerRef.current) { clearInterval(voiceNoteTimerRef.current); voiceNoteTimerRef.current = null; }
@@ -884,19 +892,63 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const cancelVoiceNote = useCallback(() => {
     haptic("light");
     stopVoiceNoteTimers();
+    voiceNoteRecorder.cancel();
     voice.stop();
     setVoiceNoteMode(false);
     setVoiceNoteSeconds(0);
+    setIsTranscribing(false);
+    setUsingMediaRecorder(false);
     voiceNoteTextRef.current = "";
     setUserInput("");
-  }, [voice]);
+  }, [voice, voiceNoteRecorder]);
 
-  const submitVoiceNote = useCallback(() => {
-    const text = voiceNoteTextRef.current.trim() || userInput.trim();
+  const submitVoiceNote = useCallback(async () => {
     stopVoiceNoteTimers();
-    voice.stop();
     setVoiceNoteMode(false);
     setVoiceNoteSeconds(0);
+
+    // MediaRecorder path — stop recording, upload blob, transcribe with Whisper
+    if (usingMediaRecorder) {
+      setUsingMediaRecorder(false);
+      setIsTranscribing(true);
+      try {
+        const result = await voiceNoteRecorder.stop();
+        if (!result || result.blob.size < 100) {
+          setIsTranscribing(false);
+          return;
+        }
+        const arrayBuffer = await result.blob.arrayBuffer();
+        const response = await fetch("/api/voice-note/transcribe", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/octet-stream",
+            "X-Mime-Type": result.mimeType,
+          },
+          body: arrayBuffer,
+          credentials: "include",
+        });
+        const data = await response.json();
+        const text = data.text?.trim() ?? "";
+        setIsTranscribing(false);
+        voiceNoteTextRef.current = "";
+        setUserInput("");
+        if (text) {
+          haptic("medium");
+          warmAudioCtx();
+          sendMessage(text);
+        }
+      } catch (err) {
+        console.error("[VoiceNote] Transcription failed:", err);
+        setIsTranscribing(false);
+        voiceNoteTextRef.current = "";
+        setUserInput("");
+      }
+      return;
+    }
+
+    // STT fallback path — text is already accumulated in voiceNoteTextRef
+    const text = voiceNoteTextRef.current.trim() || userInput.trim();
+    voice.stop();
     voiceNoteTextRef.current = "";
     setUserInput("");
     if (text) {
@@ -904,7 +956,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
       warmAudioCtx();
       sendMessage(text);
     }
-  }, [voice, userInput, sendMessage]);
+  }, [voice, voiceNoteRecorder, usingMediaRecorder, userInput, sendMessage]);
 
   // Keep the forward ref in sync so startVoiceNote's 5-min timeout always calls latest version
   submitVoiceNoteRef.current = submitVoiceNote;
@@ -974,11 +1026,14 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
       tts.cancel();
     }
     // End voice note mode when switching dates
-    if (voiceNoteMode) {
-      stopVoiceNoteTimer();
+    if (voiceNoteMode || isTranscribing) {
+      stopVoiceNoteTimers();
+      voiceNoteRecorder.cancel();
       voice.stop();
       setVoiceNoteMode(false);
       setVoiceNoteSeconds(0);
+      setIsTranscribing(false);
+      setUsingMediaRecorder(false);
       voiceNoteTextRef.current = "";
       setUserInput("");
     }
@@ -1616,7 +1671,16 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
         </div>
 
         <div className="px-4 pb-4 pt-2 flex-shrink-0">
-            {voiceNoteMode ? (
+            {isTranscribing ? (
+            /* Whisper transcription in progress */
+            <div className="flex items-center gap-3 bg-muted/50 rounded-xl border border-primary/20 p-3">
+              <Loader2 className="h-4 w-4 text-primary animate-spin shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-foreground">Transcribing your note…</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">This takes a few seconds</p>
+              </div>
+            </div>
+          ) : voiceNoteMode ? (
             <div className="space-y-2">
               {/* Voice note recording panel */}
               <div className="flex items-start gap-3 bg-muted/50 rounded-xl border border-red-500/30 p-3">
@@ -1640,15 +1704,14 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                       style={{ width: `${Math.min(100, (voiceNoteSeconds / VOICE_NOTE_MAX_SECS) * 100)}%` }}
                     />
                   </div>
-                  {/* Live transcript preview — shows most recent speech */}
-                  {(userInput || voice.interimText) ? (
+                  {/* Live transcript (STT fallback) or static prompt (MediaRecorder mode) */}
+                  {!usingMediaRecorder && (userInput || voice.interimText) ? (
                     <p className="text-sm text-foreground leading-relaxed line-clamp-4">
-                      {/* Show tail of accumulated text so newest words always visible */}
                       {userInput.length > 300 ? "…" + userInput.slice(-300) : userInput}
                       {voice.interimText ? <span className="text-muted-foreground"> {voice.interimText}</span> : null}
                     </p>
                   ) : (
-                    <p className="text-xs text-muted-foreground italic">Speak freely — pauses are fine, mic stays open until you submit…</p>
+                    <p className="text-xs text-muted-foreground italic">Speak freely — take your time, long pauses are fine, mic stays live until you submit…</p>
                   )}
                 </div>
               </div>
@@ -1661,8 +1724,8 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                   Cancel
                 </button>
                 <button
-                  onClick={submitVoiceNote}
-                  disabled={!(userInput.trim()) && !(voice.interimText?.trim())}
+                  onClick={() => submitVoiceNote()}
+                  disabled={!usingMediaRecorder && !(userInput.trim()) && !(voice.interimText?.trim())}
                   className="flex-1 h-8 rounded-lg flex items-center justify-center gap-1.5 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <Send className="h-3 w-3" />

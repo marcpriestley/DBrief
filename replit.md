@@ -32,7 +32,7 @@ The application uses a **React with TypeScript** frontend, styled with **Shadcn/
 **Key Architectural Decisions & Features:**
 - **Authentication**: Session-based email/password authentication is supported, along with Google Sign-In via the Google Identity Services SDK.
 - **AI Integration**: OpenAI API is central to conversational debriefs, journal insights, pattern analysis, infinite goal refinement, and habit suggestions. It also powers an AI Debrief feature with a performance engineer persona.
-- **Voice Features**: The Web Speech API provides speech-to-text for voice input. A `useTTS` hook enables text-to-speech for AI responses. Live Voice Mode uses the OpenAI Realtime API for real-time voice conversations with server-side VAD for turn detection.
+- **Voice Features**: The Web Speech API provides speech-to-text for voice input via `useInlineVoice` (defined in DebriefPanel). A `useTTS` hook enables text-to-speech for AI responses. **Voice Notes** use `useVoiceNoteRecorder` (MediaRecorder API) to record continuous raw audio for up to 5 minutes with no silence cutoffs, then transcribe via OpenAI Whisper (`POST /api/voice-note/transcribe`). Falls back to the STT restart loop on unsupported devices.
 - **Health Tracking**: Integration with Apple Health (HealthKit) via `capacitor-health` plugin allows tracking of 15 metrics, with auto-sync capabilities for native iOS builds.
 - **Notification System**: A dual-path system uses Web Push API for browsers and Apple Push Notifications (APNs) for native iOS, managed by `@capacitor/push-notifications`.
 - **Data Management**: Sensitive user data, including journal entries, debrief messages, and goals, is encrypted at rest using AES-256-GCM.

@@ -1,3 +1,4 @@
+import express from "express";
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage, todayInTz } from "./storage";
@@ -1050,6 +1051,36 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
       res.status(500).json({ message: "TTS failed" });
     }
   });
+
+  // Voice note transcription — accepts raw audio binary, returns Whisper transcript
+  app.post(
+    "/api/voice-note/transcribe",
+    aiLimiter,
+    express.raw({ type: "*/*", limit: "20mb" }),
+    async (req, res) => {
+      try {
+        getUserId(req);
+        const mimeType = (req.headers["x-mime-type"] as string) || "audio/webm";
+        const buffer = req.body as Buffer;
+        if (!Buffer.isBuffer(buffer) || buffer.length < 100) {
+          return res.status(400).json({ message: "No audio data received" });
+        }
+        const ext = mimeType.includes("mp4") ? "mp4"
+          : mimeType.includes("ogg") ? "ogg"
+          : "webm";
+        const file = new File([buffer], `voice-note.${ext}`, { type: mimeType });
+        const transcription = await openai.audio.transcriptions.create({
+          file,
+          model: "whisper-1",
+          language: "en",
+        });
+        res.json({ text: transcription.text });
+      } catch (err: any) {
+        console.error("[VoiceNote] Transcribe error:", err?.message);
+        res.status(500).json({ message: "Transcription failed" });
+      }
+    }
+  );
 
   app.post("/api/ai-insights/generate", async (req, res) => {
     try {
