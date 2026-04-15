@@ -2140,7 +2140,7 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
       const challengeTitle = challenge?.title || "a challenge";
       await notifyUser(target.id, {
         title: "New Challenge Invite",
-        body: `${inviterName} invited you to: ${challengeTitle}`,
+        body: "You've been invited to a DBrief challenge",
         url: "/squad?tab=challenges",
         tag: `challenge-invite-${challengeId}-${target.id}`,
       });
