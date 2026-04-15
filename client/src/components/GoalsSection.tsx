@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-motion";
+import { motion, AnimatePresence, useMotionValue, useTransform, animate } from "framer-motion";
 import { Check, Plus, X, Trash2, Edit2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { apiRequest } from "@/lib/queryClient";
-import { haptic } from "@/lib/haptics";
+import { haptic, hapticSequence } from "@/lib/haptics";
 import type { DailyGoal, GoalTemplate } from "@shared/schema";
 
 interface GoalsSectionProps {
@@ -35,7 +35,21 @@ const ALL_COMPLETE_MESSAGES = [
 ];
 
 function triggerHaptic() { haptic("medium"); }
-function triggerCelebrationHaptic() { haptic("success"); }
+function triggerCelebrationHaptic() {
+  hapticSequence([
+    { type: "success", delay: 0 },
+    { type: "heavy",   delay: 160 },
+    { type: "medium",  delay: 310 },
+    { type: "success", delay: 520 },
+    { type: "heavy",   delay: 680 },
+    { type: "medium",  delay: 820 },
+    { type: "light",   delay: 960 },
+    { type: "success", delay: 1150 },
+    { type: "heavy",   delay: 1300 },
+    { type: "medium",  delay: 1440 },
+    { type: "light",   delay: 1560 },
+  ]);
+}
 
 export default function GoalsSection({ selectedDate, tomorrowMode = false }: GoalsSectionProps) {
   const queryClient = useQueryClient();
@@ -56,12 +70,14 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
   const [showCelebration, setShowCelebration] = useState(false);
   const [celebrationMsg, setCelebrationMsg] = useState(ALL_COMPLETE_MESSAGES[0]);
   const celebrationY = useMotionValue(0);
-  const celebrationOpacity = useTransform(celebrationY, [-120, 0], [0, 1]);
+  const celebrationOpacity = useTransform(celebrationY, [-200, -60, 0], [0, 0.6, 1]);
   const prevCompletedCountRef = useRef<number>(-1);
   const prevTotalRef = useRef<number>(0);
   // Tracks whether goals data has finished its first load — prevents false
   // celebration fires when already-complete goals load in on mount/reopen.
   const initialLoadSettledRef = useRef<boolean>(false);
+  // Session-only guard so the celebration fires once per completion streak per session
+  const celebratedThisSessionRef = useRef<boolean>(false);
 
   const { data: goals = [], isLoading } = useQuery<DailyGoal[]>({
     queryKey: ["/api/daily-goals", selectedDate],
@@ -111,18 +127,18 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
       showGoalReward();
       triggerHaptic();
 
-      // Big celebration only when the user ticks the very last goal,
-      // and only if we haven't already shown it for this date this session.
-      const celebratedKey = `dbrief_goals_celebrated_${selectedDate}`;
-      const alreadyCelebrated = localStorage.getItem(celebratedKey) === "1";
-      if (allGoalsComplete && totalGoals > 0 && !alreadyCelebrated) {
-        localStorage.setItem(celebratedKey, "1");
+      // Big celebration only when the user ticks the very last goal
+      if (allGoalsComplete && totalGoals > 0 && !celebratedThisSessionRef.current) {
+        celebratedThisSessionRef.current = true;
         const msg = ALL_COMPLETE_MESSAGES[Math.floor(Math.random() * ALL_COMPLETE_MESSAGES.length)];
         setCelebrationMsg(msg);
-        setTimeout(() => {
-          triggerCelebrationHaptic();
-          setShowCelebration(true);
-        }, 600);
+        // Instant — no delay
+        triggerCelebrationHaptic();
+        setShowCelebration(true);
+      }
+      // Reset session guard if user un-completes a goal so they can celebrate again
+      if (!allGoalsComplete) {
+        celebratedThisSessionRef.current = false;
       }
     }
   }, [completedCount, allGoalsComplete, totalGoals, selectedDate]);
@@ -423,8 +439,7 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.25 }}
-              onClick={() => { celebrationY.set(0); setShowCelebration(false); }}
+              transition={{ duration: 0.2 }}
               style={{
                 position: "fixed",
                 inset: 0,
@@ -432,68 +447,149 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                backgroundColor: "rgba(0,0,0,0.5)",
+                backgroundColor: "rgba(0,0,0,0.65)",
               }}
             >
+              {/* Particle burst — 12 dots flying out from center */}
+              {Array.from({ length: 12 }).map((_, i) => {
+                const angle = (i / 12) * 2 * Math.PI;
+                const dist = 120 + Math.random() * 60;
+                const colors = ["#F59E0B","#FCD34D","#10B981","#8B5CF6","#EC4899","#3B82F6","#EF4444","#F97316"];
+                const color = colors[i % colors.length];
+                return (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 1, x: 0, y: 0, scale: 0 }}
+                    animate={{
+                      opacity: [1, 1, 0],
+                      x: Math.cos(angle) * dist,
+                      y: Math.sin(angle) * dist,
+                      scale: [0, 1.4, 0.6],
+                    }}
+                    transition={{ duration: 0.7, delay: i * 0.03, ease: "easeOut" }}
+                    style={{
+                      position: "absolute",
+                      width: 10,
+                      height: 10,
+                      borderRadius: "50%",
+                      backgroundColor: color,
+                      pointerEvents: "none",
+                    }}
+                  />
+                );
+              })}
+
+              {/* Main card — draggable upward to dismiss */}
               <motion.div
                 drag="y"
-                dragConstraints={{ top: -500, bottom: 0 }}
-                dragElastic={{ top: 1, bottom: 0 }}
+                dragConstraints={{ top: -600, bottom: 0 }}
+                dragElastic={{ top: 0.8, bottom: 0 }}
                 style={{
                   y: celebrationY,
                   opacity: celebrationOpacity,
-                  touchAction: "none",
-                  backgroundColor: "var(--card)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "1.25rem",
-                  padding: "2.25rem 2.5rem",
-                  textAlign: "center",
-                  boxShadow: "0 24px 64px rgba(0,0,0,0.45)",
-                  maxWidth: "290px",
-                  width: "90%",
+                  touchAction: "pan-y",
+                  position: "relative",
                 }}
-                initial={{ scale: 0.7, opacity: 0, y: 20 }}
+                initial={{ scale: 0.6, opacity: 0, y: 30 }}
                 animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.85, opacity: 0, y: -40 }}
-                transition={{ type: "spring", stiffness: 340, damping: 26 }}
-                onClick={(e) => e.stopPropagation()}
+                exit={{ scale: 0.8, opacity: 0, y: -120 }}
+                transition={{ type: "spring", stiffness: 380, damping: 28 }}
                 onDragEnd={(_e, info) => {
-                  if (info.offset.y < -60 || info.velocity.y < -400) {
-                    setShowCelebration(false);
-                    celebrationY.set(0);
+                  if (info.offset.y < -80 || info.velocity.y < -500) {
+                    // Fly up and out
+                    animate(celebrationY, -700, { type: "spring", stiffness: 300, damping: 30 });
+                    setTimeout(() => { setShowCelebration(false); celebrationY.set(0); }, 350);
                   } else {
-                    celebrationY.set(0);
+                    // Spring back to center
+                    animate(celebrationY, 0, { type: "spring", stiffness: 400, damping: 30 });
                   }
                 }}
               >
-                <motion.div
-                  animate={{ rotate: [0, -10, 10, -6, 6, 0] }}
-                  transition={{ duration: 0.6, delay: 0.1 }}
-                  style={{ fontSize: "3.25rem", marginBottom: "0.6rem" }}
+                <div
+                  style={{
+                    backgroundColor: "var(--card)",
+                    borderRadius: "1.5rem",
+                    padding: "2.5rem 2.25rem 2rem",
+                    textAlign: "center",
+                    boxShadow: "0 0 0 1px rgba(245,158,11,0.3), 0 32px 80px rgba(0,0,0,0.55), 0 0 60px rgba(245,158,11,0.12)",
+                    maxWidth: "300px",
+                    width: "88vw",
+                  }}
                 >
-                  {celebrationMsg.icon}
-                </motion.div>
-                <p style={{ fontSize: "1.15rem", fontWeight: 700, color: "var(--foreground)", margin: 0 }}>
-                  {celebrationMsg.title}
-                </p>
-                <p style={{ fontSize: "0.85rem", color: "var(--muted-foreground)", marginTop: "0.35rem" }}>
-                  {celebrationMsg.sub}
-                </p>
-                <p style={{ fontSize: "0.72rem", color: "var(--muted-foreground)", marginTop: "0.5rem", opacity: 0.5 }}>
-                  swipe up to dismiss
-                </p>
+                  {/* Glowing amber top bar */}
+                  <div style={{
+                    position: "absolute",
+                    top: 0,
+                    left: "15%",
+                    right: "15%",
+                    height: 3,
+                    borderRadius: "0 0 4px 4px",
+                    background: "linear-gradient(90deg, transparent, #F59E0B, #FCD34D, #F59E0B, transparent)",
+                    boxShadow: "0 0 16px 4px rgba(245,158,11,0.5)",
+                  }} />
 
-                {/* animated dots */}
-                <div style={{ display: "flex", justifyContent: "center", gap: "6px", marginTop: "1.25rem" }}>
-                  {["#F59E0B","#10B981","#8B5CF6","#EC4899","#3B82F6","#EF4444"].map((color, i) => (
+                  {/* Icon with wobble + scale-in */}
+                  <motion.div
+                    animate={{ rotate: [0, -12, 12, -7, 7, -3, 3, 0] }}
+                    transition={{ duration: 0.8, delay: 0.05 }}
+                    style={{ fontSize: "4rem", lineHeight: 1, marginBottom: "0.8rem", display: "block" }}
+                  >
+                    {celebrationMsg.icon}
+                  </motion.div>
+
+                  {/* Title */}
+                  <p style={{
+                    fontSize: "1.25rem",
+                    fontWeight: 800,
+                    color: "var(--foreground)",
+                    margin: 0,
+                    letterSpacing: "-0.02em",
+                  }}>
+                    {celebrationMsg.title}
+                  </p>
+
+                  {/* Subtitle */}
+                  <p style={{
+                    fontSize: "0.875rem",
+                    color: "var(--muted-foreground)",
+                    marginTop: "0.4rem",
+                    lineHeight: 1.4,
+                  }}>
+                    {celebrationMsg.sub}
+                  </p>
+
+                  {/* Progress dots in amber */}
+                  <div style={{ display: "flex", justifyContent: "center", gap: "6px", margin: "1.4rem 0 1.1rem" }}>
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <motion.div
+                        key={i}
+                        initial={{ scale: 0, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{ delay: 0.12 + i * 0.08, type: "spring", stiffness: 400, damping: 18 }}
+                        style={{
+                          width: 8, height: 8, borderRadius: "50%",
+                          background: i < 3 ? "#F59E0B" : i === 3 ? "#FCD34D" : "rgba(245,158,11,0.3)",
+                          boxShadow: i < 4 ? "0 0 8px rgba(245,158,11,0.6)" : "none",
+                        }}
+                      />
+                    ))}
+                  </div>
+
+                  {/* Swipe-up affordance */}
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
                     <motion.div
-                      key={i}
-                      initial={{ scale: 0, y: 0 }}
-                      animate={{ scale: [0, 1.3, 1], y: [0, -10, 0] }}
-                      transition={{ delay: 0.15 + i * 0.07, duration: 0.45, type: "spring" }}
-                      style={{ width: 9, height: 9, borderRadius: "50%", backgroundColor: color }}
-                    />
-                  ))}
+                      animate={{ y: [0, -4, 0] }}
+                      transition={{ repeat: Infinity, duration: 1.2, ease: "easeInOut" }}
+                      style={{ color: "var(--muted-foreground)", opacity: 0.45 }}
+                    >
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="18 15 12 9 6 15" />
+                      </svg>
+                    </motion.div>
+                    <span style={{ fontSize: "0.68rem", color: "var(--muted-foreground)", opacity: 0.4, letterSpacing: "0.04em" }}>
+                      SWIPE UP TO DISMISS
+                    </span>
+                  </div>
                 </div>
               </motion.div>
             </motion.div>
