@@ -382,6 +382,50 @@ export function registerDebriefRoutes(app: Express): void {
     }
   });
 
+  // Delete a user message (and the immediately following AI response if present)
+  app.delete("/api/debrief/messages/:messageId", async (req: Request, res: Response) => {
+    const userId = requireAuth(req, res);
+    if (!userId) return;
+
+    try {
+      const messageId = parseInt(req.params.messageId);
+      if (isNaN(messageId)) return res.status(400).json({ error: "Invalid message ID" });
+
+      // Verify the message belongs to a debrief owned by this user
+      const [msg] = await db.select().from(debriefMessages)
+        .where(eq(debriefMessages.id, messageId));
+      if (!msg) return res.status(404).json({ error: "Message not found" });
+
+      const [debrief] = await db.select().from(debriefs)
+        .where(and(eq(debriefs.id, msg.debriefId), eq(debriefs.userId, userId)));
+      if (!debrief) return res.status(403).json({ error: "Forbidden" });
+
+      // Only allow deletion of user messages
+      if (msg.role !== "user") return res.status(400).json({ error: "Can only delete your own messages" });
+
+      // Find all messages ordered by createdAt to locate the next AI response
+      const allMsgs = await db.select().from(debriefMessages)
+        .where(eq(debriefMessages.debriefId, msg.debriefId))
+        .orderBy(debriefMessages.createdAt);
+
+      const msgIndex = allMsgs.findIndex(m => m.id === messageId);
+      const nextMsg = msgIndex >= 0 ? allMsgs[msgIndex + 1] : null;
+
+      // Delete the user message
+      await db.delete(debriefMessages).where(eq(debriefMessages.id, messageId));
+
+      // Delete the immediately following AI response if present
+      if (nextMsg && nextMsg.role === "assistant") {
+        await db.delete(debriefMessages).where(eq(debriefMessages.id, nextMsg.id));
+      }
+
+      res.json({ ok: true, deletedPair: !!(nextMsg && nextMsg.role === "assistant") });
+    } catch (error) {
+      console.error("Error deleting debrief message:", error);
+      res.status(500).json({ error: "Failed to delete message" });
+    }
+  });
+
   app.post("/api/debriefs/:debriefId/respond", aiLimiter, async (req: Request, res: Response) => {
     const userId = requireAuth(req, res);
     if (!userId) return;

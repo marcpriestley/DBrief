@@ -24,22 +24,52 @@ export function useSpeechToText(): SpeechToTextHook {
   const [transcript, setTranscript] = useState("");
 
   const recognitionRef = useRef<any>(null);
-  // True while the user wants to keep recording (even across auto-restarts)
   const isRecordingRef = useRef(false);
-  // Text committed from completed recognition sessions (before each restart)
+  // Text committed from completed recognition sessions (native restart loop)
   const accumulatedRef = useRef("");
-  // Latest segment from the current session (may still be interim)
+  // Latest partial from the current native session
   const latestSegmentRef = useRef("");
-  // Timer used on native to detect when recognition has silently stopped
+  // Guards against double-restart when listeningState fires and a silence timer coincide
+  const restartingRef = useRef(false);
+  // Silence fallback timer (fires if no listeningState "stopped" event arrives)
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Hard 5-min limit timer
   const hardLimitRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Handles for current native listeners so we can remove them cleanly
+  const nativeHandlesRef = useRef<Array<{ remove: () => Promise<void> }>>([]);
 
   const isNative = Capacitor.isNativePlatform();
   const isWebSpeechSupported =
     typeof window !== "undefined" &&
     ("webkitSpeechRecognition" in window || "SpeechRecognition" in window);
   const isSupported = isNative || isWebSpeechSupported;
+
+  // ── helpers ────────────────────────────────────────────────────────────────
+  const clearSilenceTimer = () => {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+  };
+
+  const commitSegment = () => {
+    const seg = latestSegmentRef.current.trim();
+    if (seg) {
+      accumulatedRef.current = accumulatedRef.current
+        ? (accumulatedRef.current + " " + seg).trim()
+        : seg;
+      latestSegmentRef.current = "";
+    }
+  };
+
+  // Remove all current native listeners
+  const removeNativeListeners = async () => {
+    const handles = nativeHandlesRef.current;
+    nativeHandlesRef.current = [];
+    for (const h of handles) {
+      try { await h.remove(); } catch { /* ignore */ }
+    }
+  };
 
   // ── Web Speech API setup ───────────────────────────────────────────────────
   useEffect(() => {
@@ -70,22 +100,14 @@ export function useSpeechToText(): SpeechToTextHook {
     };
 
     recognition.onerror = (event: any) => {
-      // "no-speech" is benign — just restart
       if (event.error === "no-speech" && isRecordingRef.current) return;
       console.error("Speech recognition error:", event.error);
-      if (!isRecordingRef.current) setIsRecording(false);
     };
 
-    // onend fires whenever recognition stops, including after a pause in speech.
-    // If the user hasn't explicitly stopped, restart immediately so recording
-    // continues uninterrupted through silences.
+    // Restart when the browser ends the session mid-recording
     recognition.onend = () => {
       if (isRecordingRef.current) {
-        try {
-          recognition.start();
-        } catch {
-          // Already started — safe to ignore
-        }
+        try { recognition.start(); } catch { /* already starting */ }
       } else {
         setIsRecording(false);
       }
@@ -97,51 +119,72 @@ export function useSpeechToText(): SpeechToTextHook {
     };
   }, [isNative, isWebSpeechSupported]);
 
-  // ── Native (iOS Capacitor) continuous recording ────────────────────────────
-  // Strategy: after recognition stops due to silence, commit the last segment,
-  // wait briefly, and restart. Repeat until stopRecording() is called.
-  const nativeRestartIfNeeded = useCallback(async () => {
-    if (!isRecordingRef.current) return;
+  // ── Native: start one recognition session and auto-restart on end ──────────
+  const startNativeSession = useCallback(async () => {
+    if (!isRecordingRef.current || restartingRef.current) return;
+    restartingRef.current = true;
 
     try {
       const { SpeechRecognition } = await import("@capacitor-community/speech-recognition");
-      await SpeechRecognition.stop();
-    } catch { /* ignore */ }
 
-    // Commit the segment that was captured before the pause
-    if (latestSegmentRef.current.trim()) {
-      accumulatedRef.current = accumulatedRef.current
-        ? (accumulatedRef.current + " " + latestSegmentRef.current).trim()
-        : latestSegmentRef.current.trim();
-      latestSegmentRef.current = "";
-    }
+      // Clean up any previous session's listeners
+      await removeNativeListeners();
+      clearSilenceTimer();
 
-    if (!isRecordingRef.current) {
-      setIsRecording(false);
-      return;
-    }
+      let sessionSegment = "";
 
-    // Brief pause before restart so iOS doesn't reject the back-to-back call
-    await new Promise<void>(r => setTimeout(r, 400));
-    if (!isRecordingRef.current) { setIsRecording(false); return; }
+      // ── partialResults: accumulate text for this session ──
+      const partialHandle = await SpeechRecognition.addListener(
+        "partialResults",
+        (data: { matches: string[] }) => {
+          if (!data.matches?.[0]) return;
+          sessionSegment = data.matches[0];
+          latestSegmentRef.current = sessionSegment;
 
-    try {
-      const { SpeechRecognition } = await import("@capacitor-community/speech-recognition");
-      await SpeechRecognition.removeAllListeners();
+          const full = accumulatedRef.current
+            ? (accumulatedRef.current + " " + sessionSegment).trim()
+            : sessionSegment.trim();
+          setTranscript(full);
 
-      SpeechRecognition.addListener("partialResults", (data: { matches: string[] }) => {
-        if (!data.matches?.[0]) return;
-        latestSegmentRef.current = data.matches[0];
-        const full = accumulatedRef.current
-          ? (accumulatedRef.current + " " + data.matches[0]).trim()
-          : data.matches[0].trim();
-        setTranscript(full);
+          // Silence fallback: if no new words for 3 s, iOS probably already stopped
+          clearSilenceTimer();
+          silenceTimerRef.current = setTimeout(async () => {
+            if (!isRecordingRef.current || restartingRef.current) return;
+            commitSegment();
+            await new Promise<void>(r => setTimeout(r, 300));
+            restartingRef.current = false;
+            startNativeSession();
+          }, 3000);
+        }
+      );
+      nativeHandlesRef.current.push(partialHandle);
 
-        // Reset the silence timer each time new speech arrives
-        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-        silenceTimerRef.current = setTimeout(() => nativeRestartIfNeeded(), 2000);
-      });
+      // ── listeningState: primary signal that iOS stopped the recognizer ──
+      const stateHandle = await SpeechRecognition.addListener(
+        "listeningState",
+        async (data: { status: string }) => {
+          if (data.status !== "stopped") return;
+          if (!isRecordingRef.current || restartingRef.current) return;
 
+          clearSilenceTimer();
+          commitSegment();
+
+          // Brief pause before iOS accepts a new start() call
+          await new Promise<void>(r => setTimeout(r, 300));
+
+          if (!isRecordingRef.current) {
+            setIsRecording(false);
+            restartingRef.current = false;
+            return;
+          }
+
+          restartingRef.current = false;
+          startNativeSession();
+        }
+      );
+      nativeHandlesRef.current.push(stateHandle);
+
+      // Fire recognition
       await SpeechRecognition.start({
         language: "en-US",
         maxResults: 1,
@@ -149,28 +192,40 @@ export function useSpeechToText(): SpeechToTextHook {
         popup: false,
       });
 
-      // Arm the initial silence timer in case no speech arrives at all
-      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-      silenceTimerRef.current = setTimeout(() => nativeRestartIfNeeded(), 3000);
-    } catch (e) {
-      console.error("Native speech restart error:", e);
-      if (isRecordingRef.current) {
-        setTimeout(() => nativeRestartIfNeeded(), 1000);
-      } else {
+      // Initial silence timer: if no speech arrives within 5 s, restart anyway
+      silenceTimerRef.current = setTimeout(async () => {
+        if (!isRecordingRef.current || restartingRef.current) return;
+        commitSegment();
+        await new Promise<void>(r => setTimeout(r, 300));
+        restartingRef.current = false;
+        startNativeSession();
+      }, 5000);
+
+    } catch (error) {
+      console.error("Native speech session error:", error);
+      restartingRef.current = false;
+      if (!isRecordingRef.current) {
         setIsRecording(false);
+      } else {
+        // Retry after a second
+        await new Promise<void>(r => setTimeout(r, 1000));
+        restartingRef.current = false;
+        startNativeSession();
       }
     }
+
+    restartingRef.current = false;
   }, []);
 
   // ── startRecording ─────────────────────────────────────────────────────────
   const startRecording = useCallback(async () => {
     accumulatedRef.current = "";
     latestSegmentRef.current = "";
+    restartingRef.current = false;
     setTranscript("");
     isRecordingRef.current = true;
     setIsRecording(true);
 
-    // Hard 5-minute limit
     if (hardLimitRef.current) clearTimeout(hardLimitRef.current);
     hardLimitRef.current = setTimeout(() => {
       isRecordingRef.current = false;
@@ -187,71 +242,42 @@ export function useSpeechToText(): SpeechToTextHook {
           setIsRecording(false);
           return;
         }
-
-        await SpeechRecognition.removeAllListeners();
-
-        SpeechRecognition.addListener("partialResults", (data: { matches: string[] }) => {
-          if (!data.matches?.[0]) return;
-          latestSegmentRef.current = data.matches[0];
-          const full = accumulatedRef.current
-            ? (accumulatedRef.current + " " + data.matches[0]).trim()
-            : data.matches[0].trim();
-          setTranscript(full);
-
-          // Reset silence timer on each new word
-          if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-          silenceTimerRef.current = setTimeout(() => nativeRestartIfNeeded(), 2000);
-        });
-
-        await SpeechRecognition.start({
-          language: "en-US",
-          maxResults: 1,
-          partialResults: true,
-          popup: false,
-        });
-
-        // Arm the initial silence timer
-        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-        silenceTimerRef.current = setTimeout(() => nativeRestartIfNeeded(), 3000);
       } catch (error) {
-        console.error("Native speech recognition error:", error);
+        console.error("Permission request error:", error);
         isRecordingRef.current = false;
         setIsRecording(false);
+        return;
       }
+      startNativeSession();
       return;
     }
 
-    // Web path
     if (!recognitionRef.current) return;
     try {
       recognitionRef.current.start();
     } catch (error) {
-      console.error("Error starting speech recognition:", error);
+      console.error("Error starting web speech recognition:", error);
     }
-  }, [isNative, nativeRestartIfNeeded]);
+  }, [isNative, startNativeSession]);
 
   // ── stopRecording ──────────────────────────────────────────────────────────
   const stopRecording = useCallback(async () => {
     isRecordingRef.current = false;
+    restartingRef.current = false;
 
     if (hardLimitRef.current) { clearTimeout(hardLimitRef.current); hardLimitRef.current = null; }
-    if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
+    clearSilenceTimer();
 
     if (isNative) {
+      await removeNativeListeners();
       try {
         const { SpeechRecognition } = await import("@capacitor-community/speech-recognition");
-        await SpeechRecognition.removeAllListeners();
         await SpeechRecognition.stop();
-      } catch (error) {
-        console.error("Error stopping native speech recognition:", error);
-      }
-      // Commit any final segment
-      if (latestSegmentRef.current.trim()) {
-        const final = accumulatedRef.current
-          ? (accumulatedRef.current + " " + latestSegmentRef.current).trim()
-          : latestSegmentRef.current.trim();
-        setTranscript(final);
-      }
+      } catch { /* ignore */ }
+      // Commit any final in-flight segment
+      commitSegment();
+      const final = accumulatedRef.current;
+      if (final) setTranscript(final);
       setIsRecording(false);
       return;
     }
@@ -259,9 +285,7 @@ export function useSpeechToText(): SpeechToTextHook {
     if (!recognitionRef.current) return;
     try {
       recognitionRef.current.stop();
-    } catch (error) {
-      console.error("Error stopping speech recognition:", error);
-    }
+    } catch { /* ignore */ }
   }, [isNative]);
 
   const resetTranscript = useCallback(() => {

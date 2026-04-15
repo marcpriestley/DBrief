@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { haptic } from "@/lib/haptics";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { MessageCircle, Send, CheckCircle, Flag, Loader2, RotateCcw, Mic, MicOff, ArrowRight, Volume2, VolumeX, Square, ChevronDown, Radio, Waves, AudioLines } from "lucide-react";
+import { MessageCircle, Send, CheckCircle, Flag, Loader2, RotateCcw, Mic, MicOff, ArrowRight, Volume2, VolumeX, Square, ChevronDown, Radio, Waves, AudioLines, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiRequest } from "@/lib/queryClient";
@@ -436,6 +436,24 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     const s = new Set(prev);
     s.has(id) ? s.delete(id) : s.add(id);
     return s;
+  });
+
+  // Long-press to delete a user message
+  const [selectedMsgId, setSelectedMsgId] = useState<number | null>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const deleteMsgMutation = useMutation({
+    mutationFn: (messageId: number) =>
+      apiRequest("DELETE", `/api/debrief/messages/${messageId}`).then(r => r.json()),
+    onSuccess: (_data, _messageId) => {
+      haptic("success");
+      setSelectedMsgId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/debriefs"] });
+    },
+    onError: () => {
+      haptic("error");
+      setSelectedMsgId(null);
+    },
   });
 
   // Voice note mode — long-form voice dump that only sends on explicit Submit
@@ -1411,28 +1429,98 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
           )}
 
           <AnimatePresence initial={false}>
-            {(showAllMessages ? debrief.messages : debrief.messages.slice(-VISIBLE_MESSAGES)).map((msg) => (
-              <motion.div
-                key={msg.id}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.2 }}
-                className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}
-              >
-                <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
-                  msg.role === "user"
-                    ? "bg-primary text-primary-foreground rounded-br-md"
-                    : "bg-muted text-foreground rounded-bl-md"
-                }`}>
-                  {msg.content}
-                </div>
-                {msg.createdAt && (
-                  <span className="text-[10px] text-muted-foreground/60 mt-0.5 px-1">
-                    {formatMsgTime(msg.createdAt)}
-                  </span>
-                )}
-              </motion.div>
-            ))}
+            {(showAllMessages ? debrief.messages : debrief.messages.slice(-VISIBLE_MESSAGES)).map((msg) => {
+              const isSelected = selectedMsgId === msg.id;
+              const isUser = msg.role === "user";
+              return (
+                <motion.div
+                  key={msg.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, x: isUser ? 40 : -40, scale: 0.9 }}
+                  transition={{ duration: 0.2 }}
+                  className={`flex flex-col ${isUser ? "items-end" : "items-start"}`}
+                >
+                  <div
+                    onTouchStart={() => {
+                      if (!isUser) return;
+                      longPressTimerRef.current = setTimeout(() => {
+                        haptic("medium");
+                        setSelectedMsgId(msg.id);
+                      }, 450);
+                    }}
+                    onTouchEnd={() => {
+                      if (longPressTimerRef.current) {
+                        clearTimeout(longPressTimerRef.current);
+                        longPressTimerRef.current = null;
+                      }
+                    }}
+                    onTouchMove={() => {
+                      if (longPressTimerRef.current) {
+                        clearTimeout(longPressTimerRef.current);
+                        longPressTimerRef.current = null;
+                      }
+                    }}
+                    onMouseDown={() => {
+                      if (!isUser) return;
+                      longPressTimerRef.current = setTimeout(() => {
+                        setSelectedMsgId(msg.id);
+                      }, 450);
+                    }}
+                    onMouseUp={() => {
+                      if (longPressTimerRef.current) {
+                        clearTimeout(longPressTimerRef.current);
+                        longPressTimerRef.current = null;
+                      }
+                    }}
+                    className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed select-none transition-opacity cursor-default ${
+                      isUser
+                        ? "bg-primary text-primary-foreground rounded-br-md"
+                        : "bg-muted text-foreground rounded-bl-md"
+                    } ${isSelected ? "opacity-70" : ""}`}
+                  >
+                    {msg.content}
+                  </div>
+
+                  {/* Timestamp + delete controls */}
+                  <div className={`flex items-center gap-2 mt-0.5 px-1 ${isUser ? "flex-row-reverse" : "flex-row"}`}>
+                    {msg.createdAt && (
+                      <span className="text-[10px] text-muted-foreground/60">
+                        {formatMsgTime(msg.createdAt)}
+                      </span>
+                    )}
+                    <AnimatePresence>
+                      {isSelected && isUser && (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.8, x: 8 }}
+                          animate={{ opacity: 1, scale: 1, x: 0 }}
+                          exit={{ opacity: 0, scale: 0.8, x: 8 }}
+                          transition={{ duration: 0.15 }}
+                          className="flex items-center gap-1.5"
+                        >
+                          <button
+                            onClick={() => deleteMsgMutation.mutate(msg.id)}
+                            disabled={deleteMsgMutation.isPending}
+                            className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-destructive/10 border border-destructive/30 text-destructive text-[10px] font-medium hover:bg-destructive/20 transition-colors disabled:opacity-50"
+                          >
+                            {deleteMsgMutation.isPending && deleteMsgMutation.variables === msg.id
+                              ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                              : <Trash2 className="h-2.5 w-2.5" />}
+                            Delete
+                          </button>
+                          <button
+                            onClick={() => setSelectedMsgId(null)}
+                            className="text-[10px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </motion.div>
+              );
+            })}
           </AnimatePresence>
 
           {/* Live realtime transcripts shown during active voice session */}
