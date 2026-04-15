@@ -746,12 +746,16 @@ function EditChallengeSheet({
       // Send invites for newly selected connections
       if (inviting.length > 0) {
         const targets = connections.filter(c => inviting.includes(c.userId));
-        await Promise.all(
+        const results = await Promise.allSettled(
           targets.map(t =>
             apiRequest("POST", `/api/challenges/${challenge.id}/invite`, { username: t.username })
           )
         );
         queryClient.invalidateQueries({ queryKey: ["/api/challenges"] });
+        const failed = results.filter(r => r.status === "rejected").length;
+        if (failed > 0) {
+          toast({ title: `${failed} invite(s) failed`, variant: "destructive" });
+        }
       }
       toast({ title: "Challenge updated", description: inviting.length > 0 ? "Invites sent." : undefined });
       onClose();
@@ -1295,6 +1299,7 @@ export default function ChallengesTab({
     queryFn: () =>
       fetch(`/api/challenges?date=${localToday()}`, { credentials: "include" }).then(r => r.json()),
     staleTime: 30000,
+    refetchInterval: 60000, // Poll every 60 s so new invites appear without manual refresh
   });
 
   const invited = challenges.filter(c => c.myStatus === "invited");

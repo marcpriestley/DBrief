@@ -1837,18 +1837,28 @@ export class DatabaseStorage implements IStorage {
 
   async inviteToChallenge(challengeId: number, inviteeUserId: number, inviterId: number): Promise<void> {
     const { challengeParticipants } = await import("@shared/schema");
+    // Verify inviter is an active participant (joined) in this challenge
     const inviterPart = await db.select().from(challengeParticipants)
       .where(and(
         eq(challengeParticipants.challengeId, challengeId),
         eq(challengeParticipants.userId, inviterId),
         eq(challengeParticipants.status, "joined"),
       ));
-    if (inviterPart.length === 0) return;
-    const existing = await db.select().from(challengeParticipants)
+    if (inviterPart.length === 0) throw new Error("Inviter is not a joined participant");
+
+    const [existing] = await db.select().from(challengeParticipants)
       .where(and(eq(challengeParticipants.challengeId, challengeId), eq(challengeParticipants.userId, inviteeUserId)));
-    if (existing.length === 0) {
+
+    if (!existing) {
+      // First time — insert a fresh invite row
       await db.insert(challengeParticipants).values({ challengeId, userId: inviteeUserId, status: "invited" });
+    } else if (existing.status === "declined") {
+      // Previously declined — move back to invited so they can reconsider
+      await db.update(challengeParticipants)
+        .set({ status: "invited" })
+        .where(and(eq(challengeParticipants.challengeId, challengeId), eq(challengeParticipants.userId, inviteeUserId)));
     }
+    // If already "invited" or "joined", do nothing
   }
 
   async getUserPoints(userId: number): Promise<number> {

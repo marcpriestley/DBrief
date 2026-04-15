@@ -2120,7 +2120,16 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
       if (!username) return res.status(400).json({ message: "username required" });
       const target = await storage.getUserByUsername(username);
       if (!target) return res.status(404).json({ message: "User not found" });
-      await storage.inviteToChallenge(challengeId, target.id, userId);
+
+      try {
+        await storage.inviteToChallenge(challengeId, target.id, userId);
+      } catch (inviteErr: any) {
+        // Distinguish between auth failure and other errors
+        if (inviteErr?.message === "Inviter is not a joined participant") {
+          return res.status(403).json({ message: "You must be a participant to invite others" });
+        }
+        throw inviteErr;
+      }
 
       // Notify the invitee
       const [inviter, challenge] = await Promise.all([
@@ -2131,13 +2140,14 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
       const challengeTitle = challenge?.title || "a challenge";
       await notifyUser(target.id, {
         title: "New Challenge Invite",
-        body: "You've been invited to a DBrief challenge",
+        body: `${inviterName} invited you to: ${challengeTitle}`,
         url: "/squad?tab=challenges",
         tag: `challenge-invite-${challengeId}-${target.id}`,
       });
 
       res.json({ success: true });
     } catch (error) {
+      console.error("Failed to invite user:", error);
       res.status(500).json({ message: "Failed to invite user" });
     }
   });
