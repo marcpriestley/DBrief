@@ -63,7 +63,7 @@ export default function MetricTrendChart({ metric, history, selectedDate }: Metr
               tick={{ fontSize: 11 }}
               tickFormatter={(value) => {
                 const date = new Date(value);
-                return `${date.getMonth() + 1}/${date.getDate()}`;
+                return `${date.getDate()}/${date.getMonth() + 1}`;
               }}
             />
             <YAxis 
@@ -71,7 +71,7 @@ export default function MetricTrendChart({ metric, history, selectedDate }: Metr
               tick={{ fontSize: 11 }}
             />
             <Tooltip 
-              labelFormatter={(value) => new Date(value).toLocaleDateString()}
+              labelFormatter={(value) => new Date(value).toLocaleDateString("en-GB")}
               formatter={(value: number) => [value, metric.name]}
             />
             <Line

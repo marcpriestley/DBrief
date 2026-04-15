@@ -506,7 +506,7 @@ export default function LongTermGoals() {
                           <p className="text-sm font-medium text-muted-foreground line-through">{goal.title}</p>
                           {goal.completedAt && (
                             <p className="text-[10px] text-muted-foreground/60 mt-0.5">
-                              Completed {new Date(goal.completedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                              Completed {new Date(goal.completedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
                             </p>
                           )}
                         </div>

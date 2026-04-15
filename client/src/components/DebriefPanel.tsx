@@ -1113,7 +1113,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   const isToday = selectedDate === todayStr;
-  const dateLabel = isToday ? "Today" : new Date(selectedDate + "T12:00:00").toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  const dateLabel = isToday ? "Today" : new Date(selectedDate + "T12:00:00").toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 
   if (isLoading) {
     return (

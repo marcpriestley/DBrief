@@ -351,7 +351,7 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
       <div className="bg-card rounded-xl border border-border/50 shadow-sm overflow-hidden">
         <div className="px-4 py-3 flex justify-between items-center border-b border-border/30">
           <h2 className="text-sm font-semibold text-foreground tracking-tight">
-            {isToday ? "Daily Scores" : `Scores — ${new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
+            {isToday ? "Daily Scores" : `Scores — ${new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`}
           </h2>
           <div className="flex items-center gap-1">
             <Button

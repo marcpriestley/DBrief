@@ -117,7 +117,7 @@ function MoodPatterns({ checkins }: { checkins: MoodCheckin[] }) {
               {dailyPoints.map(({ date, avg }) => {
                 const heightPct = Math.max(10, avg);
                 const d = new Date(date + "T12:00:00");
-                const label = d.toLocaleDateString("en-US", { month: "numeric", day: "numeric" });
+                const label = d.toLocaleDateString("en-GB", { day: "numeric", month: "numeric" });
                 return (
                   <div key={date} className="flex-1 flex flex-col items-center gap-0.5" title={`${label}: ${avg}`}>
                     <div
@@ -130,7 +130,7 @@ function MoodPatterns({ checkins }: { checkins: MoodCheckin[] }) {
             </div>
             <div className="flex justify-between mt-1">
               <span className="text-[10px] text-muted-foreground">
-                {new Date(dailyPoints[0].date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                {new Date(dailyPoints[0].date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
               </span>
               <span className="text-[10px] text-muted-foreground">Today</span>
             </div>
@@ -312,7 +312,7 @@ export default function TrendsEnhanced() {
         tick={axisStyle}
         tickFormatter={(value) => {
           const date = new Date(value);
-          return `${date.getMonth() + 1}/${date.getDate()}`;
+          return `${date.getDate()}/${date.getMonth() + 1}`;
         }}
         axisLine={false}
         tickLine={false}
@@ -326,7 +326,7 @@ export default function TrendsEnhanced() {
           {commonXAxis}
           <YAxis domain={[0, 100]} tick={axisStyle} axisLine={false} tickLine={false} width={30} />
           <Tooltip
-            labelFormatter={(value) => new Date(value).toLocaleDateString()}
+            labelFormatter={(value) => new Date(value).toLocaleDateString("en-GB")}
             contentStyle={{ borderRadius: '8px', border: '1px solid hsl(220, 14%, 90%)', fontSize: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}
           />
           <Legend wrapperStyle={{ fontSize: '12px' }} />
@@ -361,7 +361,7 @@ export default function TrendsEnhanced() {
           {commonXAxis}
           <YAxis domain={[0, 100]} tick={axisStyle} axisLine={false} tickLine={false} width={30} />
           <Tooltip
-            labelFormatter={(value) => new Date(value).toLocaleDateString()}
+            labelFormatter={(value) => new Date(value).toLocaleDateString("en-GB")}
             contentStyle={{ borderRadius: '8px', border: '1px solid hsl(220, 14%, 90%)', fontSize: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}
           />
           <Legend wrapperStyle={{ fontSize: '12px' }} />
@@ -385,7 +385,7 @@ export default function TrendsEnhanced() {
         {commonXAxis}
         <YAxis domain={[0, 100]} tick={axisStyle} axisLine={false} tickLine={false} width={30} />
         <Tooltip
-          labelFormatter={(value) => new Date(value).toLocaleDateString()}
+          labelFormatter={(value) => new Date(value).toLocaleDateString("en-GB")}
           contentStyle={{ borderRadius: '8px', border: '1px solid hsl(220, 14%, 90%)', fontSize: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}
         />
         <Legend wrapperStyle={{ fontSize: '12px' }} />
@@ -516,7 +516,7 @@ export default function TrendsEnhanced() {
                         style={{
                           backgroundColor: intensity > 0 ? `rgba(79, 70, 229, ${0.15 + intensity * 0.7})` : 'hsl(220, 14%, 94%)',
                         }}
-                        title={`${new Date(day.date).toLocaleDateString()}: ${avgScore.toFixed(0)}/100`}
+                        title={`${new Date(day.date).toLocaleDateString("en-GB")}: ${avgScore.toFixed(0)}/100`}
                       />
                     );
                   })}
@@ -568,14 +568,14 @@ export default function TrendsEnhanced() {
                   <XAxis
                     dataKey="date"
                     tick={{ fontSize: 10, fill: 'hsl(220, 10%, 46%)' }}
-                    tickFormatter={(v) => { const d = new Date(v); return `${d.getMonth()+1}/${d.getDate()}`; }}
+                    tickFormatter={(v) => { const d = new Date(v); return `${d.getDate()}/${d.getMonth()+1}`; }}
                     axisLine={false}
                     tickLine={false}
                     interval={Math.max(0, Math.floor(dailyPointsData.length / 6) - 1)}
                   />
                   <YAxis tick={{ fontSize: 10, fill: 'hsl(220, 10%, 46%)' }} axisLine={false} tickLine={false} width={28} />
                   <Tooltip
-                    labelFormatter={(v) => new Date(v).toLocaleDateString()}
+                    labelFormatter={(v) => new Date(v).toLocaleDateString("en-GB")}
                     formatter={(v: number) => [`${v} pts`, "Points"]}
                     contentStyle={{ borderRadius: '8px', border: '1px solid hsl(220, 14%, 90%)', fontSize: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}
                   />

@@ -1448,8 +1448,8 @@ export class DatabaseStorage implements IStorage {
     entries.sort((a, b) => {
       if (sortBy === "streak") return (b.currentStreak - a.currentStreak) || (b.sevenDayConsistency - a.sevenDayConsistency);
       if (sortBy === "consistency") return (b.sevenDayConsistency - a.sevenDayConsistency) || (b.currentStreak - a.currentStreak);
-      // score: rank by points, tiebreak by 7-day consistency
-      return (b.points - a.points) || (b.sevenDayConsistency - a.sevenDayConsistency);
+      // score: rank by weeklyPoints first, tiebreak by lifetime points
+      return (b.weeklyPoints - a.weeklyPoints) || (b.points - a.points);
     });
 
     // Assign ranks (ties share the same rank)
@@ -1462,7 +1462,7 @@ export class DatabaseStorage implements IStorage {
           ? prev.currentStreak === cur.currentStreak && prev.sevenDayConsistency === cur.sevenDayConsistency
           : sortBy === "consistency"
           ? prev.sevenDayConsistency === cur.sevenDayConsistency && prev.currentStreak === cur.currentStreak
-          : prev.points === cur.points && prev.sevenDayConsistency === cur.sevenDayConsistency;
+          : prev.weeklyPoints === cur.weeklyPoints && prev.points === cur.points;
         if (!tied) rank = i + 1;
       }
       entries[i].rank = rank;
@@ -1546,7 +1546,7 @@ export class DatabaseStorage implements IStorage {
     const thirtyDayScores = allScores.filter(s => s.date >= thirtyAgo && s.value > 0 && !s.isAutoSynced);
     const todayScores = allScores.filter(s => s.date === todayStr && s.value > 0 && !s.isAutoSynced);
 
-    const sevenDayDays = new Set(recentScores.map(s => s.date)).size;
+    const sevenDayDays = Math.min(7, new Set(recentScores.map(s => s.date)).size);
     const sevenDayConsistency = Math.round((sevenDayDays / 7) * 100);
 
     const thirtyDayAvgScore = thirtyDayScores.length > 0
@@ -1879,7 +1879,7 @@ export class DatabaseStorage implements IStorage {
     const scoreDays = new Set(
       allScores.filter(s => s.date >= sevenAgo && s.value > 0 && !s.isAutoSynced).map(s => s.date)
     );
-    pts += scoreDays.size * 10;
+    pts += Math.min(7, scoreDays.size) * 10;
 
     const activeHabits = await db.select({ id: habits.id }).from(habits)
       .where(and(eq(habits.userId, userId), eq(habits.isArchived, false)));

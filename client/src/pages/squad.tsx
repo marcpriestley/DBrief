@@ -69,7 +69,7 @@ function LeaderboardRow({ entry, sortBy, idx }: { entry: LeaderboardEntry; sortB
   const name = entry.displayName || entry.username;
   const initials = name.slice(0, 2).toUpperCase();
   const loggedToday = entry.lastLoggedDate === new Date().toISOString().split("T")[0];
-  const daysLogged = Math.round((entry.sevenDayConsistency / 100) * 7);
+  const daysLogged = Math.min(7, Math.round((entry.sevenDayConsistency / 100) * 7));
 
   return (
     <motion.div
@@ -130,10 +130,10 @@ function LeaderboardRow({ entry, sortBy, idx }: { entry: LeaderboardEntry; sortB
         <div className="text-right shrink-0 space-y-0.5">
           <div className="flex items-center gap-1 justify-end">
             <Star className="h-3.5 w-3.5 text-primary" />
-            <span className="text-base font-bold text-foreground tabular-nums">{entry.points.toLocaleString()}</span>
+            <span className="text-base font-bold text-primary tabular-nums">{(entry.weeklyPoints ?? 0).toLocaleString()}</span>
           </div>
-          <p className="text-[10px] text-muted-foreground/60">lifetime pts</p>
-          <p className="text-[10px] text-primary/70 font-medium tabular-nums">{(entry.weeklyPoints ?? 0).toLocaleString()} this week</p>
+          <p className="text-[10px] text-muted-foreground/60">this week</p>
+          <p className="text-[10px] text-muted-foreground/50 tabular-nums">{entry.points.toLocaleString()} lifetime</p>
         </div>
       )}
     </motion.div>
@@ -298,7 +298,7 @@ type SortBy = "streak" | "consistency" | "score";
 const SORT_OPTIONS: { key: SortBy; label: string; icon: React.ReactNode }[] = [
   { key: "streak",      label: "Streak",      icon: <Flame className="h-3 w-3" /> },
   { key: "consistency", label: "Log Rate",     icon: <TrendingUp className="h-3 w-3" /> },
-  { key: "score",       label: "Points",       icon: <Star className="h-3 w-3" /> },
+  { key: "score",       label: "Perf. Points", icon: <Star className="h-3 w-3" /> },
 ];
 
 // ── Main Squad page ───────────────────────────────────────────────────────────
@@ -685,7 +685,7 @@ export default function SquadPage() {
                 <p className="text-[11px] text-muted-foreground/40 text-center">
                   {sortBy === "streak" ? "Ranked by current streak · log rate as tiebreaker" :
                    sortBy === "consistency" ? "Ranked by days logged in the last 7 · streak as tiebreaker" :
-                   "Ranked by lifetime Performance Points · weekly pts shown below"}
+                   "Ranked by this week's Performance Points · lifetime shown below"}
                 </p>
               )}
             </motion.div>

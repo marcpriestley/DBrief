@@ -190,7 +190,7 @@ export default function CalendarView({ selectedDate, onDateSelect }: CalendarVie
         <DialogContent className="max-w-lg overflow-y-auto" style={{ maxHeight: 'calc(80dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom))' }}>
           <DialogHeader>
             <DialogTitle>
-              {longPressDate && new Date(longPressDate + "T12:00:00").toLocaleDateString('en-US', {
+              {longPressDate && new Date(longPressDate + "T12:00:00").toLocaleDateString('en-GB', {
                 weekday: 'long',
                 month: 'long',
                 day: 'numeric'
