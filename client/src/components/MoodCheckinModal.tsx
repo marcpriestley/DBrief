@@ -4,6 +4,7 @@ import { haptic } from "@/lib/haptics";
 import { motion, AnimatePresence } from "framer-motion";
 import { Smile, Frown, Meh, Heart, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Slider } from "@/components/ui/slider";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -39,72 +40,6 @@ function getTimeOfDayLabel(): string {
   if (hour < 12) return "morning";
   if (hour < 17) return "afternoon";
   return "evening";
-}
-
-// Composite slider: a visible track+fill+thumb built from divs with the native
-// <input type="range"> layered transparently on top. Avoids all style-tag and
-// CSS-var pitfalls — works reliably in every browser and in Capacitor WebViews.
-function MoodSlider({
-  value,
-  onChange,
-}: {
-  value: number;
-  onChange: (v: number) => void;
-}) {
-  const color = getMoodColor(value);
-  const thumbSize = 28;
-
-  return (
-    <div className="relative flex items-center h-12 select-none">
-      {/* Track background */}
-      <div className="absolute inset-x-0 h-2 rounded-full bg-muted">
-        {/* Colored fill */}
-        <div
-          className="h-full rounded-full"
-          style={{ width: `${value}%`, background: color, transition: "width 0s" }}
-        />
-      </div>
-
-      {/* Thumb */}
-      <div
-        style={{
-          position: "absolute",
-          left: `calc(${thumbSize / 2}px + ${value / 100} * (100% - ${thumbSize}px))`,
-          width: thumbSize,
-          height: thumbSize,
-          borderRadius: "50%",
-          background: color,
-          border: "2.5px solid white",
-          boxShadow: "0 2px 8px rgba(0,0,0,0.28)",
-          pointerEvents: "none",
-          transform: "translateX(-50%)",
-          transition: "left 0s, background 0.15s",
-        }}
-      />
-
-      {/* Native input — invisible but handles all interaction including touch-drag on iOS */}
-      <input
-        type="range"
-        min={0}
-        max={100}
-        step={1}
-        value={value}
-        onChange={(e) => onChange(parseInt(e.target.value, 10))}
-        style={{
-          position: "absolute",
-          inset: 0,
-          width: "100%",
-          height: "100%",
-          opacity: 0,
-          cursor: "pointer",
-          margin: 0,
-          // Do NOT set touchAction here — iOS WebKit needs to handle the
-          // touch natively so it recognises the gesture as a range drag,
-          // not just a tap at a fixed position.
-        }}
-      />
-    </div>
-  );
 }
 
 export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProps) {
@@ -163,7 +98,8 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
     }
   }, [open]);
 
-  function handleSliderChange(val: number) {
+  function handleSliderChange(vals: number[]) {
+    const val = vals[0];
     setMoodValue(val);
     if (lastHapticVal.current === null || Math.abs(val - lastHapticVal.current) >= 5) {
       haptic("light");
@@ -223,10 +159,16 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
                 <p className="text-2xl font-bold text-foreground mt-0.5 tabular-nums">{moodValue}</p>
               </div>
 
-              {/* Composite slider */}
+              {/* Slider — uses the same Radix-based Slider that works throughout the app */}
               <div className="px-2">
-                <MoodSlider value={moodValue} onChange={handleSliderChange} />
-                <div className="flex justify-between mt-1 text-[10px] text-muted-foreground">
+                <Slider
+                  value={[moodValue]}
+                  onValueChange={handleSliderChange}
+                  min={0}
+                  max={100}
+                  step={1}
+                />
+                <div className="flex justify-between mt-2 text-[10px] text-muted-foreground">
                   <span>0</span>
                   <span>50</span>
                   <span>100</span>
