@@ -6,7 +6,7 @@ import {
   insertJournalEntrySchema, insertDailyScoreSchema, 
   insertUserMetricSchema, insertAIInsightSchema,
   insertPushSubscriptionSchema, insertHabitSchema,
-  infiniteGoals, longTermGoals,
+  infiniteGoals, longTermGoals, challengeParticipants,
 } from "@shared/schema";
 import OpenAI from "openai";
 import type { HealthData } from "./oura";
@@ -2108,6 +2108,40 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ message: "Failed to log challenge entry" });
+    }
+  });
+
+  // List pending (invited but not yet responded) users for a challenge — creator only
+  app.get("/api/challenges/:id/invited", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const challengeId = parseInt(req.params.id);
+      const challenge = await storage.getChallengeById(challengeId);
+      if (!challenge) return res.status(404).json({ message: "Challenge not found" });
+      if (challenge.creatorId !== userId) return res.status(403).json({ message: "Forbidden" });
+
+      const rows = await db
+        .select({
+          userId: challengeParticipants.userId,
+          status: challengeParticipants.status,
+        })
+        .from(challengeParticipants)
+        .where(
+          and(
+            eq(challengeParticipants.challengeId, challengeId),
+            eq(challengeParticipants.status, "invited"),
+          )
+        );
+
+      const result = await Promise.all(
+        rows.map(async (r) => {
+          const u = await storage.getUser(r.userId);
+          return { userId: r.userId, username: u?.username ?? "", displayName: u?.displayName ?? null };
+        })
+      );
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch pending invites" });
     }
   });
 

@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus, Flame, Zap, Trophy, Calendar, Users, ChevronRight,
   Check, X, Trash2, Crown, Medal, Lock, Globe,
-  Target, Activity, CheckCircle2, Clock, EyeOff, Eye, Pencil,
+  Target, Activity, CheckCircle2, Clock, EyeOff, Eye, Pencil, Bell,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -472,6 +472,28 @@ function ChallengeCard({
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/challenges"] }),
   });
 
+  // Pending invitees — only fetched when viewer is the creator and challenge is still active
+  const { data: pendingInvites = [] } = useQuery<{ userId: number; username: string; displayName: string | null }[]>({
+    queryKey: ["/api/challenges", challenge.id, "invited"],
+    queryFn: () => fetch(`/api/challenges/${challenge.id}/invited`, { credentials: "include" }).then(r => r.json()),
+    enabled: viewerIsCreator && !past,
+    staleTime: 30000,
+  });
+
+  const [nudgingId, setNudgingId] = useState<number | null>(null);
+  async function nudge(username: string, userId: number) {
+    setNudgingId(userId);
+    haptic("medium");
+    try {
+      await apiRequest("POST", `/api/challenges/${challenge.id}/invite`, { username });
+      toast({ title: "Nudge sent", description: `${username} has been reminded.` });
+    } catch {
+      toast({ title: "Failed to send nudge", variant: "destructive" });
+    } finally {
+      setNudgingId(null);
+    }
+  }
+
   const deleteMutation = useMutation({
     mutationFn: () => apiRequest("DELETE", `/api/challenges/${challenge.id}`, {}).then(r => r.json()),
     onSuccess: () => {
@@ -639,6 +661,29 @@ function ChallengeCard({
             >
               <Trophy className="h-3.5 w-3.5" /> Final standings <ChevronRight className="h-3 w-3" />
             </button>
+          </div>
+        )}
+
+        {/* Pending invites — creator only, active challenges */}
+        {viewerIsCreator && !past && pendingInvites.length > 0 && (
+          <div className="border-t border-border/30 px-4 py-2.5 space-y-1.5">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium flex items-center gap-1">
+              <Bell className="h-3 w-3" /> Awaiting response ({pendingInvites.length})
+            </p>
+            {pendingInvites.map(p => (
+              <div key={p.userId} className="flex items-center justify-between gap-2">
+                <span className="text-xs text-foreground/70 truncate">
+                  {p.displayName ? `${p.displayName}` : `@${p.username}`}
+                </span>
+                <button
+                  disabled={nudgingId === p.userId}
+                  onClick={() => nudge(p.username, p.userId)}
+                  className="text-[11px] font-medium text-primary/70 hover:text-primary px-2 py-0.5 rounded-md hover:bg-primary/5 transition-colors shrink-0 disabled:opacity-50"
+                >
+                  {nudgingId === p.userId ? "Sending…" : "Re-send"}
+                </button>
+              </div>
+            ))}
           </div>
         )}
 
