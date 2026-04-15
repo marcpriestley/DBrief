@@ -26,6 +26,11 @@ app.get("/api/version", (_req, res) => {
   res.json({ version: BUILD_ID });
 });
 
+// Lightweight public endpoint for keepalive pings — no DB hit, no auth required.
+// Point an uptime monitor (e.g. UptimeRobot) at /api/ping every 5 minutes
+// to prevent cold-start delays for users.
+app.get("/api/ping", (_req, res) => res.json({ ok: true }));
+
 // Force no-cache on HTML so WKWebView (Capacitor) always fetches the latest JS bundle.
 // Must be registered before session middleware and routes so headers are set before
 // any other handler can short-circuit the response (e.g. static file serving).

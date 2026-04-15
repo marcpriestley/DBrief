@@ -1693,7 +1693,7 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
 
   // ─── Habit routes ─────────────────────────────────────────────────────────
 
-  app.post("/api/habits/suggest-stacking", async (req, res) => {
+  app.post("/api/habits/suggest-stacking", aiLimiter, async (req, res) => {
     const userId = (req.session as any)?.userId;
     if (!userId) return res.status(401).json({ message: "Not authenticated" });
     const { anchor, habitName } = req.body;

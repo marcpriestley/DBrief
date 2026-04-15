@@ -8,7 +8,7 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
-export const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+export const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 20 });
 export const db = drizzle(pool, { schema });
 
 // Ensure server_config table exists (needed in production where migrations don't auto-run)
