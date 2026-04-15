@@ -82,7 +82,7 @@ function MoodSlider({
         }}
       />
 
-      {/* Native input — invisible but handles all interaction */}
+      {/* Native input — invisible but handles all interaction including touch-drag on iOS */}
       <input
         type="range"
         min={0}
@@ -98,7 +98,9 @@ function MoodSlider({
           opacity: 0,
           cursor: "pointer",
           margin: 0,
-          touchAction: "none",
+          // Do NOT set touchAction here — iOS WebKit needs to handle the
+          // touch natively so it recognises the gesture as a range drag,
+          // not just a tap at a fixed position.
         }}
       />
     </div>

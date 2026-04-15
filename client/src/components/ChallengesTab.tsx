@@ -972,16 +972,7 @@ function CreateChallengeSheet({
 
   const createMutation = useMutation({
     mutationFn: (body: object) => apiRequest("POST", "/api/challenges", body).then(r => r.json()),
-    onSuccess: async (ch) => {
-      if (visibility === "invite_only" && selectedInvitees.length > 0) {
-        const targets = connections.filter(c => selectedInvitees.includes(c.userId));
-        // Use allSettled so a single failed invite doesn't abort the rest of the flow
-        await Promise.allSettled(
-          targets.map(t =>
-            apiRequest("POST", `/api/challenges/${ch.id}/invite`, { username: t.username }).then(r => r.json())
-          )
-        );
-      }
+    onSuccess: () => {
       haptic("success");
       toast({ title: "Challenge created!", description: selectedInvitees.length > 0 || visibility === "open" ? "Invitations sent." : "Ready when your crew joins." });
       queryClient.invalidateQueries({ queryKey: ["/api/challenges"] });
@@ -993,6 +984,9 @@ function CreateChallengeSheet({
   function handleCreate() {
     const today = localToday();
     const end = new Date(new Date(today + "T12:00:00").getTime() + durationDays * 86400000).toLocaleDateString("en-CA");
+    const inviteeUsernames = visibility === "invite_only"
+      ? connections.filter(c => selectedInvitees.includes(c.userId)).map(c => c.username)
+      : [];
     createMutation.mutate({
       title: title.trim() || (type === "habit" ? habitName : `${metricName} challenge`),
       type,
@@ -1005,6 +999,7 @@ function CreateChallengeSheet({
       frequency,
       startDate: today,
       endDate: end,
+      inviteeUsernames,
     });
   }
 

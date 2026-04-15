@@ -1931,7 +1931,7 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
   app.post("/api/challenges", async (req, res) => {
     try {
       const userId = getUserId(req);
-      const { title, description, type, habitName, habitEmoji, metricName, visibility, startDate, endDate, frequency } = req.body;
+      const { title, description, type, habitName, habitEmoji, metricName, visibility, startDate, endDate, frequency, inviteeUsernames, creatorCommitment, creatorReminderTime } = req.body;
       if (!title || !type || !startDate || !endDate) {
         return res.status(400).json({ message: "title, type, startDate, endDate are required" });
       }
@@ -1944,7 +1944,7 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
       if (type === "score" && !metricName) {
         return res.status(400).json({ message: "metricName is required for score challenges" });
       }
-      const { creatorCommitment, creatorReminderTime } = req.body;
+
       const challenge = await storage.createChallenge(userId, {
         creatorId: userId,
         title,
@@ -1959,13 +1959,10 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
         endDate,
       }, creatorCommitment ?? undefined, creatorReminderTime ?? undefined);
 
-      // If open, auto-invite all accepted connections and notify them
       if (visibility === "open") {
+        // Auto-invite every accepted connection
         const conns = await storage.getConnectionsByUser(userId);
-        const accepted = conns.filter(c => c.status === "accepted");
-        const creator = await storage.getUser(userId);
-        const creatorName = creator?.displayName || creator?.username || "Someone";
-        for (const conn of accepted) {
+        for (const conn of conns.filter(c => c.status === "accepted")) {
           const targetId = conn.requesterId === userId ? conn.receiverId : conn.requesterId;
           await storage.inviteToChallenge(challenge.id, targetId, userId);
           await notifyUser(targetId, {
@@ -1975,10 +1972,29 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
             tag: `challenge-invite-${challenge.id}-${targetId}`,
           });
         }
+      } else if (Array.isArray(inviteeUsernames) && inviteeUsernames.length > 0) {
+        // invite_only — invite the explicitly chosen users server-side so it's atomic
+        console.log(`[Challenge] Creating invite-only challenge ${challenge.id}, inviting: ${inviteeUsernames.join(", ")}`);
+        for (const username of inviteeUsernames) {
+          const target = await storage.getUserByUsername(username as string);
+          if (!target) {
+            console.warn(`[Challenge] Invitee not found: ${username}`);
+            continue;
+          }
+          await storage.inviteToChallenge(challenge.id, target.id, userId);
+          await notifyUser(target.id, {
+            title: "New Challenge Invite",
+            body: "You've been invited to a DBrief challenge",
+            url: "/squad?tab=challenges",
+            tag: `challenge-invite-${challenge.id}-${target.id}`,
+          });
+          console.log(`[Challenge] Invited user ${target.id} (${username}) to challenge ${challenge.id}`);
+        }
       }
 
       res.json(challenge);
     } catch (error) {
+      console.error("Failed to create challenge:", error);
       res.status(500).json({ message: "Failed to create challenge" });
     }
   });
