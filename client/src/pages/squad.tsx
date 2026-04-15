@@ -69,12 +69,7 @@ function LeaderboardRow({ entry, sortBy, idx }: { entry: LeaderboardEntry; sortB
   const name = entry.displayName || entry.username;
   const initials = name.slice(0, 2).toUpperCase();
   const loggedToday = entry.lastLoggedDate === new Date().toISOString().split("T")[0];
-
-  const primaryStat = sortBy === "streak"
-    ? { value: entry.currentStreak, label: "streak", icon: <Flame className="h-3.5 w-3.5 text-orange-400" /> }
-    : sortBy === "consistency"
-    ? { value: `${entry.sevenDayConsistency}%`, label: "7-day", icon: <TrendingUp className="h-3.5 w-3.5 text-blue-400" /> }
-    : { value: entry.points.toLocaleString(), label: "pts", icon: <Star className="h-3.5 w-3.5 text-primary" /> };
+  const daysLogged = Math.round((entry.sevenDayConsistency / 100) * 7);
 
   return (
     <motion.div
@@ -112,14 +107,35 @@ function LeaderboardRow({ entry, sortBy, idx }: { entry: LeaderboardEntry; sortB
         <p className="text-[11px] text-muted-foreground/60">{formatLastSeen(entry.lastLoggedDate)}</p>
       </div>
 
-      {/* Primary stat */}
-      <div className="text-right shrink-0">
-        <div className="flex items-center gap-1 justify-end">
-          {primaryStat.icon}
-          <span className="text-base font-bold text-foreground tabular-nums">{primaryStat.value}</span>
+      {/* Stats — points sort shows lifetime + weekly; others show primary stat */}
+      {sortBy === "streak" && (
+        <div className="text-right shrink-0">
+          <div className="flex items-center gap-1 justify-end">
+            <Flame className="h-3.5 w-3.5 text-orange-400" />
+            <span className="text-base font-bold text-foreground tabular-nums">{entry.currentStreak}</span>
+          </div>
+          <p className="text-[10px] text-muted-foreground/60">streak</p>
         </div>
-        <p className="text-[10px] text-muted-foreground/60">{primaryStat.label}</p>
-      </div>
+      )}
+      {sortBy === "consistency" && (
+        <div className="text-right shrink-0">
+          <div className="flex items-center gap-1 justify-end">
+            <TrendingUp className="h-3.5 w-3.5 text-blue-400" />
+            <span className="text-base font-bold text-foreground tabular-nums">{daysLogged}/7</span>
+          </div>
+          <p className="text-[10px] text-muted-foreground/60">days logged</p>
+        </div>
+      )}
+      {sortBy === "score" && (
+        <div className="text-right shrink-0 space-y-0.5">
+          <div className="flex items-center gap-1 justify-end">
+            <Star className="h-3.5 w-3.5 text-primary" />
+            <span className="text-base font-bold text-foreground tabular-nums">{entry.points.toLocaleString()}</span>
+          </div>
+          <p className="text-[10px] text-muted-foreground/60">lifetime pts</p>
+          <p className="text-[10px] text-primary/70 font-medium tabular-nums">{(entry.weeklyPoints ?? 0).toLocaleString()} this week</p>
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -179,19 +195,29 @@ function ConnectionCard({ stats, onRemove }: { stats: ConnectionPublicStats; onR
                 {stats.points.toLocaleString()}
               </span>
             </div>
-            <p className="text-[10px] text-muted-foreground">pts</p>
+            <p className="text-[10px] text-muted-foreground">lifetime pts</p>
           </div>
           <div className="bg-muted/40 rounded-xl p-2.5 text-center">
             <div className="flex items-center justify-center gap-1 mb-0.5">
               <Trophy className="h-3 w-3 text-amber-400" />
               <span className="text-base font-bold text-foreground tabular-nums">{stats.longestStreak}</span>
             </div>
-            <p className="text-[10px] text-muted-foreground">best</p>
+            <p className="text-[10px] text-muted-foreground">best streak</p>
           </div>
         </div>
 
+        {(stats.weeklyPoints ?? 0) > 0 && (
+          <div className="bg-primary/5 rounded-xl px-3 py-2 mb-3 flex items-center justify-between">
+            <p className="text-[11px] text-muted-foreground">Performance pts this week</p>
+            <span className="text-xs font-bold text-primary tabular-nums">{(stats.weeklyPoints ?? 0).toLocaleString()} pts</span>
+          </div>
+        )}
+
         <div className="mb-2">
-          <p className="text-[11px] text-muted-foreground mb-1">7-day consistency</p>
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-[11px] text-muted-foreground">Logged last 7 days</p>
+            <p className="text-[11px] font-semibold text-foreground">{Math.round((stats.sevenDayConsistency / 100) * 7)}/7 days</p>
+          </div>
           <ConsistencyBar pct={stats.sevenDayConsistency} />
         </div>
 
@@ -271,7 +297,7 @@ function PendingCard({ stats, onAccept, onDecline }: { stats: ConnectionPublicSt
 type SortBy = "streak" | "consistency" | "score";
 const SORT_OPTIONS: { key: SortBy; label: string; icon: React.ReactNode }[] = [
   { key: "streak",      label: "Streak",      icon: <Flame className="h-3 w-3" /> },
-  { key: "consistency", label: "Consistency",  icon: <TrendingUp className="h-3 w-3" /> },
+  { key: "consistency", label: "Log Rate",     icon: <TrendingUp className="h-3 w-3" /> },
   { key: "score",       label: "Points",       icon: <Star className="h-3 w-3" /> },
 ];
 
@@ -657,9 +683,9 @@ export default function SquadPage() {
 
               {leaderboard.length > 1 && (
                 <p className="text-[11px] text-muted-foreground/40 text-center">
-                  {sortBy === "streak" ? "Ranked by current streak · consistency as tiebreaker" :
-                   sortBy === "consistency" ? "Ranked by 7-day logging consistency · streak as tiebreaker" :
-                   "Ranked by today's score avg · falls back to 30-day avg if today is empty"}
+                  {sortBy === "streak" ? "Ranked by current streak · log rate as tiebreaker" :
+                   sortBy === "consistency" ? "Ranked by days logged in the last 7 · streak as tiebreaker" :
+                   "Ranked by lifetime Performance Points · weekly pts shown below"}
                 </p>
               )}
             </motion.div>

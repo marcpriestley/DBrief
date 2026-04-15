@@ -544,7 +544,7 @@ export default function TrendsEnhanced() {
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <div className="text-xs font-black uppercase tracking-wider text-foreground">Activity Points</div>
+                  <div className="text-xs font-black uppercase tracking-wider text-foreground">Performance Points</div>
                   <div className="text-[10px] text-muted-foreground mt-0.5">Habits · Goals · Consistency</div>
                 </div>
                 <div className="flex items-center gap-3 text-right">

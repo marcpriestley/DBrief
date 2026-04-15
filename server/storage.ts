@@ -1561,7 +1561,10 @@ export class DatabaseStorage implements IStorage {
       .filter(s => s.value > 0 && !s.isAutoSynced)
       .sort((a, b) => b.date.localeCompare(a.date))[0]?.date ?? null;
 
-    const points = await this._getUserPoints(targetUserId);
+    const [points, weeklyPoints] = await Promise.all([
+      this._getUserPoints(targetUserId),
+      this.getWeeklyActivityPoints(targetUserId),
+    ]);
 
     return {
       userId: targetUserId,
@@ -1573,6 +1576,7 @@ export class DatabaseStorage implements IStorage {
       thirtyDayAvgScore,
       todayAvgScore,
       points,
+      weeklyPoints,
       lastLoggedDate,
       connectionId: conn.id,
       status: conn.status,

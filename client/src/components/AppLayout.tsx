@@ -1,7 +1,7 @@
 import { useLocation, Link } from "wouter";
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { CalendarDays, TrendingUp, Settings, LogOut, Smile, ChevronLeft, Users, LayoutDashboard } from "lucide-react";
+import { Settings, LogOut, Smile, ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import StreakDisplay from "@/components/StreakDisplay";
 import SettingsModal from "@/components/SettingsModal";
@@ -235,10 +235,10 @@ function AppLayoutInner({ children }: AppLayoutProps) {
   const PAGE_ORDER = ["/", "/calendar", "/trends", "/squad"];
 
   const allTabs = [
-    { href: "/", label: "Home", icon: LayoutDashboard },
-    { href: "/calendar", label: "History", icon: CalendarDays },
-    { href: "/trends", label: "Trends", icon: TrendingUp },
-    { href: "/squad", label: "Team", icon: Users },
+    { href: "/", label: "Dashboard" },
+    { href: "/calendar", label: "History" },
+    { href: "/trends", label: "Analytics" },
+    { href: "/squad", label: "Team" },
   ];
 
   const isActive = (href: string) =>
@@ -351,34 +351,27 @@ function AppLayoutInner({ children }: AppLayoutProps) {
             </div>
           </div>
 
-          <div className="flex gap-0 -mb-px">
-            {allTabs.map(({ href, label, icon: Icon }) => {
+          <div className="flex -mb-px">
+            {allTabs.map(({ href, label }) => {
               const active = isActive(href);
               const showChallengePulse = href === "/squad" && hasUnloggedChallenge && !active;
               return (
-                <Link key={href} href={href}>
+                <Link key={href} href={href} className="flex-1">
                   <button
                     onClick={() => haptic("select")}
-                    className={`relative flex flex-col items-center justify-center px-3 py-2 border-b-2 transition-all min-w-[52px] ${
+                    className={`relative w-full flex items-center justify-center gap-0.5 py-2.5 border-b-2 transition-all text-[10px] font-black uppercase tracking-tight ${
                       active
                         ? "border-primary text-foreground"
                         : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
                     }`}
                   >
-                    <span className="relative inline-flex">
-                      <Icon className={`h-4 w-4 transition-colors ${active ? "text-primary" : ""}`} />
-                      {showChallengePulse && (
-                        <span className="absolute -top-1 -right-1 flex h-2 w-2">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-70" />
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
-                        </span>
-                      )}
-                    </span>
-                    {active && (
-                      <span className="text-[9px] font-black uppercase tracking-wider mt-0.5 text-primary leading-none">
-                        {label}
+                    {showChallengePulse && (
+                      <span className="absolute top-1.5 right-2 flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-70" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
                       </span>
                     )}
+                    {label}
                   </button>
                 </Link>
               );

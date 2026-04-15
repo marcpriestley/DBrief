@@ -460,6 +460,7 @@ export type ConnectionPublicStats = {
   thirtyDayAvgScore: number | null;
   todayAvgScore: number | null;
   points: number;
+  weeklyPoints: number;
   lastLoggedDate: string | null;
   connectionId: number;
   status: string;
