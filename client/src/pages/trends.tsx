@@ -395,7 +395,7 @@ export default function TrendsEnhanced() {
     <AppLayout>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-foreground">Performance Trends</h2>
+          <h2 className="text-xl font-black uppercase tracking-tight text-foreground">Performance Trends</h2>
           <div className="flex items-center gap-1.5">
             <Select value={timeRange} onValueChange={setTimeRange}>
               <SelectTrigger className="h-8 w-24 text-xs">

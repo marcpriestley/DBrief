@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { haptic } from "@/lib/haptics";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { MessageCircle, Send, CheckCircle, Flag, Loader2, RotateCcw, Mic, MicOff, ArrowRight, Volume2, VolumeX, Square, ChevronDown, Radio, Waves, AudioLines, Trash2 } from "lucide-react";
+import { MessageCircle, Send, CheckCircle, Flag, Loader2, RotateCcw, Mic, MicOff, ArrowRight, Volume2, VolumeX, Square, ChevronDown, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiRequest } from "@/lib/queryClient";
@@ -458,8 +458,6 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
 
   // Voice note mode — long-form voice dump that only sends on explicit Submit
   const [voiceNoteMode, setVoiceNoteMode] = useState(false);
-  // "live" or "voice" — which quick-start chip is selected when there are no messages yet
-  const [inputStartMode, setInputStartMode] = useState<"live" | "voice">("voice");
   const [voiceNoteSeconds, setVoiceNoteSeconds] = useState(0);
   const voiceNoteTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const voiceNoteAutoStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1407,14 +1405,9 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
         </div>
 
         <div ref={chatContainerRef} className="px-5 py-4 space-y-3 overflow-y-auto overscroll-y-contain" style={{ maxHeight: 'calc(var(--visual-height, 100dvh) * 0.24)', minHeight: '60px' }}>
-          {debrief.messages.length === 0 && realtimeMessages.length === 0 && !isStreaming && !realtimeVoice.isActive && (
+          {debrief.messages.length === 0 && !isStreaming && (
             <p className="text-sm text-muted-foreground text-center py-4">
               Your session, your opening. What's on your mind?
-            </p>
-          )}
-          {realtimeVoice.status === "connecting" && (
-            <p className="text-sm text-muted-foreground text-center py-4 animate-pulse">
-              Connecting to your engineer…
             </p>
           )}
 
@@ -1523,40 +1516,6 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
             })}
           </AnimatePresence>
 
-          {/* Live realtime transcripts shown during active voice session */}
-          <AnimatePresence>
-            {realtimeMessages.map((msg, i) => (
-              <motion.div
-                key={`rt-${i}`}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.2 }}
-                className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}
-              >
-                <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
-                  msg.role === "user"
-                    ? "bg-primary text-primary-foreground rounded-br-md"
-                    : "bg-muted text-foreground rounded-bl-md"
-                }`}>
-                  {msg.text}
-                </div>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-
-          {/* AI responding indicator for realtime mode */}
-          {realtimeVoice.status === "ai_speaking" && (
-            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              <Waves className="h-3 w-3 animate-pulse text-primary" />
-              <span>Engineer speaking…</span>
-              <button
-                onClick={() => realtimeVoice.interrupt?.()}
-                className="ml-1 px-2 py-0.5 rounded-full bg-muted hover:bg-destructive/20 text-muted-foreground hover:text-destructive border border-border text-xs transition-colors"
-              >
-                Interrupt
-              </button>
-            </div>
-          )}
           {realtimeVoice.status === "user_speaking" && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Mic className="h-3 w-3 animate-pulse text-primary" />
@@ -1657,60 +1616,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
         </div>
 
         <div className="px-4 pb-4 pt-2 flex-shrink-0">
-          {/* Realtime live voice mode — full-width status display */}
-          {realtimeVoice.isActive ? (
-            <div className="flex items-center gap-3 bg-muted/50 rounded-xl border border-primary/30 p-3">
-              <div className="flex-1 min-w-0">
-                {realtimeVoice.status === "connecting" && (
-                  <span className="text-xs text-muted-foreground animate-pulse">Connecting to your engineer…</span>
-                )}
-                {realtimeVoice.status === "ai_speaking" && (
-                  <div className="flex items-center gap-2">
-                    <div className="flex gap-0.5 shrink-0">
-                      {[0, 80, 160, 240, 320].map((d) => (
-                        <span key={d} className="w-0.5 h-3.5 bg-primary rounded-full animate-pulse" style={{ animationDelay: `${d}ms` }} />
-                      ))}
-                    </div>
-                    <span className="text-xs text-muted-foreground">Engineer speaking…</span>
-                    <button
-                      onClick={() => realtimeVoice.interrupt?.()}
-                      className="ml-1 px-2 py-0.5 rounded-full bg-background hover:bg-destructive/20 text-muted-foreground hover:text-destructive border border-border text-xs transition-colors"
-                    >
-                      Interrupt
-                    </button>
-                  </div>
-                )}
-                {realtimeVoice.status === "user_speaking" && (
-                  <div className="flex items-center gap-2">
-                    <div className="flex gap-0.5 shrink-0">
-                      {[0, 100, 200, 300].map((d) => (
-                        <span key={d} className="w-0.5 h-3 bg-red-400 rounded-full animate-bounce" style={{ animationDelay: `${d}ms` }} />
-                      ))}
-                    </div>
-                    <span className="text-xs text-muted-foreground">Listening…</span>
-                  </div>
-                )}
-                {realtimeVoice.status === "ready" && (
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs text-muted-foreground">Live — speak when ready</span>
-                    <button
-                      onClick={() => realtimeVoice.promptEngineer?.()}
-                      className="text-[11px] font-medium text-primary bg-primary/10 hover:bg-primary/20 px-2 py-0.5 rounded-md transition-colors"
-                    >
-                      Prompt engineer
-                    </button>
-                  </div>
-                )}
-              </div>
-              <button
-                onClick={toggleRealtimeVoice}
-                className="h-8 px-3 rounded-lg shrink-0 flex items-center gap-1.5 text-xs font-medium bg-muted hover:bg-muted/80 text-foreground transition-colors"
-              >
-                <Square className="h-3 w-3 fill-current" />
-                End
-              </button>
-            </div>
-          ) : voiceNoteMode ? (
+            {voiceNoteMode ? (
             <div className="space-y-2">
               {/* Voice note recording panel */}
               <div className="flex items-start gap-3 bg-muted/50 rounded-xl border border-red-500/30 p-3">
@@ -1810,33 +1716,6 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
             </div>
           ) : (
             <>
-              {/* Mode selector — always visible so labels are always clear */}
-              {!isStreaming && voice.isSupported && (
-                <div className="flex items-center gap-1.5 mb-2">
-                  <button
-                    onClick={() => { haptic("select"); setInputStartMode("live"); if (voiceNoteMode) cancelVoiceNote(); }}
-                    className={`flex items-center gap-1.5 h-7 px-3 rounded-full text-xs font-medium transition-colors border ${
-                      inputStartMode === "live"
-                        ? "bg-primary/10 text-primary border-primary/30"
-                        : "bg-transparent text-muted-foreground border-border/40 hover:bg-muted/60"
-                    }`}
-                  >
-                    <Radio className="h-3 w-3" />
-                    Live Chat
-                  </button>
-                  <button
-                    onClick={() => { haptic("select"); setInputStartMode("voice"); }}
-                    className={`flex items-center gap-1.5 h-7 px-3 rounded-full text-xs font-medium transition-colors border ${
-                      inputStartMode === "voice"
-                        ? "bg-primary/10 text-primary border-primary/30"
-                        : "bg-transparent text-muted-foreground border-border/40 hover:bg-muted/60"
-                    }`}
-                  >
-                    <AudioLines className="h-3 w-3" />
-                    Voice note
-                  </button>
-                </div>
-              )}
               {/* Normal mode — mic waveform indicator */}
               {voice.isListening && (
                 <div className="flex items-center gap-2 mb-2 px-2">
@@ -1873,15 +1752,10 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                 {voice.isSupported && (
                   <button
                     onClick={() => {
-                      // When no messages yet, mic button also respects the selected start mode
                       if (debrief.messages.length === 0 && !isStreaming) {
                         haptic("medium");
                         warmAudioCtx();
-                        if (inputStartMode === "live") {
-                          toggleConversation();
-                        } else {
-                          startVoiceNote();
-                        }
+                        startVoiceNote();
                       } else {
                         handleMicToggle();
                       }
@@ -1905,16 +1779,10 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                   onKeyDown={handleKeyDown}
                   onInput={handleTextareaInput}
                   onFocus={() => {
-                    // When no messages yet, tapping the input row launches the selected mode
-                    // rather than opening the keyboard to type
                     if (debrief.messages.length === 0 && !isStreaming && voice.isSupported) {
                       inputRef.current?.blur();
                       warmAudioCtx();
-                      if (inputStartMode === "live") {
-                        toggleConversation();
-                      } else {
-                        startVoiceNote();
-                      }
+                      startVoiceNote();
                     }
                   }}
                   placeholder={voice.isListening ? "Speak freely — pausing is fine, mic stays on..." : "Talk to your engineer..."}

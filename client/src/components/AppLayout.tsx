@@ -319,7 +319,7 @@ function AppLayoutInner({ children }: AppLayoutProps) {
             <Link href="/">
               <button
                 onClick={() => haptic("select")}
-                className={`flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-semibold border-b-2 transition-all ${
+                className={`flex items-center gap-1.5 px-3.5 py-2.5 text-[11px] font-black uppercase tracking-wider border-b-2 transition-all ${
                   location === "/" || location === "/dashboard"
                     ? "border-primary text-foreground"
                     : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
@@ -334,7 +334,7 @@ function AppLayoutInner({ children }: AppLayoutProps) {
                 <Link key={href} href={href}>
                   <button
                     onClick={() => haptic("select")}
-                    className={`relative flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-semibold border-b-2 transition-all ${
+                    className={`relative flex items-center gap-1.5 px-3.5 py-2.5 text-[11px] font-black uppercase tracking-wider border-b-2 transition-all ${
                       isActive(href)
                         ? "border-primary text-foreground"
                         : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
