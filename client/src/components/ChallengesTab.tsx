@@ -5,6 +5,7 @@ import {
   Plus, Flame, Zap, Trophy, Calendar, Users, ChevronRight,
   Check, X, Trash2, Crown, Medal, Lock, Globe,
   Target, Activity, CheckCircle2, Clock, EyeOff, Eye, Pencil, Bell,
+  Search, UserPlus,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -967,6 +968,7 @@ function CreateChallengeSheet({
   const [frequency, setFrequency] = useState<"daily" | "every_other_day" | "weekly">("daily");
   const [visibility, setVisibility] = useState<"invite_only" | "open">("invite_only");
   const [selectedInvitees, setSelectedInvitees] = useState<number[]>([]);
+  const [inviteSearch, setInviteSearch] = useState("");
   const [reminderEnabled, setReminderEnabled] = useState(false);
   const [reminderTime, setReminderTime] = useState("21:00");
 
@@ -1246,42 +1248,87 @@ function CreateChallengeSheet({
               </div>
 
               {/* Invite specific people */}
-              {visibility === "invite_only" && connections.length > 0 && (
-                <div>
-                  <label className="text-xs text-muted-foreground block mb-2">Invite crew members</label>
-                  <div className="space-y-1.5">
-                    {connections.map(c => {
-                      const selected = selectedInvitees.includes(c.userId);
-                      const name = c.displayName || c.username;
-                      return (
-                        <button
-                          key={c.userId}
-                          onClick={() => {
-                            haptic("select");
-                            setSelectedInvitees(prev =>
-                              prev.includes(c.userId) ? prev.filter(id => id !== c.userId) : [...prev, c.userId]
-                            );
-                          }}
-                          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all text-left ${
-                            selected ? "border-primary bg-primary/5" : "border-border/50 bg-card"
-                          }`}
-                        >
-                          <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                            <span className="text-[10px] font-bold text-primary">{name.slice(0, 2).toUpperCase()}</span>
-                          </div>
-                          <span className="text-sm text-foreground flex-1">{name}</span>
-                          {selected && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+              {visibility === "invite_only" && (
+                <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground block">Invite crew members</label>
 
-              {visibility === "invite_only" && connections.length === 0 && (
-                <p className="text-xs text-muted-foreground/60 text-center py-2">
-                  No crew yet — add connections first, or switch to Open.
-                </p>
+                  {connections.length === 0 ? (
+                    <p className="text-xs text-muted-foreground/60 text-center py-2">
+                      No crew yet — add connections first, or switch to Open.
+                    </p>
+                  ) : (
+                    <>
+                      {/* Selected chips */}
+                      {selectedInvitees.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {selectedInvitees.map(id => {
+                            const c = connections.find(x => x.userId === id);
+                            if (!c) return null;
+                            const name = c.displayName || c.username;
+                            return (
+                              <button
+                                key={id}
+                                onClick={() => { haptic("select"); setSelectedInvitees(prev => prev.filter(x => x !== id)); }}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/30 text-xs text-primary font-medium"
+                              >
+                                {name}
+                                <X className="h-3 w-3 opacity-60" />
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Search input */}
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/50" />
+                        <input
+                          value={inviteSearch}
+                          onChange={e => setInviteSearch(e.target.value)}
+                          placeholder="Search crew to invite…"
+                          className="w-full pl-8 pr-3 py-2 text-sm rounded-xl border border-border/50 bg-card text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50"
+                        />
+                      </div>
+
+                      {/* Filtered results — only show when user has typed something */}
+                      {inviteSearch.trim().length > 0 && (
+                        <div className="space-y-1">
+                          {connections
+                            .filter(c => {
+                              const name = (c.displayName || c.username).toLowerCase();
+                              return name.includes(inviteSearch.toLowerCase()) && !selectedInvitees.includes(c.userId);
+                            })
+                            .map(c => {
+                              const name = c.displayName || c.username;
+                              return (
+                                <button
+                                  key={c.userId}
+                                  onClick={() => {
+                                    haptic("select");
+                                    setSelectedInvitees(prev => [...prev, c.userId]);
+                                    setInviteSearch("");
+                                  }}
+                                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border border-border/50 bg-card hover:bg-muted/50 transition-all text-left"
+                                >
+                                  <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                                    <span className="text-[10px] font-bold text-primary">{name.slice(0, 2).toUpperCase()}</span>
+                                  </div>
+                                  <span className="text-sm text-foreground flex-1">{name}</span>
+                                  <UserPlus className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                </button>
+                              );
+                            })}
+                          {connections.filter(c => {
+                            const name = (c.displayName || c.username).toLowerCase();
+                            return name.includes(inviteSearch.toLowerCase()) && !selectedInvitees.includes(c.userId);
+                          }).length === 0 && (
+                            <p className="text-xs text-muted-foreground/50 text-center py-1">No matches</p>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
               )}
 
               {/* Reminder */}
