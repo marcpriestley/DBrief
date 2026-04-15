@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { haptic } from "@/lib/haptics";
 import { motion, AnimatePresence } from "framer-motion";
@@ -41,10 +41,67 @@ function getTimeOfDayLabel(): string {
   return "evening";
 }
 
+// Static style — never regenerated. Track fill + thumb colour come from CSS vars
+// set directly on the slider wrapper via ref, avoiding per-frame style recalculation.
+const SLIDER_STYLE = `
+  .mood-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 48px;
+    background: transparent;
+    cursor: pointer;
+    touch-action: none;
+  }
+  .mood-slider::-webkit-slider-runnable-track {
+    height: 8px;
+    border-radius: 9999px;
+    background: linear-gradient(
+      to right,
+      var(--mood-color) var(--mood-pct),
+      hsl(var(--border)) var(--mood-pct)
+    );
+  }
+  .mood-slider::-moz-range-track {
+    height: 8px;
+    border-radius: 9999px;
+    background: hsl(var(--border));
+  }
+  .mood-slider::-moz-range-progress {
+    height: 8px;
+    border-radius: 9999px;
+    background: var(--mood-color);
+  }
+  .mood-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--mood-color);
+    border: 2px solid white;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+    margin-top: -10px;
+    transition: transform 0.1s ease;
+  }
+  .mood-slider:active::-webkit-slider-thumb { transform: scale(1.15); }
+  .mood-slider::-moz-range-thumb {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--mood-color);
+    border: 2px solid white;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+    cursor: pointer;
+  }
+  .mood-slider:focus { outline: none; }
+`;
+
 export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProps) {
   const [moodValue, setMoodValue] = useState(50);
   const seededRef = useRef(false);
   const lastHapticVal = useRef<number | null>(null);
+  const sliderWrapRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -97,9 +154,22 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
     }
   }, [open]);
 
+  // Directly update CSS vars on the wrapper element — no style tag recreation, no forced layout.
+  const syncCssVars = useCallback((val: number) => {
+    const el = sliderWrapRef.current;
+    if (!el) return;
+    const color = getMoodColor(val);
+    el.style.setProperty("--mood-color", color);
+    el.style.setProperty("--mood-pct", `${val}%`);
+  }, []);
+
+  // Sync on mount and whenever moodValue changes (e.g. seeded from today's check-in)
+  useEffect(() => { syncCssVars(moodValue); }, [moodValue, syncCssVars]);
+
   function handleSliderChange(e: React.ChangeEvent<HTMLInputElement>) {
     const val = parseInt(e.target.value, 10);
-    setMoodValue(val);
+    syncCssVars(val);   // update track/thumb instantly via CSS vars — no layout stall
+    setMoodValue(val);  // update displayed number + emoji (less frequent re-render cost)
     if (lastHapticVal.current === null || Math.abs(val - lastHapticVal.current) >= 5) {
       haptic("light");
       lastHapticVal.current = val;
@@ -158,59 +228,10 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
                 <p className="text-2xl font-bold text-foreground mt-0.5 tabular-nums">{moodValue}</p>
               </div>
 
-              {/* Native range slider — GPU-accelerated, no JS thread blocking */}
-              <div className="px-2">
-                <style>{`
-                  .mood-slider {
-                    -webkit-appearance: none;
-                    appearance: none;
-                    width: 100%;
-                    height: 48px;
-                    background: transparent;
-                    cursor: pointer;
-                    touch-action: manipulation;
-                  }
-                  .mood-slider::-webkit-slider-runnable-track {
-                    height: 8px;
-                    border-radius: 9999px;
-                    background: linear-gradient(to right, ${moodColor} ${moodValue}%, hsl(var(--border)) ${moodValue}%);
-                  }
-                  .mood-slider::-moz-range-track {
-                    height: 8px;
-                    border-radius: 9999px;
-                    background: hsl(var(--border));
-                  }
-                  .mood-slider::-moz-range-progress {
-                    height: 8px;
-                    border-radius: 9999px;
-                    background: ${moodColor};
-                  }
-                  .mood-slider::-webkit-slider-thumb {
-                    -webkit-appearance: none;
-                    appearance: none;
-                    width: 28px;
-                    height: 28px;
-                    border-radius: 50%;
-                    background: ${moodColor};
-                    border: 2px solid white;
-                    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
-                    margin-top: -10px;
-                    transition: transform 0.1s ease;
-                  }
-                  .mood-slider:active::-webkit-slider-thumb {
-                    transform: scale(1.15);
-                  }
-                  .mood-slider::-moz-range-thumb {
-                    width: 28px;
-                    height: 28px;
-                    border-radius: 50%;
-                    background: ${moodColor};
-                    border: 2px solid white;
-                    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
-                    cursor: pointer;
-                  }
-                  .mood-slider:focus { outline: none; }
-                `}</style>
+              {/* Range slider — track fill/thumb colour driven by CSS vars on the wrapper, */}
+              {/* updated directly via DOM ref to avoid per-frame style tag recreation.      */}
+              <div className="px-2" ref={sliderWrapRef}>
+                <style dangerouslySetInnerHTML={{ __html: SLIDER_STYLE }} />
                 <input
                   type="range"
                   min={0}
