@@ -32,6 +32,12 @@ const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 
+// Whisper audio transcription requires the standard OpenAI API (not Azure).
+// Azure OpenAI only supports model deployments, and whisper-1 is not deployed.
+const whisperOpenai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
 // ── Push notification helper ───────────────────────────────────────────────
 // Sends a push to ALL registered devices for a user (APNs first, then web).
 // Silently swallows errors so callers don't need try/catch.
@@ -1139,7 +1145,7 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
           : mimeType.includes("ogg") ? "ogg"
           : "webm";
         const file = new File([buffer], `voice-note.${ext}`, { type: mimeType });
-        const transcription = await openai.audio.transcriptions.create({
+        const transcription = await whisperOpenai.audio.transcriptions.create({
           file,
           model: "whisper-1",
           language: "en",
