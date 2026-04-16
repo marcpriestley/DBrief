@@ -108,14 +108,24 @@ function generateApnsJwt(keyId: string, teamId: string, privateKey: Uint8Array):
 
 let h2Session: http2.ClientHttp2Session | null = null;
 let h2Host: string | null = null;
+let h2LastUsedAt = 0;
+// Apple silently closes idle HTTP/2 connections after ~1 hour. Force a fresh
+// connection if the session hasn't been used in 45 minutes.
+const H2_MAX_IDLE_MS = 45 * 60 * 1000;
 
 function getH2Session(host: string): http2.ClientHttp2Session {
-  if (h2Session && !h2Session.destroyed && h2Host === host) return h2Session;
+  const now = Date.now();
+  const sessionStale = h2LastUsedAt > 0 && (now - h2LastUsedAt) > H2_MAX_IDLE_MS;
+  if (h2Session && !h2Session.destroyed && h2Host === host && !sessionStale) {
+    h2LastUsedAt = now;
+    return h2Session;
+  }
   if (h2Session && !h2Session.destroyed) h2Session.destroy();
   h2Session = http2.connect(host);
   h2Host = host;
-  h2Session.on("error", () => { h2Session = null; h2Host = null; });
-  h2Session.on("close", () => { h2Session = null; h2Host = null; });
+  h2LastUsedAt = now;
+  h2Session.on("error", () => { h2Session = null; h2Host = null; h2LastUsedAt = 0; });
+  h2Session.on("close", () => { h2Session = null; h2Host = null; h2LastUsedAt = 0; });
   return h2Session;
 }
 

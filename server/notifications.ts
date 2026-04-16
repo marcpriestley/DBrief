@@ -72,6 +72,8 @@ export interface PushNotificationPayload {
   icon?: string;
   url?: string;
   tag?: string;
+  type?: string;
+  category?: string;
 }
 
 // ─── Send helpers ──────────────────────────────────────────────────────────
@@ -215,11 +217,12 @@ export async function sendDailyReminders(windowMinutes = DELIVERY_WINDOW_MINUTES
         const payload: PushNotificationPayload = {
           title: isMorning ? '☀️ Morning Check-in' : '🔥 Evening Reminder',
           body:  isMorning
-            ? 'Start your day right — set your goals and log how you feel.'
+            ? 'Start your day right — log your mood and set your intentions.'
             : 'Time to log your scores and continue your streak!',
           icon: '/icon-192.png',
-          url:  '/',
+          url:  isMorning ? '/?mood=checkin' : '/',
           tag:  `daily-reminder-${user.id}-${reminder.slot}`,
+          ...(isMorning ? { type: 'MOOD_CHECKIN', category: 'MOOD_CHECKIN' } : {}),
         };
 
         console.log(`[Daily Reminders] Sending slot ${reminder.slot} to user ${user.id} (${user.timezone}, ${reminder.time})`);

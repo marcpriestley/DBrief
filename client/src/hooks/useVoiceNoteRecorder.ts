@@ -241,9 +241,29 @@ export function useVoiceNoteRecorder(): VoiceNoteRecorder {
 
   const start = useCallback(async (onUnexpectedStop?: () => void): Promise<boolean> => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      });
+      // Retry getUserMedia up to 3 times with back-off.
+      // iOS keeps the audio session "in use" for a short period after stop() —
+      // calling getUserMedia immediately often fails on the first attempt but
+      // succeeds within a few hundred ms.
+      const START_DELAYS = [0, 200, 500]; // ms before each attempt
+      let stream: MediaStream | null = null;
+      let lastErr: unknown;
+      for (let i = 0; i < START_DELAYS.length; i++) {
+        if (START_DELAYS[i] > 0) {
+          await new Promise<void>((r) => setTimeout(r, START_DELAYS[i]));
+          console.log(`[VoiceNote] start: getUserMedia retry ${i}...`);
+        }
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+          });
+          break;
+        } catch (err) {
+          lastErr = err;
+          console.warn(`[VoiceNote] start: getUserMedia attempt ${i + 1} failed:`, err);
+        }
+      }
+      if (!stream) throw lastErr;
 
       // Increment session ID — invalidates any in-flight tryRestart from previous session
       const sessionId = ++sessionIdRef.current;
