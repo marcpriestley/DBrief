@@ -48,43 +48,40 @@
   --radius: 0.75rem;
 }
 
-/* Fill every layer with the app background so that iOS WKWebView's native
-   rubber-band bounce never reveals white.  --background is a full hsl() value
-   so we use var() directly (not hsl(var())) to avoid double-wrapping.
-   #root ensures the React mount point is also coloured (the layer WKWebView
-   bounces against in Capacitor). */
-html,
-body,
-#root {
-  background-color: var(--background);
-}
+/* ── Overscroll / bounce fix ────────────────────────────────────────────────
+   WKWebView controls body-scroll at the OS layer, so CSS overscroll-behavior
+   and background-color on html/body are IGNORED for the rubber-band bounce
+   area — the OS always paints its own (white) background there.
 
-/* Explicit dark-mode fallback so iOS Safari's overscroll bounce always shows
-   the dark background — not white — when the .dark class is active on <html>. */
-html.dark,
-html.dark body,
-html.dark #root {
-  background-color: hsl(0, 0%, 8%);
-}
+   The fix: keep html+body locked to the viewport height with overflow:hidden,
+   and let #root be the CSS overflow scroll container. When scroll is inside a
+   CSS overflow element (not body), WebKit respects overscroll-behavior:none
+   and uses that element's background-color for any bounce reveal — both fully
+   under our CSS control, no native rebuild required. */
 
-/* color-scheme tells Safari / WKWebView what colour to paint the native
-   rubber-band overscroll area that sits OUTSIDE the HTML layer.
-   Without this the OS defaults to white regardless of CSS background-color. */
 html {
-  color-scheme: light;
+  height: 100%;
+  color-scheme: light;          /* hint for system-level UI chrome (scrollbars etc.) */
 }
 html.dark {
   color-scheme: dark;
 }
 
-/* Prevent the main viewport from rubber-band bouncing in iOS Safari.
-   This stops both the white-band flash and the scroll-vibration glitch
-   that occurs when nested scroll containers chain momentum to the body. */
-html {
-  overscroll-behavior-y: none;
-}
 body {
-  overscroll-behavior-y: none;
+  height: 100%;
+  overflow: hidden;             /* prevent native body/WKWebView scroll layer */
+}
+
+#root {
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior-y: none; /* respected by WebKit on CSS overflow elements */
+  background-color: var(--background);
+  -webkit-overflow-scrolling: touch;
+}
+
+html.dark #root {
+  background-color: hsl(0, 0%, 8%);
 }
 
 @layer base {
