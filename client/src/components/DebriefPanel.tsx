@@ -477,6 +477,10 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const focusMountedRef = useRef(false);
   // Index into `accumulated` where the first sentence ends (0 = no sentence spoken yet)
   const ttsFirstSentenceRef = useRef<number>(0);
+  // Tracks the most recently COMPLETED AI streaming response so the speaker
+  // button always plays the right message even if the query cache hasn't
+  // refreshed yet after invalidateQueries.
+  const lastStreamedAiMsgRef = useRef<string>("");
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const voice = useInlineVoice();
@@ -754,6 +758,9 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
         }
       }
 
+      // Capture the completed response NOW so the speaker button has the right
+      // text even before the query cache refetch lands.
+      if (accumulated) lastStreamedAiMsgRef.current = accumulated;
       queryClient.invalidateQueries({ queryKey: ["/api/debriefs", selectedDate] });
       // Speak: if first sentence was already started, queue the rest; otherwise speak all.
       // Pre-fetch the remainder audio NOW (before first sentence finishes) to eliminate
@@ -1430,7 +1437,12 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
           {/* Right: action buttons — icon-only to avoid overflow on narrow screens */}
           <div className="flex items-center gap-0.5 flex-shrink-0">
             {tts.isSupported && !realtimeVoice.isActive && !isConversationMode && (() => {
-              const lastAiMsg = debrief.messages.filter(m => m.role === "assistant").slice(-1)[0]?.content ?? "";
+              // Prefer the ref (set the moment streaming ends) over the query cache
+              // — the cache refetch from invalidateQueries may not have landed yet
+              // when the user taps the speaker immediately after a response.
+              const lastAiMsg =
+                lastStreamedAiMsgRef.current ||
+                (debrief.messages.filter(m => m.role === "assistant").slice(-1)[0]?.content ?? "");
               const handleSpeaker = () => {
                 haptic("select");
                 if (tts.speaking) {

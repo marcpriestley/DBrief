@@ -90,15 +90,27 @@ function AuthenticatedRouter() {
       setLocation(`/squad?tab=${tab}`);
     };
 
+    // When the app comes back to the foreground after a notification tap,
+    // iOS fires visibilitychange → "visible" before (or instead of) the
+    // dbrief:open-mood custom event arriving from the Capacitor bridge.
+    // Re-checking here closes the timing gap.
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      if (consumePendingMoodOpen()) { setIsMoodOpen(true); return; }
+      checkMoodParam();
+    };
+
     window.addEventListener("dbrief:open-mood", onOpenMood);
     window.addEventListener("dbrief:open-squad", onOpenSquad);
     window.addEventListener("dbrief:notification", onForegroundNotification);
     window.addEventListener("popstate", checkMoodParam);
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       window.removeEventListener("dbrief:open-mood", onOpenMood);
       window.removeEventListener("dbrief:open-squad", onOpenSquad);
       window.removeEventListener("dbrief:notification", onForegroundNotification);
       window.removeEventListener("popstate", checkMoodParam);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
 
