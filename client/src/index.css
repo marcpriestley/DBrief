@@ -67,6 +67,16 @@ html.dark #root {
   background-color: hsl(0, 0%, 8%);
 }
 
+/* color-scheme tells Safari / WKWebView what colour to paint the native
+   rubber-band overscroll area that sits OUTSIDE the HTML layer.
+   Without this the OS defaults to white regardless of CSS background-color. */
+html {
+  color-scheme: light;
+}
+html.dark {
+  color-scheme: dark;
+}
+
 /* Prevent the main viewport from rubber-band bouncing in iOS Safari.
    This stops both the white-band flash and the scroll-vibration glitch
    that occurs when nested scroll containers chain momentum to the body. */
