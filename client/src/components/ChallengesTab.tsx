@@ -482,7 +482,8 @@ function ChallengeCard({
       return res.json();
     },
     enabled: viewerIsCreator && !past,
-    staleTime: 30000,
+    staleTime: 10000,
+    refetchInterval: 15000, // Poll so "awaiting response" clears quickly when someone accepts
   });
 
   const [nudgingId, setNudgingId] = useState<number | null>(null);
@@ -1390,8 +1391,8 @@ export default function ChallengesTab({
     queryKey: ["/api/challenges"],
     queryFn: () =>
       fetch(`/api/challenges?date=${localToday()}`, { credentials: "include" }).then(r => r.json()),
-    staleTime: 30000,
-    refetchInterval: 60000, // Poll every 60 s so new invites appear without manual refresh
+    staleTime: 10000,
+    refetchInterval: 15000, // Poll every 15 s so joins/accepts appear quickly
   });
 
   const invited = challenges.filter(c => c.myStatus === "invited");

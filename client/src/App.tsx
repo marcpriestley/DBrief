@@ -96,8 +96,12 @@ function AuthenticatedRouter() {
     // Re-checking here closes the timing gap.
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
+      // Mood modal pending from a notification tap while app was backgrounded
       if (consumePendingMoodOpen()) { setIsMoodOpen(true); return; }
       checkMoodParam();
+      // Squad / challenges deep-link pending from a notification tap
+      const pendingSquad = consumePendingSquadNav();
+      if (pendingSquad) setLocation(`/squad?tab=${pendingSquad}`);
     };
 
     window.addEventListener("dbrief:open-mood", onOpenMood);
