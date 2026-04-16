@@ -300,23 +300,48 @@ export function useVoiceNoteRecorder(): VoiceNoteRecorder {
 
       const mimeType = recorder?.mimeType || mimeTypeRef.current || "audio/webm";
 
+      // Snapshot chunks immediately. Any ondataavailable events that fire
+      // between now and onstop will push into this local array (we override
+      // ondataavailable below), so a new session can't wipe our data.
+      const localChunks = chunksRef.current.slice();
+      chunksRef.current = [];
+
+      let resolved = false;
       const finish = () => {
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(timeoutId);
         streamRef.current?.getTracks().forEach((t) => t.stop());
         streamRef.current        = null;
         mediaRecorderRef.current = null;
-        if (chunksRef.current.length > 0) {
-          const blob = new Blob(chunksRef.current, { type: mimeType });
-          chunksRef.current = [];
-          resolve({ blob, mimeType });
+        console.log(`[VoiceNote] stop(): finish — ${localChunks.length} chunks, mimeType=${mimeType}`);
+        if (localChunks.length > 0) {
+          resolve({ blob: new Blob(localChunks, { type: mimeType }), mimeType });
         } else {
-          chunksRef.current = [];
           resolve(null);
         }
       };
 
+      // Safety net: if onstop never fires (common on iOS WKWebView), resolve
+      // after 4 s with whatever chunks we've accumulated up to this point.
+      const timeoutId = setTimeout(() => {
+        console.warn("[VoiceNote] stop(): onstop timeout — forcing finish");
+        finish();
+      }, 4000);
+
       if (!recorder || recorder.state === "inactive") { finish(); return; }
+
+      // Override ondataavailable so any final chunk goes into localChunks,
+      // not the now-cleared chunksRef (prevents cross-session data loss).
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) localChunks.push(e.data);
+      };
       recorder.onstop = finish;
-      try { recorder.stop(); } catch { finish(); }
+      console.log(`[VoiceNote] stop(): calling recorder.stop() state=${recorder.state}`);
+      try { recorder.stop(); } catch (err) {
+        console.warn("[VoiceNote] stop(): recorder.stop() threw:", err);
+        finish();
+      }
     });
   }, [stopHeartbeat, stopKeepAlive, stopVisibilityWatcher]);
 

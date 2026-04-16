@@ -920,18 +920,34 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
         const result = await voiceNoteRecorder.stop();
         if (!result || result.blob.size < 100) {
           setIsTranscribing(false);
+          toast({
+            title: "No audio captured",
+            description: "Nothing was recorded — tap the mic and try again.",
+            variant: "destructive",
+          });
           return;
         }
         const arrayBuffer = await result.blob.arrayBuffer();
-        const response = await fetch("/api/voice-note/transcribe", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/octet-stream",
-            "X-Mime-Type": result.mimeType,
-          },
-          body: arrayBuffer,
-          credentials: "include",
-        });
+        const controller = new AbortController();
+        const fetchTimeout = setTimeout(() => controller.abort(), 30_000);
+        let response: Response;
+        try {
+          response = await fetch("/api/voice-note/transcribe", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/octet-stream",
+              "X-Mime-Type": result.mimeType,
+            },
+            body: arrayBuffer,
+            credentials: "include",
+            signal: controller.signal,
+          });
+        } finally {
+          clearTimeout(fetchTimeout);
+        }
+        if (!response.ok) {
+          throw new Error(`Transcribe HTTP ${response.status}`);
+        }
         const data = await response.json();
         const text = data.text?.trim() ?? "";
         setIsTranscribing(false);
@@ -941,12 +957,15 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
           haptic("medium");
           warmAudioCtx();
           sendMessage(text);
+        } else {
+          toast({ title: "Nothing to transcribe", description: "The recording was silent — try again.", variant: "default" });
         }
       } catch (err) {
         console.error("[VoiceNote] Transcription failed:", err);
         setIsTranscribing(false);
         voiceNoteTextRef.current = "";
         setUserInput("");
+        toast({ title: "Transcription failed", description: "Couldn't process the recording. Please try again.", variant: "destructive" });
       }
       return;
     }
