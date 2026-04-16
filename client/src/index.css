@@ -70,12 +70,25 @@ html.dark {
 body {
   height: 100%;
   overflow: hidden;             /* prevent native body/WKWebView scroll layer */
+  background-color: var(--background);
+}
+html.dark body {
+  background-color: hsl(0, 0%, 8%);
 }
 
+/* #root is the sole scroll container.
+   - height: 100dvh pins it to the real viewport regardless of body padding.
+   - box-sizing: border-box means the safe-area padding is INSIDE the height,
+     so the home-indicator zone (bottom 34px) shows #root's own background
+     and the scroll track ends exactly at the right place.
+   - overscroll-behavior-y: none is respected by WebKit on CSS overflow
+     elements (unlike on body, which WKWebView handles natively). */
 #root {
-  height: 100%;
+  height: 100dvh;
+  box-sizing: border-box;
+  padding-bottom: env(safe-area-inset-bottom);
   overflow-y: auto;
-  overscroll-behavior-y: none; /* respected by WebKit on CSS overflow elements */
+  overscroll-behavior-y: none;
   background-color: var(--background);
   -webkit-overflow-scrolling: touch;
 }
