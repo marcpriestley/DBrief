@@ -14,7 +14,7 @@ export interface VoiceNoteRecorder {
 }
 
 const MAX_RETRIES    = 4;
-const RETRY_DELAY_MS = [500, 1000, 2000, 3000]; // backoff per attempt
+const RETRY_DELAY_MS = [500, 1000, 2000, 3000]; // ms per attempt
 
 function getPreferredMimeType(): string {
   const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
@@ -39,15 +39,16 @@ export function useVoiceNoteRecorder(): VoiceNoteRecorder {
   const audioCtxRef         = useRef<AudioContext | null>(null);
   const keepAliveOscRef     = useRef<OscillatorNode | null>(null);
   const onUnexpectedStopRef = useRef<(() => void) | undefined>(undefined);
-  // Timestamp of the last non-empty ondataavailable chunk — used to detect
-  // silent streams where iOS returns a "live" track but sends no audio data.
   const lastChunkTimeRef    = useRef<number>(0);
-
-  // visibilitychange handler stored in a ref so we can remove the exact same fn
   const visibilityHandlerRef = useRef<(() => void) | null>(null);
 
-  // tryRestart in a ref — avoids circular useCallback deps
-  const tryRestartRef = useRef<() => Promise<void>>(async () => {});
+  // ── Session ID ────────────────────────────────────────────────────────────
+  // Incremented on every start(). tryRestart captures this value so that any
+  // async restart spawned by session N bails out immediately when session N+1
+  // starts — preventing stale restarts from overwriting the new session's stream.
+  const sessionIdRef = useRef(0);
+
+  const tryRestartRef = useRef<(sessionId: number) => Promise<void>>(async () => {});
 
   const isSupported =
     typeof navigator !== "undefined" &&
@@ -55,8 +56,7 @@ export function useVoiceNoteRecorder(): VoiceNoteRecorder {
     typeof MediaRecorder !== "undefined" &&
     !!navigator.mediaDevices?.getUserMedia;
 
-  // ── Keep-alive oscillator ──────────────────────────────────────────────────
-  // Prevents iOS from suspending the WebKit audio session while recording.
+  // ── Keep-alive oscillator ─────────────────────────────────────────────────
   const startKeepAlive = useCallback(() => {
     try {
       const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
@@ -64,11 +64,11 @@ export function useVoiceNoteRecorder(): VoiceNoteRecorder {
       const ctx: AudioContext = new AudioCtx();
       const osc  = ctx.createOscillator();
       const gain = ctx.createGain();
-      gain.gain.setValueAtTime(0.00001, ctx.currentTime); // completely inaudible
+      gain.gain.setValueAtTime(0.00001, ctx.currentTime);
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.start();
-      audioCtxRef.current    = ctx;
+      audioCtxRef.current     = ctx;
       keepAliveOscRef.current = osc;
     } catch { /* not critical */ }
   }, []);
@@ -86,57 +86,28 @@ export function useVoiceNoteRecorder(): VoiceNoteRecorder {
     }
   }, []);
 
-  // ── Heartbeat ──────────────────────────────────────────────────────────────
-  // Polls every 1.5 s. Checks BOTH MediaRecorder.state AND the underlying audio
-  // track's readyState — iOS can kill the track without changing recorder state.
+  // ── Heartbeat ─────────────────────────────────────────────────────────────
   const stopHeartbeat = useCallback(() => {
     if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
   }, []);
 
-  const startHeartbeat = useCallback(() => {
+  const startHeartbeat = useCallback((sessionId: number) => {
     stopHeartbeat();
     heartbeatRef.current = setInterval(() => {
-      if (!isActiveRef.current) { stopHeartbeat(); return; }
+      if (!isActiveRef.current || sessionIdRef.current !== sessionId) { stopHeartbeat(); return; }
       if (isRestartingRef.current) return;
-      const recState   = mediaRecorderRef.current?.state;
-      const trackDead  = streamRef.current?.getAudioTracks()[0]?.readyState === "ended";
-      // Data starvation: recorder claims to be running but no audio chunks have
-      // arrived in the last 5 s. This catches iOS "silent stream" hangs.
-      const now = Date.now();
+      const recState  = mediaRecorderRef.current?.state;
+      const trackDead = streamRef.current?.getAudioTracks()[0]?.readyState === "ended";
+      const now       = Date.now();
       const dataStarved = lastChunkTimeRef.current > 0 && (now - lastChunkTimeRef.current) > 5000;
       if (recState !== "recording" || trackDead || dataStarved) {
-        console.warn(`[VoiceNote] heartbeat: recState=${recState} trackDead=${trackDead} dataStarved=${dataStarved} — restarting`);
-        tryRestartRef.current();
+        console.warn(`[VoiceNote] heartbeat: recState=${recState} trackDead=${trackDead} dataStarved=${dataStarved}`);
+        tryRestartRef.current(sessionId);
       }
     }, 1500);
   }, [stopHeartbeat]);
 
-  // ── Visibility handler ─────────────────────────────────────────────────────
-  // When the app returns to foreground after being backgrounded/locked, iOS may
-  // have silently killed the audio stream while JS was suspended. We proactively
-  // restart the stream a short moment after the page becomes visible again.
-  const startVisibilityWatcher = useCallback(() => {
-    if (visibilityHandlerRef.current) {
-      document.removeEventListener("visibilitychange", visibilityHandlerRef.current);
-    }
-    const handler = () => {
-      if (!isActiveRef.current || document.hidden) return;
-      // Short delay lets iOS fully restore the audio session before we probe
-      setTimeout(() => {
-        if (!isActiveRef.current) return;
-        resumeKeepAlive();
-        const recState  = mediaRecorderRef.current?.state;
-        const trackDead = streamRef.current?.getAudioTracks()[0]?.readyState === "ended";
-        if (recState !== "recording" || trackDead) {
-          console.warn("[VoiceNote] visibility: stream dead after foreground — restarting");
-          tryRestartRef.current();
-        }
-      }, 300);
-    };
-    visibilityHandlerRef.current = handler;
-    document.addEventListener("visibilitychange", handler);
-  }, [resumeKeepAlive]);
-
+  // ── Visibility watcher ────────────────────────────────────────────────────
   const stopVisibilityWatcher = useCallback(() => {
     if (visibilityHandlerRef.current) {
       document.removeEventListener("visibilitychange", visibilityHandlerRef.current);
@@ -144,15 +115,34 @@ export function useVoiceNoteRecorder(): VoiceNoteRecorder {
     }
   }, []);
 
-  // ── attachStream ───────────────────────────────────────────────────────────
-  const attachStream = useCallback((stream: MediaStream) => {
+  const startVisibilityWatcher = useCallback((sessionId: number) => {
+    stopVisibilityWatcher();
+    const handler = () => {
+      if (!isActiveRef.current || document.hidden || sessionIdRef.current !== sessionId) return;
+      setTimeout(() => {
+        if (!isActiveRef.current || sessionIdRef.current !== sessionId) return;
+        resumeKeepAlive();
+        const recState  = mediaRecorderRef.current?.state;
+        const trackDead = streamRef.current?.getAudioTracks()[0]?.readyState === "ended";
+        if (recState !== "recording" || trackDead) {
+          console.warn("[VoiceNote] visibility: stream dead on foreground — restarting");
+          tryRestartRef.current(sessionId);
+        }
+      }, 300);
+    };
+    visibilityHandlerRef.current = handler;
+    document.addEventListener("visibilitychange", handler);
+  }, [resumeKeepAlive, stopVisibilityWatcher]);
+
+  // ── attachStream ──────────────────────────────────────────────────────────
+  const attachStream = useCallback((stream: MediaStream, sessionId: number) => {
     streamRef.current = stream;
 
     stream.getAudioTracks().forEach((track) => {
       track.onended = () => {
-        if (!isActiveRef.current || isRestartingRef.current) return;
+        if (!isActiveRef.current || isRestartingRef.current || sessionIdRef.current !== sessionId) return;
         console.warn("[VoiceNote] track.onended — restarting");
-        tryRestartRef.current();
+        tryRestartRef.current(sessionId);
       };
     });
 
@@ -175,28 +165,26 @@ export function useVoiceNoteRecorder(): VoiceNoteRecorder {
     };
 
     recorder.onerror = () => {
-      if (!isActiveRef.current || isRestartingRef.current) return;
+      if (!isActiveRef.current || isRestartingRef.current || sessionIdRef.current !== sessionId) return;
       console.warn("[VoiceNote] MediaRecorder.onerror — restarting");
-      tryRestartRef.current();
+      tryRestartRef.current(sessionId);
     };
 
-    try {
-      recorder.start(500);
-    } catch (err) {
+    try { recorder.start(500); } catch (err) {
       console.error("[VoiceNote] recorder.start() threw:", err);
     }
 
     mediaRecorderRef.current = recorder;
   }, []);
 
-  // ── tryRestart (ref — no circular deps) ───────────────────────────────────
-  // Retries up to MAX_RETRIES times with an increasing backoff before giving up.
-  // This handles the common iOS case where getUserMedia fails immediately after
-  // an audio-session interruption but succeeds after a short wait.
-  tryRestartRef.current = async () => {
+  // ── tryRestart ────────────────────────────────────────────────────────────
+  // Takes a sessionId — if the ID no longer matches the active session, the
+  // restart bails without touching any state (prevents cross-session corruption).
+  tryRestartRef.current = async (sessionId: number) => {
     if (!isActiveRef.current || isRestartingRef.current) return;
+    if (sessionIdRef.current !== sessionId) return; // stale — different session started
     isRestartingRef.current = true;
-    console.log("[VoiceNote] restarting stream...");
+    console.log("[VoiceNote] restarting stream (session", sessionId, ")...");
 
     const old = mediaRecorderRef.current;
     if (old && old.state !== "inactive") {
@@ -208,24 +196,27 @@ export function useVoiceNoteRecorder(): VoiceNoteRecorder {
 
     let lastErr: unknown;
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-      if (!isActiveRef.current) { isRestartingRef.current = false; return; }
+      // Bail if session changed or recording was cancelled
+      if (!isActiveRef.current || sessionIdRef.current !== sessionId) {
+        isRestartingRef.current = false; return;
+      }
       if (attempt > 0) {
-        // Wait before retrying — lets iOS restore the audio session
         await new Promise<void>((res) => setTimeout(res, RETRY_DELAY_MS[attempt - 1]));
-        if (!isActiveRef.current) { isRestartingRef.current = false; return; }
+        if (!isActiveRef.current || sessionIdRef.current !== sessionId) {
+          isRestartingRef.current = false; return;
+        }
       }
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
         });
-        if (!isActiveRef.current) {
+        if (!isActiveRef.current || sessionIdRef.current !== sessionId) {
           stream.getTracks().forEach((t) => t.stop());
-          isRestartingRef.current = false;
-          return;
+          isRestartingRef.current = false; return;
         }
-        attachStream(stream);
+        attachStream(stream, sessionId);
         resumeKeepAlive();
-        console.log(`[VoiceNote] restart OK (attempt ${attempt + 1})`);
+        console.log(`[VoiceNote] restart OK (session ${sessionId}, attempt ${attempt + 1})`);
         isRestartingRef.current = false;
         return;
       } catch (err) {
@@ -234,7 +225,8 @@ export function useVoiceNoteRecorder(): VoiceNoteRecorder {
       }
     }
 
-    // All retries exhausted — mic is genuinely unavailable
+    // Only give up if still the active session
+    if (sessionIdRef.current !== sessionId) { isRestartingRef.current = false; return; }
     console.error("[VoiceNote] all restart attempts failed:", lastErr);
     isActiveRef.current = false;
     stopHeartbeat();
@@ -245,7 +237,7 @@ export function useVoiceNoteRecorder(): VoiceNoteRecorder {
     isRestartingRef.current = false;
   };
 
-  // ── Public API ─────────────────────────────────────────────────────────────
+  // ── Public API ────────────────────────────────────────────────────────────
 
   const start = useCallback(async (onUnexpectedStop?: () => void): Promise<boolean> => {
     try {
@@ -253,16 +245,19 @@ export function useVoiceNoteRecorder(): VoiceNoteRecorder {
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       });
 
+      // Increment session ID — invalidates any in-flight tryRestart from previous session
+      const sessionId = ++sessionIdRef.current;
+
       chunksRef.current           = [];
-      lastChunkTimeRef.current    = 0; // reset before first data arrives
+      lastChunkTimeRef.current    = 0;
       isActiveRef.current         = true;
       isRestartingRef.current     = false;
       onUnexpectedStopRef.current = onUnexpectedStop;
 
-      attachStream(stream);
-      startHeartbeat();
+      attachStream(stream, sessionId);
+      startHeartbeat(sessionId);
       startKeepAlive();
-      startVisibilityWatcher();
+      startVisibilityWatcher(sessionId);
       setIsRecording(true);
       return true;
     } catch (err) {
@@ -287,7 +282,7 @@ export function useVoiceNoteRecorder(): VoiceNoteRecorder {
 
       const finish = () => {
         streamRef.current?.getTracks().forEach((t) => t.stop());
-        streamRef.current      = null;
+        streamRef.current        = null;
         mediaRecorderRef.current = null;
         if (chunksRef.current.length > 0) {
           const blob = new Blob(chunksRef.current, { type: mimeType });
@@ -317,7 +312,7 @@ export function useVoiceNoteRecorder(): VoiceNoteRecorder {
       try { recorder.onstop = null; recorder.stop(); } catch { /* ignore */ }
     }
     streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current      = null;
+    streamRef.current        = null;
     mediaRecorderRef.current = null;
   }, [stopHeartbeat, stopKeepAlive, stopVisibilityWatcher]);
 

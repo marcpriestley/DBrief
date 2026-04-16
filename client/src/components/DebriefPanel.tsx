@@ -1820,12 +1820,10 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                 {voice.isSupported && (
                   <button
                     onClick={() => {
-                      if (debrief.messages.length === 0 && !isStreaming) {
+                      if (!isStreaming) {
                         haptic("medium");
                         warmAudioCtx();
                         startVoiceNote();
-                      } else {
-                        handleMicToggle();
                       }
                     }}
                     disabled={isStreaming}
@@ -1847,7 +1845,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                   onKeyDown={handleKeyDown}
                   onInput={handleTextareaInput}
                   onFocus={() => {
-                    if (debrief.messages.length === 0 && !isStreaming && voice.isSupported) {
+                    if (!isStreaming && voice.isSupported) {
                       inputRef.current?.blur();
                       warmAudioCtx();
                       startVoiceNote();
