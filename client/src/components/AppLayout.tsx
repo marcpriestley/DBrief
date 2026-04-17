@@ -59,23 +59,23 @@ function DateSelector() {
   ];
 
   return (
-    <div className="flex w-full bg-muted rounded-xl p-1 gap-0.5 my-1.5">
+    <div className="flex w-full bg-muted rounded-xl p-1 gap-0.5 my-2">
       {tabs.map(({ id, label, date }) => {
         const active = dayView === id;
         return (
           <button
             key={id}
             onClick={() => { haptic("select"); setDayView(id); }}
-            className={`flex-1 flex flex-col items-center py-2 rounded-lg transition-all duration-200 ${
+            className={`flex-1 flex flex-col items-center py-2.5 rounded-lg transition-all duration-200 ${
               active ? "bg-card shadow-sm" : "hover:bg-background/50"
             }`}
           >
-            <span className={`text-[10px] uppercase tracking-widest leading-tight transition-colors font-bold ${
+            <span className={`text-[11px] uppercase tracking-widest leading-tight transition-colors font-bold ${
               active ? "text-primary" : "text-muted-foreground font-semibold"
             }`}>
               {label}
             </span>
-            <span className={`text-xs mt-0.5 transition-colors ${
+            <span className={`text-sm mt-0.5 transition-colors ${
               active ? "text-foreground font-extrabold" : "text-muted-foreground font-medium"
             }`}>
               {formatDateShort(date)}
@@ -293,21 +293,21 @@ function AppLayoutInner({ children }: AppLayoutProps) {
         style={{ paddingTop: 'env(safe-area-inset-top)', backgroundColor: 'var(--background)' }}
       >
         <div className="max-w-2xl mx-auto px-4">
-          <div className="flex justify-between items-center h-14">
+          <div className="flex justify-between items-center h-16">
             <Link href="/">
               <button
                 onClick={() => haptic("select")}
-                className="flex items-center gap-2.5"
+                className="flex items-center gap-3"
               >
                 <img
                   src={logoSrc}
                   alt="DBrief"
-                  className="w-9 h-9 rounded-xl object-cover shadow-sm"
+                  className="w-10 h-10 rounded-xl object-cover shadow-sm"
                 />
-                <span className="text-lg font-black text-foreground tracking-tight">DBrief</span>
+                <span className="text-xl font-black text-foreground tracking-tight">DBrief</span>
               </button>
             </Link>
-            <div className="flex items-center gap-0.5">
+            <div className="flex items-center gap-1">
               <StreakDisplay streak={streak} />
               <div className="relative">
                 {showMoodPulse && (
@@ -324,29 +324,29 @@ function AppLayoutInner({ children }: AppLayoutProps) {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className={`h-8 w-8 transition-colors ${showMoodPulse ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
+                  className={`h-9 w-9 transition-colors ${showMoodPulse ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
                   onClick={() => { haptic("light"); openMood(); }}
                   title={`${currentPeriod.charAt(0).toUpperCase() + currentPeriod.slice(1)} mood check-in`}
                 >
-                  <Smile className={`h-4 w-4 ${showMoodPulse ? "scale-110" : ""} transition-transform`} />
+                  <Smile className={`h-[18px] w-[18px] ${showMoodPulse ? "scale-110" : ""} transition-transform`} />
                 </Button>
               </div>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                className="h-9 w-9 text-muted-foreground hover:text-foreground"
                 onClick={() => { haptic("light"); setIsSettingsOpen(true); }}
               >
-                <Settings className="h-4 w-4" />
+                <Settings className="h-[18px] w-[18px]" />
               </Button>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                className="h-9 w-9 text-muted-foreground hover:text-foreground"
                 onClick={() => { haptic("light"); logoutMutation.mutate(); }}
                 title="Sign out"
               >
-                <LogOut className="h-4 w-4" />
+                <LogOut className="h-[18px] w-[18px]" />
               </Button>
             </div>
           </div>
@@ -359,7 +359,7 @@ function AppLayoutInner({ children }: AppLayoutProps) {
                 <Link key={href} href={href} className="flex-1">
                   <button
                     onClick={() => haptic("select")}
-                    className={`relative w-full flex items-center justify-center gap-0.5 py-2.5 border-b-2 transition-all text-[10px] font-black uppercase tracking-tight ${
+                    className={`relative w-full flex items-center justify-center gap-0.5 py-3 border-b-2 transition-all text-xs font-black uppercase tracking-tight ${
                       active
                         ? "border-primary text-foreground"
                         : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
