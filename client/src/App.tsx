@@ -45,7 +45,19 @@ function AuthenticatedRouter() {
   }, []);
 
   // ── Mood modal — lives here so it survives all route changes ──────────────
-  const [isMoodOpen, setIsMoodOpen] = useState(false);
+  // Initialize directly from pending flag (lazy initializer) so the modal
+  // opens on the very first render rather than waiting for a useEffect cycle.
+  const [isMoodOpen, setIsMoodOpen] = useState(() => {
+    // Also clean up the URL param right away if it's present
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("mood") === "checkin") {
+        window.history.replaceState({}, "", window.location.pathname);
+        return true;
+      }
+    } catch {}
+    return consumePendingMoodOpen();
+  });
 
   useEffect(() => {
     // Check for ?mood=checkin in URL (web-push tap sets this)
@@ -58,8 +70,8 @@ function AuthenticatedRouter() {
     };
     checkMoodParam();
 
-    // Native notification tap that fired before this component mounted
-    if (consumePendingMoodOpen()) setIsMoodOpen(true);
+    // consumePendingMoodOpen was already called in the useState initializer;
+    // check again here to handle any race where it arrived after first render.
 
     // Squad deep-link from notification tap (fires before React mounted)
     const pendingSquadTab = consumePendingSquadNav();

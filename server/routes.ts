@@ -1896,6 +1896,11 @@ Convert the habit to a natural English verb phrase. Return ONLY the sentence, no
     const date = req.body.date || new Date().toISOString().split('T')[0];
     try {
       const result = await storage.toggleHabitCompletion(habitId, userId, date);
+      // Update streak whenever a habit is toggled for today — this ensures
+      // users who log habits but not metric scores still build their streak.
+      // updateUserStreak is idempotent: only acts if entryDate === today and
+      // skips silently if the streak was already updated for today.
+      updateUserStreak(userId, date).catch(e => console.error("Streak update (habit) error:", e));
       res.json(result);
     } catch (error) {
       console.error("Toggle habit error:", error);

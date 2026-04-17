@@ -4,7 +4,6 @@ import { haptic } from "@/lib/haptics";
 import { motion, AnimatePresence } from "framer-motion";
 import { Smile, Frown, Meh, Heart, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Slider } from "@/components/ui/slider";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -42,10 +41,107 @@ function getTimeOfDayLabel(): string {
   return "evening";
 }
 
+// Native touch-event slider — uses the same pattern as ScoreDashboard's
+// NativeSlider to guarantee reliable drag behaviour on iOS WKWebView.
+// Radix's pointer-capture approach breaks on older WKWebView builds.
+function MoodSlider({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const isDragging = useRef(false);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const lastHapticVal = useRef<number | null>(null);
+
+  const pct = Math.max(0, Math.min(100, value));
+
+  const color = getMoodColor(value);
+
+  const emitWithHaptic = (newVal: number) => {
+    onChangeRef.current(newVal);
+    if (lastHapticVal.current === null || Math.abs(newVal - lastHapticVal.current) >= 5) {
+      haptic("light");
+      lastHapticVal.current = newVal;
+    }
+  };
+
+  useEffect(() => {
+    const el = trackRef.current;
+    if (!el) return;
+
+    const getVal = (clientX: number) => {
+      const rect = el.getBoundingClientRect();
+      const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      return Math.round(ratio * 100);
+    };
+
+    const onTouchStart = (e: TouchEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      isDragging.current = true;
+      lastHapticVal.current = null;
+      if (e.touches[0]) emitWithHaptic(getVal(e.touches[0].clientX));
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      if (!isDragging.current) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.touches[0]) emitWithHaptic(getVal(e.touches[0].clientX));
+    };
+    const onTouchEnd = () => { isDragging.current = false; };
+
+    const onMouseDown = (e: MouseEvent) => {
+      e.preventDefault();
+      isDragging.current = true;
+      lastHapticVal.current = null;
+      emitWithHaptic(getVal(e.clientX));
+      const onMouseMove = (e: MouseEvent) => {
+        if (isDragging.current) emitWithHaptic(getVal(e.clientX));
+      };
+      const onMouseUp = () => {
+        isDragging.current = false;
+        document.removeEventListener("mousemove", onMouseMove);
+        document.removeEventListener("mouseup", onMouseUp);
+      };
+      document.addEventListener("mousemove", onMouseMove);
+      document.addEventListener("mouseup", onMouseUp);
+    };
+
+    el.addEventListener("touchstart", onTouchStart, { passive: false, capture: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: false, capture: true });
+    el.addEventListener("touchend", onTouchEnd, { capture: true });
+    el.addEventListener("touchcancel", onTouchEnd, { capture: true });
+    el.addEventListener("mousedown", onMouseDown);
+
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart, { capture: true });
+      el.removeEventListener("touchmove", onTouchMove, { capture: true });
+      el.removeEventListener("touchend", onTouchEnd, { capture: true });
+      el.removeEventListener("touchcancel", onTouchEnd, { capture: true });
+      el.removeEventListener("mousedown", onMouseDown);
+    };
+  }, []);
+
+  return (
+    <div
+      ref={trackRef}
+      className="relative w-full flex items-center cursor-pointer select-none"
+      style={{ touchAction: "none", userSelect: "none", height: 48 } as React.CSSProperties}
+    >
+      <div className="absolute inset-x-0 h-3 rounded-full bg-border" />
+      <div
+        className="absolute h-3 rounded-full transition-none"
+        style={{ width: `${pct}%`, backgroundColor: color }}
+      />
+      <div
+        className="absolute w-8 h-8 rounded-full shadow-md border-2 border-white"
+        style={{ left: `calc(${pct}% - 16px)`, backgroundColor: color }}
+      />
+    </div>
+  );
+}
+
 export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProps) {
   const [moodValue, setMoodValue] = useState(50);
   const seededRef = useRef(false);
-  const lastHapticVal = useRef<number | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -89,23 +185,6 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
       toast({ title: "Error", description: "Failed to save mood check-in.", variant: "destructive" });
     },
   });
-
-  useEffect(() => {
-    if (open) {
-      const prev = document.documentElement.style.overflow;
-      document.documentElement.style.overflow = "hidden";
-      return () => { document.documentElement.style.overflow = prev; };
-    }
-  }, [open]);
-
-  function handleSliderChange(vals: number[]) {
-    const val = vals[0];
-    setMoodValue(val);
-    if (lastHapticVal.current === null || Math.abs(val - lastHapticVal.current) >= 5) {
-      haptic("light");
-      lastHapticVal.current = val;
-    }
-  }
 
   return (
     <AnimatePresence>
@@ -159,16 +238,10 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
                 <p className="text-2xl font-bold text-foreground mt-0.5 tabular-nums">{moodValue}</p>
               </div>
 
-              {/* Slider — uses the same Radix-based Slider that works throughout the app */}
+              {/* Native slider — reliable drag on iOS WKWebView */}
               <div className="px-2">
-                <Slider
-                  value={[moodValue]}
-                  onValueChange={handleSliderChange}
-                  min={0}
-                  max={100}
-                  step={1}
-                />
-                <div className="flex justify-between mt-2 text-[10px] text-muted-foreground">
+                <MoodSlider value={moodValue} onChange={setMoodValue} />
+                <div className="flex justify-between mt-1 text-[10px] text-muted-foreground">
                   <span>0</span>
                   <span>50</span>
                   <span>100</span>
