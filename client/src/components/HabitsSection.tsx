@@ -208,7 +208,7 @@ export default function HabitsSection() {
   ];
 
   return (
-    <div className="relative bg-card rounded-xl border border-border/50 shadow-sm p-4">
+    <div className="relative bg-card rounded-2xl border border-border/50 shadow-sm p-5">
       {/* Motivation flash — fixed toast at the bottom of the screen */}
       <AnimatePresence>
         {motivationFlash && (
@@ -272,22 +272,22 @@ export default function HabitsSection() {
       </AnimatePresence>
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-sm font-semibold text-foreground">Habit Lab</h2>
+          <h2 className="text-base font-semibold text-foreground">Habit Lab</h2>
           {totalHabits > 0 ? (
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className="text-sm text-muted-foreground mt-0.5">
               {completedToday === totalHabits
                 ? "All habits locked in 🎯"
                 : `${completedToday} of ${totalHabits} done today`}
             </p>
           ) : (
-            <p className="text-xs text-muted-foreground mt-0.5">Build routines that stick</p>
+            <p className="text-sm text-muted-foreground mt-0.5">Build routines that stick</p>
           )}
         </div>
         <button
           onClick={openSetup}
-          className="flex items-center gap-1.5 text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 rounded-lg px-2.5 py-1.5 transition-colors"
+          className="flex items-center gap-1.5 text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 rounded-lg px-3 py-2 transition-colors"
         >
           <Plus className="h-3.5 w-3.5" />
           New habit
@@ -456,7 +456,7 @@ function HabitCard({
           : "border-border/50 bg-muted/20"
       }`}
     >
-      <div className="flex items-center gap-3 p-3">
+      <div className="flex items-center gap-3 p-4">
         {/* Completion toggle */}
         <button
           onClick={() => onToggle(habit)}

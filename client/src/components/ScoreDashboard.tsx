@@ -349,9 +349,9 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
 
   return (
     <>
-      <div className="bg-card rounded-xl border border-border/50 shadow-sm overflow-hidden">
-        <div className="px-4 py-3 flex justify-between items-center border-b border-border/30">
-          <h2 className="text-sm font-semibold text-foreground tracking-tight">
+      <div className="bg-card rounded-2xl border border-border/50 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 flex justify-between items-center border-b border-border/30">
+          <h2 className="text-base font-semibold text-foreground tracking-tight">
             {isToday ? "Daily Scores" : `Scores — ${new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`}
           </h2>
           <div className="flex items-center gap-1">
@@ -388,15 +388,15 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
             </Button>
           </div>
         ) : (
-          <div className="p-3">
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+          <div className="p-4">
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
               {activeMetrics.map((metric) => {
                 const score = getScoreForMetric(metric.name);
                 const value = score?.value;
                 const maxValue = metric.maxValue || 100;
                 const percentage = value !== undefined ? Math.min(100, Math.max(0, (value / maxValue) * 100)) : 0;
-                const ringSize = 52;
-                const strokeWidth = 3.5;
+                const ringSize = 64;
+                const strokeWidth = 4;
                 const radius = (ringSize - strokeWidth) / 2;
                 const circumference = 2 * Math.PI * radius;
                 const strokeDashoffset = circumference - (percentage / 100) * circumference;
@@ -405,7 +405,7 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
                   <button
                     key={metric.id} 
                     onClick={() => handleMetricClick(metric)}
-                    className="flex flex-col items-center py-3 px-1 rounded-lg hover:bg-muted/40 transition-colors cursor-pointer group"
+                    className="flex flex-col items-center py-3.5 px-1 rounded-xl hover:bg-muted/40 transition-colors cursor-pointer group"
                   >
                     <div className="relative" style={{ width: ringSize, height: ringSize }}>
                       <svg width={ringSize} height={ringSize} className="-rotate-90">
@@ -434,13 +434,13 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
                       </svg>
                       <div className="absolute inset-0 flex items-center justify-center">
                         {value !== undefined ? (
-                          <span className="text-sm font-semibold text-foreground">{value}</span>
+                          <span className="text-base font-bold text-foreground">{value}</span>
                         ) : (
-                          <span className="text-xs text-muted-foreground">--</span>
+                          <span className="text-sm text-muted-foreground">--</span>
                         )}
                       </div>
                     </div>
-                    <span className="text-[11px] font-medium text-muted-foreground mt-1.5 leading-tight text-center line-clamp-2">{metric.name}</span>
+                    <span className="text-xs font-medium text-muted-foreground mt-2 leading-tight text-center line-clamp-2">{metric.name}</span>
                     {score?.isAutoSynced && (
                       <span className="text-[9px] text-primary/70 mt-0.5">synced</span>
                     )}

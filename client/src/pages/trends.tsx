@@ -10,6 +10,8 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { DailyScore, UserMetric, AIInsight, DailyGoal, MoodCheckin } from "@shared/schema";
 import PerformancePatterns from "@/components/PerformancePatterns";
+import WeeklyRaceReport from "@/components/WeeklyRaceReport";
+import AIInsights from "@/components/AIInsights";
 
 function getMoodColor(v: number) {
   if (v >= 80) return "#EC4899";
@@ -589,6 +591,10 @@ export default function TrendsEnhanced() {
         <MoodPatterns checkins={moodCheckins} />
 
         <PerformancePatterns />
+
+        <WeeklyRaceReport />
+
+        <AIInsights />
 
         {displayMetrics.length > 0 && (
           <Card className="border-border/50 shadow-sm">

@@ -227,10 +227,10 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
 
   return (
     <div className="relative">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
           {tomorrowMode ? "Tomorrow's Goals" : "Today's Goals"}
-          <span className="text-xs font-normal text-muted-foreground">
+          <span className="text-sm font-normal text-muted-foreground">
             {completedCount}/{displayTotal}
           </span>
         </h3>

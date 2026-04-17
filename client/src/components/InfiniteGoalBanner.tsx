@@ -80,14 +80,14 @@ export default function InfiniteGoalBanner() {
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <div className="bg-gradient-to-r from-primary/8 via-primary/5 to-transparent border border-primary/15 rounded-xl px-4 py-3">
+        <div className="bg-gradient-to-r from-primary/8 via-primary/5 to-transparent border border-primary/15 rounded-2xl px-5 py-4">
           <div className="flex items-start gap-3">
-            <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-              <Compass className="h-3.5 w-3.5 text-primary" />
+            <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+              <Compass className="h-4 w-4 text-primary" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-[10px] font-medium uppercase tracking-wider text-primary/60 mb-0.5">Infinite Goal</p>
-              <p className="text-sm font-medium text-foreground leading-snug">{infiniteGoal.content}</p>
+              <p className="text-[11px] font-medium uppercase tracking-wider text-primary/60 mb-0.5">Infinite Goal</p>
+              <p className="text-base font-medium text-foreground leading-snug">{infiniteGoal.content}</p>
             </div>
             <button
               onClick={() => {

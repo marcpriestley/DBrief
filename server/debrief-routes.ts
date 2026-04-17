@@ -40,8 +40,38 @@ export async function gatherDayContext(userId: number, date: string) {
   // Exclude zero scores — a value of 0 almost always means the user didn't log that
   // metric, not that they deliberately scored it as a zero. Treat missing data as absent.
   const loggedScores = scores.filter(s => s.value > 0);
+
+  // Metric unit lookup — metrics that are NOT on a 0-100 score scale
+  const METRIC_UNITS: Record<string, string> = {
+    "Sleep Duration":   "hrs",
+    "Steps":            "steps",
+    "Active Energy":    "kcal",
+    "Exercise Minutes": "min",
+    "Flights Climbed":  "flights",
+    "Walking Distance": "km",
+    "Heart Rate":       "bpm",
+    "Resting Heart Rate": "bpm",
+    "HRV":              "ms",
+    "Body Weight":      "kg",
+    "Body Fat %":       "%",
+    "Mindful Minutes":  "min",
+    "Respiratory Rate": "brpm",
+    "VO2 Max":          "ml/kg/min",
+  };
+
+  // Build a map of metricName → maxValue from the user's configured metrics
+  const metricMaxValues = new Map(metrics.map(m => [m.name, m.maxValue ?? 100]));
+
   const scoreMap = loggedScores.length > 0
-    ? loggedScores.map(s => `${s.metricName}: ${s.value}/100`).join(", ")
+    ? loggedScores.map(s => {
+        const maxVal = metricMaxValues.get(s.metricName) ?? 100;
+        const unit = METRIC_UNITS[s.metricName];
+        if (unit && maxVal !== 100) {
+          // Raw measurement — show with unit so the AI understands the scale
+          return `${s.metricName}: ${s.value} ${unit}`;
+        }
+        return `${s.metricName}: ${s.value}/100`;
+      }).join(", ")
     : "";
   const goalSummary = goals.length > 0
     ? `Daily goals: ${goals.filter(g => g.completed).length}/${goals.length} completed (${goals.map(g => `${g.title}: ${g.completed ? "done" : "not done"}`).join(", ")})`

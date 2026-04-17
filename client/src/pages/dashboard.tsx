@@ -4,9 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import AppLayout from "@/components/AppLayout";
 import ScoreDashboard from "@/components/ScoreDashboard";
 import DebriefPanel from "@/components/DebriefPanel";
-import AIInsights from "@/components/AIInsights";
-import WeeklyRaceReport from "@/components/WeeklyRaceReport";
-import PerformancePatterns from "@/components/PerformancePatterns";
 import GoalsSection from "@/components/GoalsSection";
 import InfiniteGoalBanner from "@/components/InfiniteGoalBanner";
 import LongTermGoals from "@/components/LongTermGoals";
@@ -70,7 +67,7 @@ function DashboardContent() {
   const needsScores   = isToday && scores.length === 0;
 
   return (
-    <div className="space-y-3 pt-1">
+    <div className="space-y-4 pt-1">
       <InfiniteGoalBanner />
       <PointsBanner />
 
@@ -81,14 +78,14 @@ function DashboardContent() {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -4 }}
           transition={{ duration: 0.15 }}
-          className="space-y-3"
+          className="space-y-4"
         >
           {dayView === "tomorrow" ? (
-            <div className="space-y-3">
-              <div className="bg-card rounded-xl border border-border/50 shadow-sm p-4">
+            <div className="space-y-4">
+              <div className="bg-card rounded-2xl border border-border/50 shadow-sm p-5">
                 <GoalsSection selectedDate={selectedDate} tomorrowMode />
               </div>
-              <div className="text-center py-8 text-muted-foreground text-sm">
+              <div className="text-center py-10 text-muted-foreground text-sm">
                 <p className="font-medium">Goals set. See you tomorrow.</p>
                 <p className="text-xs mt-1 text-muted-foreground/70">Telemetry and debrief unlock on the day.</p>
               </div>
@@ -100,7 +97,7 @@ function DashboardContent() {
               </AttentionRing>
 
               <AttentionRing active={needsGoals}>
-                <div className="bg-card rounded-xl border border-border/50 shadow-sm p-4">
+                <div className="bg-card rounded-2xl border border-border/50 shadow-sm p-5">
                   <GoalsSection selectedDate={selectedDate} />
                 </div>
               </AttentionRing>
@@ -114,10 +111,6 @@ function DashboardContent() {
               <AttentionRing active={needsScores}>
                 <ScoreDashboard selectedDate={selectedDate} />
               </AttentionRing>
-
-              <WeeklyRaceReport />
-              <PerformancePatterns />
-              <AIInsights />
             </>
           )}
         </motion.div>
