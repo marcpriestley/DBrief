@@ -48,21 +48,32 @@ async function notifyUser(
   try {
     const subs = await storage.getPushSubscriptions(userId);
     console.log(`[Notify] user=${userId} subs=${subs.length} title="${payload.title}"`);
-    const apnsSub = subs.filter(s => !!s.apnsToken).pop();
-    if (apnsSub?.apnsToken) {
-      const ok = await sendApnsNotification(apnsSub.apnsToken, payload);
-      console.log(`[Notify] APNs result for user=${userId}: ${ok}`);
-    } else {
-      const webSub = subs.find(s => s.p256dh && s.auth);
-      if (webSub) {
+
+    // Try every APNs token registered for this user (multiple devices possible)
+    const apnsSubs = subs.filter(s => !!s.apnsToken);
+    let apnsOk = false;
+    for (const sub of apnsSubs) {
+      const ok = await sendApnsNotification(sub.apnsToken!, payload);
+      console.log(`[Notify] APNs token=${sub.apnsToken!.slice(0, 8)}… result=${ok}`);
+      if (ok) apnsOk = true;
+    }
+
+    // Always also attempt web push — belt-and-suspenders for browsers / PWA installs
+    const webSubs = subs.filter(s => s.p256dh && s.auth);
+    for (const sub of webSubs) {
+      try {
         await sendPushNotification(
-          { endpoint: webSub.endpoint, keys: { p256dh: webSub.p256dh!, auth: webSub.auth! } },
+          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh!, auth: sub.auth! } },
           payload
         );
-        console.log(`[Notify] Web push sent for user=${userId}`);
-      } else {
-        console.log(`[Notify] No usable subscription for user=${userId}`);
+        console.log(`[Notify] Web push sent for user=${userId} endpoint=${sub.endpoint.slice(-20)}`);
+      } catch (e) {
+        console.warn(`[Notify] Web push failed for user=${userId}:`, e);
       }
+    }
+
+    if (apnsSubs.length === 0 && webSubs.length === 0) {
+      console.log(`[Notify] No usable subscription for user=${userId}`);
     }
   } catch (err) {
     console.error(`[Notify] Error notifying user=${userId}:`, err);

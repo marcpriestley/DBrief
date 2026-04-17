@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { haptic } from "@/lib/haptics";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { MessageCircle, Send, CheckCircle, Flag, Loader2, RotateCcw, Mic, MicOff, ArrowRight, Volume2, VolumeX, Square, ChevronDown, Trash2 } from "lucide-react";
+import { MessageCircle, Send, CheckCircle, Flag, Loader2, RotateCcw, Mic, MicOff, ArrowRight, Volume2, VolumeX, Square, ChevronDown, Trash2, Keyboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiRequest } from "@/lib/queryClient";
@@ -417,6 +417,7 @@ function useInlineVoice() {
 
 export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const [userInput, setUserInput] = useState("");
+  const [textMode, setTextMode] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [openingStreamContent, setOpeningStreamContent] = useState("");
@@ -1848,10 +1849,21 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                 </div>
               )}
               <div className="flex items-end gap-2 bg-muted/50 rounded-xl border border-border/50 p-2">
+                {/* Mode toggle: mic (voice) ↔ keyboard (text) */}
                 {voice.isSupported && (
                   <button
                     onClick={() => {
-                      if (!isStreaming) {
+                      if (isStreaming) return;
+                      if (textMode) {
+                        // Switch to voice mode
+                        haptic("light");
+                        setTextMode(false);
+                      } else if (voice.isListening) {
+                        // Already listening — tap mic to stop
+                        haptic("medium");
+                        voice.stop();
+                      } else {
+                        // Start voice
                         haptic("medium");
                         warmAudioCtx();
                         startVoiceNote();
@@ -1861,9 +1873,11 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                     className={`h-8 w-8 rounded-lg shrink-0 flex items-center justify-center transition-all ${
                       voice.isListening
                         ? "bg-red-500 text-white shadow-sm shadow-red-200"
+                        : textMode
+                        ? "text-primary bg-primary/10"
                         : "text-muted-foreground hover:text-foreground hover:bg-muted"
                     } ${isStreaming ? "opacity-40 cursor-not-allowed" : ""}`}
-                    aria-label={voice.isListening ? "Stop listening" : "Start voice input"}
+                    aria-label={textMode ? "Switch to voice" : voice.isListening ? "Stop recording" : "Start voice"}
                   >
                     {voice.isListening ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
                   </button>
@@ -1876,17 +1890,38 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                   onKeyDown={handleKeyDown}
                   onInput={handleTextareaInput}
                   onFocus={() => {
-                    if (!isStreaming && voice.isSupported) {
+                    // In text mode (or if voice not supported) — let the keyboard open normally
+                    if (textMode || !voice.isSupported) return;
+                    // Voice mode: hijack focus → start recording
+                    if (!isStreaming) {
                       inputRef.current?.blur();
                       warmAudioCtx();
                       startVoiceNote();
                     }
                   }}
-                  placeholder={voice.isListening ? "Speak freely — pausing is fine, mic stays on..." : "Talk to your engineer..."}
+                  placeholder={
+                    textMode
+                      ? "Type your message…"
+                      : voice.isListening
+                      ? "Speak freely — pausing is fine, mic stays on..."
+                      : "Tap to speak or use keyboard →"
+                  }
                   className="flex-1 min-w-0 bg-transparent border-0 outline-none text-sm placeholder:text-muted-foreground/60 text-foreground p-1 resize-none overflow-hidden leading-5"
                   style={{ height: "20px" }}
                   disabled={isStreaming}
                 />
+                {/* Keyboard toggle when voice is NOT supported (always text mode) OR as a text-mode switch */}
+                {voice.isSupported && !textMode && (
+                  <button
+                    onClick={() => { haptic("light"); setTextMode(true); if (voice.isListening) voice.stop(); }}
+                    disabled={isStreaming}
+                    className="h-8 w-8 rounded-lg shrink-0 flex items-center justify-center text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted transition-all disabled:opacity-40"
+                    aria-label="Switch to text input"
+                    title="Type instead"
+                  >
+                    <Keyboard className="h-3.5 w-3.5" />
+                  </button>
+                )}
             <Button
               size="icon"
               onClick={handleSend}
