@@ -2053,6 +2053,50 @@ Convert the habit to a natural English verb phrase. Return ONLY the sentence, no
     }
   });
 
+  // ── Connection nudge ──────────────────────────────────────────────────────
+  // In-memory cooldown: only one nudge per connection per hour
+  const nudgeCooldowns = new Map<number, number>();
+
+  app.post("/api/connections/:id/nudge", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const connectionId = Number(req.params.id);
+
+      const conn = await storage.getConnectionById(connectionId);
+      if (!conn) return res.status(404).json({ message: "Connection not found" });
+      if (conn.requesterId !== userId) {
+        return res.status(403).json({ message: "Only the sender can nudge" });
+      }
+      if (conn.status !== "pending") {
+        return res.status(400).json({ message: "Connection is no longer pending" });
+      }
+
+      // Rate-limit: 1 nudge per hour per connection
+      const last = nudgeCooldowns.get(connectionId) ?? 0;
+      const cooldownMs = 60 * 60 * 1000;
+      const remaining = cooldownMs - (Date.now() - last);
+      if (remaining > 0) {
+        const mins = Math.ceil(remaining / 60000);
+        return res.status(429).json({ message: `You can nudge again in ${mins} min${mins !== 1 ? "s" : ""}` });
+      }
+
+      nudgeCooldowns.set(connectionId, Date.now());
+
+      const myUser = await storage.getUser(userId);
+      const senderName = myUser?.displayName || myUser?.username || "Someone";
+      await notifyUser(conn.receiverId, {
+        title: "Crew Request Reminder",
+        body: `${senderName} is still waiting for you to join their crew on DBrief`,
+        url: "/squad?tab=crew",
+        tag: `conn-nudge-${connectionId}`,
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to send nudge" });
+    }
+  });
+
   // ── Challenge routes ──────────────────────────────────────────────────────
 
   // List challenges for current user

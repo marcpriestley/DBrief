@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Users, Search, UserPlus, Check, X, Flame, Trophy,
-  UserMinus, Clock, Medal, Crown, TrendingUp, Star, Swords,
+  UserMinus, Clock, Medal, Crown, TrendingUp, Star, Swords, BellRing,
 } from "lucide-react";
 import AppLayout from "@/components/AppLayout";
 import { Input } from "@/components/ui/input";
@@ -359,7 +359,9 @@ export default function SquadPage() {
 
   const { data: stats = [], isLoading: statsLoading } = useQuery<ConnectionPublicStats[]>({
     queryKey: ["/api/connections/stats"],
-    staleTime: 30000,
+    staleTime: 0,
+    refetchInterval: 20000,
+    refetchOnMount: true,
   });
 
   const { data: leaderboard = [], isLoading: boardLoading } = useQuery<LeaderboardEntry[]>({
@@ -412,6 +414,25 @@ export default function SquadPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/connections/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/squad/leaderboard"] });
+    },
+  });
+
+  const nudgeMutation = useMutation({
+    mutationFn: (id: number) => apiRequest("POST", `/api/connections/${id}/nudge`, {}).then(r => r.json()),
+    onSuccess: () => {
+      haptic("medium");
+      toast({ title: "Nudge sent", description: "They'll get a reminder notification." });
+    },
+    onError: (err: any) => {
+      // Error message is "STATUS: {json}" — extract the json.message if present
+      let msg = "Failed to send nudge";
+      try {
+        const raw = err?.message || "";
+        const jsonStr = raw.includes(":") ? raw.slice(raw.indexOf(":") + 1).trim() : raw;
+        const parsed = JSON.parse(jsonStr);
+        if (parsed?.message) msg = parsed.message;
+      } catch {}
+      toast({ title: msg, variant: "destructive" });
     },
   });
 
@@ -493,6 +514,52 @@ export default function SquadPage() {
                           onDecline={() => declineMutation.mutate(s.connectionId)}
                         />
                       ))}
+                    </AnimatePresence>
+                  </div>
+                </section>
+              )}
+
+              {/* Outgoing pending */}
+              {outgoing.length > 0 && (
+                <section>
+                  <div className="flex items-center gap-2 mb-3">
+                    <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Awaiting response ({outgoing.length})
+                    </h2>
+                  </div>
+                  <div className="space-y-2">
+                    <AnimatePresence>
+                      {outgoing.map(s => {
+                        const name = s.displayName || s.username;
+                        const initials = name.slice(0, 2).toUpperCase();
+                        const isNudging = nudgeMutation.isPending && nudgeMutation.variables === s.connectionId;
+                        return (
+                          <motion.div
+                            key={s.connectionId}
+                            layout
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, x: 20 }}
+                            className="flex items-center gap-3 bg-card rounded-xl border border-border/50 px-4 py-3"
+                          >
+                            <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center shrink-0">
+                              <span className="text-xs font-bold text-muted-foreground">{initials}</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-foreground truncate">{name}</p>
+                              <p className="text-xs text-muted-foreground">@{s.username} · request sent</p>
+                            </div>
+                            <button
+                              onClick={() => { haptic("light"); nudgeMutation.mutate(s.connectionId); }}
+                              disabled={isNudging}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors disabled:opacity-40 shrink-0"
+                            >
+                              <BellRing className="h-3 w-3" />
+                              Nudge
+                            </button>
+                          </motion.div>
+                        );
+                      })}
                     </AnimatePresence>
                   </div>
                 </section>
@@ -589,28 +656,6 @@ export default function SquadPage() {
                   })}
                 </AnimatePresence>
 
-                {/* Outgoing pending */}
-                {outgoing.length > 0 && debouncedQ.length < 2 && (
-                  <div className="mt-3">
-                    <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider mb-2">Sent requests</p>
-                    <div className="space-y-1.5">
-                      {outgoing.map(s => (
-                        <div key={s.connectionId} className="flex items-center gap-3 px-4 py-2.5 bg-muted/30 rounded-xl">
-                          <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center shrink-0">
-                            <span className="text-[10px] font-bold text-muted-foreground">
-                              {(s.displayName || s.username).slice(0, 2).toUpperCase()}
-                            </span>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-medium text-foreground">{s.displayName || s.username}</p>
-                            <p className="text-[10px] text-muted-foreground/60">@{s.username}</p>
-                          </div>
-                          <span className="text-[11px] text-muted-foreground/50">Pending</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </section>
 
               <p className="text-[11px] text-muted-foreground/40 text-center leading-relaxed px-4 pb-2">
