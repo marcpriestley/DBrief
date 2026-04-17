@@ -212,6 +212,7 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
       queryClient.invalidateQueries({ queryKey: ["/api/daily-scores", selectedDate] });
       queryClient.invalidateQueries({ queryKey: ["/api/dates-with-data"] });
       queryClient.invalidateQueries({ queryKey: ["/api/streak"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/me/points"] });
       
       const metricName = selectedMetric?.name;
       if (metricName) {

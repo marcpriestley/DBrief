@@ -112,6 +112,7 @@ export default function HabitsSection() {
       apiRequest("POST", `/api/habits/${id}/toggle`, { date }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/habits"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/me/points"] });
       haptic("success");
     },
   });

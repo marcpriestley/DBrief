@@ -154,6 +154,7 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/daily-goals", selectedDate] });
+      queryClient.invalidateQueries({ queryKey: ["/api/me/points"] });
     },
   });
 

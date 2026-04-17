@@ -1,46 +1,46 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { haptic } from "@/lib/haptics";
 
-const STORAGE_KEY = "dbrief_last_points";
-
-function PointsCelebration({ onDone }: { onDone: () => void }) {
+// ── Burst animation overlay ──────────────────────────────────────────────────
+// Restricted to the RIGHT half of the banner so it never covers the
+// "Performance Points" label on the left.
+function PointsBurst({ delta, onDone }: { delta: number; onDone: () => void }) {
   useEffect(() => {
-    const t = setTimeout(onDone, 2800);
+    const t = setTimeout(onDone, 2400);
     return () => clearTimeout(t);
   }, [onDone]);
 
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.7, y: 8 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.8, y: -8 }}
+      initial={{ opacity: 0, scale: 0.7 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.8 }}
       transition={{ type: "spring", damping: 18, stiffness: 320 }}
-      className="absolute inset-0 flex items-center justify-center rounded-xl pointer-events-none z-10 overflow-hidden"
+      className="absolute right-0 top-0 bottom-0 w-1/2 flex items-center justify-center pointer-events-none z-10 overflow-hidden"
     >
-      <div className="absolute inset-0 bg-primary/10 rounded-xl" />
-      {[...Array(12)].map((_, i) => (
+      <div className="absolute inset-0 bg-primary/8 rounded-r-xl" />
+      {[...Array(10)].map((_, i) => (
         <motion.div
           key={i}
           className="absolute w-1.5 h-1.5 rounded-full bg-primary"
           initial={{ x: 0, y: 0, opacity: 1 }}
           animate={{
-            x: (Math.cos((i / 12) * Math.PI * 2) * 60),
-            y: (Math.sin((i / 12) * Math.PI * 2) * 40),
+            x: Math.cos((i / 10) * Math.PI * 2) * 44,
+            y: Math.sin((i / 10) * Math.PI * 2) * 28,
             opacity: 0,
-            scale: [1, 1.5, 0],
+            scale: [1, 1.4, 0],
           }}
-          transition={{ duration: 0.9, delay: i * 0.03, ease: "easeOut" }}
+          transition={{ duration: 0.8, delay: i * 0.03, ease: "easeOut" }}
         />
       ))}
       <motion.span
         initial={{ scale: 0.5, opacity: 0 }}
         animate={{ scale: 1.1, opacity: 1 }}
         transition={{ type: "spring", damping: 12, stiffness: 400 }}
-        className="text-primary font-black text-lg relative z-10"
+        className="text-primary font-black text-sm relative z-10"
       >
-        +pts ⚡
+        +{delta} pts ⚡
       </motion.span>
     </motion.div>
   );
@@ -49,67 +49,67 @@ function PointsCelebration({ onDone }: { onDone: () => void }) {
 export default function PointsBanner() {
   const { data } = useQuery<{ points: number; weeklyPoints: number }>({
     queryKey: ["/api/me/points"],
-    staleTime: 30 * 1000,
-    refetchInterval: 60 * 1000,
+    staleTime: 0,
   });
 
   const points = data?.points ?? null;
   const weeklyPoints = data?.weeklyPoints ?? null;
-  const prevPointsRef = useRef<number | null>(null);
-  const [celebrating, setCelebrating] = useState(false);
+  const [burst, setBurst] = useState<number | null>(null);   // delta for the burst
   const [displayPoints, setDisplayPoints] = useState<number | null>(null);
   const animRef = useRef<number | null>(null);
   const hasMounted = useRef(false);
+  const prevPointsRef = useRef<number | null>(null);
 
+  // Animate the counter whenever the live points value changes.
+  // GlobalPointsToast is the single source of truth for detecting increases
+  // and dispatching dbrief:points-earned; we do NOT trigger the burst here
+  // to avoid double-firing when both this component and GlobalPointsToast see
+  // the same cache update.
   useEffect(() => {
     if (points === null) return;
-
-    const stored = localStorage.getItem(STORAGE_KEY);
-    const lastKnown = stored ? parseInt(stored, 10) : null;
-
     if (!hasMounted.current) {
       hasMounted.current = true;
       prevPointsRef.current = points;
       setDisplayPoints(points);
-      if (lastKnown !== null) {
-        localStorage.setItem(STORAGE_KEY, String(points));
-      }
       return;
     }
-
-    const prev = prevPointsRef.current ?? lastKnown ?? points;
+    const prev = prevPointsRef.current ?? points;
     if (points > prev) {
-      haptic("success");
-      setCelebrating(true);
-      const diff = points - prev;
-      const duration = Math.min(diff * 30, 1200);
+      const delta = points - prev;
+      const duration = Math.min(delta * 30, 1000);
       const start = Date.now();
       const from = prev;
-
       if (animRef.current) cancelAnimationFrame(animRef.current);
       const tick = () => {
-        const elapsed = Date.now() - start;
-        const t = Math.min(elapsed / duration, 1);
+        const t = Math.min((Date.now() - start) / duration, 1);
         const eased = 1 - Math.pow(1 - t, 3);
-        setDisplayPoints(Math.round(from + diff * eased));
+        setDisplayPoints(Math.round(from + delta * eased));
         if (t < 1) animRef.current = requestAnimationFrame(tick);
       };
       animRef.current = requestAnimationFrame(tick);
     } else {
       setDisplayPoints(points);
     }
-
     prevPointsRef.current = points;
-    localStorage.setItem(STORAGE_KEY, String(points));
   }, [points]);
+
+  // Burst plays only when GlobalPointsToast fires the event — single source of truth.
+  useEffect(() => {
+    const onEarned = (e: Event) => {
+      const delta = (e as CustomEvent<{ delta: number }>).detail?.delta ?? 0;
+      if (delta > 0) setBurst(delta);
+    };
+    window.addEventListener("dbrief:points-earned", onEarned);
+    return () => window.removeEventListener("dbrief:points-earned", onEarned);
+  }, []);
 
   if (displayPoints === null) return null;
 
   return (
     <div className="relative bg-card rounded-xl border border-border/50 shadow-sm px-4 py-2.5 flex items-center justify-between overflow-hidden">
       <AnimatePresence>
-        {celebrating && (
-          <PointsCelebration onDone={() => setCelebrating(false)} />
+        {burst !== null && (
+          <PointsBurst key={burst + Date.now()} delta={burst} onDone={() => setBurst(null)} />
         )}
       </AnimatePresence>
       <div className="flex items-center gap-2">

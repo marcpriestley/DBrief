@@ -14,6 +14,7 @@ import NotFound from "@/pages/not-found";
 import PrivacyPolicy from "@/pages/privacy";
 import BirthdayCelebration from "@/components/BirthdayCelebration";
 import MoodCheckinModal from "@/components/MoodCheckinModal";
+import GlobalPointsToast from "@/components/GlobalPointsToast";
 import { MoodProvider } from "@/contexts/MoodContext";
 import { useLocation } from "wouter";
 import { registerNativePush, isNativePlatform, clearBadge, setupNotificationTapListener, consumePendingMoodOpen, consumePendingSquadNav } from "@/hooks/useNativeNotifications";
@@ -179,6 +180,7 @@ function AuthenticatedRouter() {
       </Switch>
       <BirthdayCelebration displayName={user?.displayName} dateOfBirth={dateOfBirth} />
       <MoodCheckinModal open={isMoodOpen} onClose={() => setIsMoodOpen(false)} />
+      <GlobalPointsToast />
     </MoodProvider>
   );
 }

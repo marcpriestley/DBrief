@@ -348,6 +348,7 @@ function LogEntrySheet({
       haptic("success");
       queryClient.invalidateQueries({ queryKey: ["/api/challenges"] });
       queryClient.invalidateQueries({ queryKey: ["/api/challenges", challenge.id, "leaderboard"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/me/points"] });
       toast({
         title: "Logged!",
         description: challenge.type === "habit"
