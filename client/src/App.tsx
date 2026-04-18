@@ -15,6 +15,7 @@ import PrivacyPolicy from "@/pages/privacy";
 import BirthdayCelebration from "@/components/BirthdayCelebration";
 import MoodCheckinModal from "@/components/MoodCheckinModal";
 import GlobalPointsToast from "@/components/GlobalPointsToast";
+import CallsignPromptModal from "@/components/CallsignPromptModal";
 import { MoodProvider } from "@/contexts/MoodContext";
 import { useLocation } from "wouter";
 import { registerNativePush, isNativePlatform, clearBadge, setupNotificationTapListener, consumePendingMoodOpen, consumePendingSquadNav } from "@/hooks/useNativeNotifications";
@@ -155,6 +156,16 @@ function AuthenticatedRouter() {
     return () => clearTimeout(t);
   }, [isLoading]);
 
+  // Show callsign prompt for existing users who haven't set one yet.
+  // Respects a 7-day snooze stored in localStorage.
+  const [callsignDismissed, setCallsignDismissed] = useState(() => {
+    try {
+      const until = Number(localStorage.getItem("callsign_snoozed_until"));
+      return !!(until && Date.now() < until);
+    } catch { return false; }
+  });
+  const showCallsignPrompt = !!user && user.hasCompletedOnboarding && !user.driverHandle && !callsignDismissed;
+
   if (isLoading) return null;
 
   if (!user) {
@@ -180,6 +191,7 @@ function AuthenticatedRouter() {
       <BirthdayCelebration displayName={user?.displayName} dateOfBirth={dateOfBirth} />
       <MoodCheckinModal open={isMoodOpen} onClose={() => setIsMoodOpen(false)} />
       <GlobalPointsToast />
+      <CallsignPromptModal open={showCallsignPrompt} onClose={() => setCallsignDismissed(true)} />
     </MoodProvider>
   );
 }
