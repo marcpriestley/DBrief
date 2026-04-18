@@ -52,7 +52,7 @@ export default function CallsignPromptModal({ open, onClose }: { open: boolean; 
 
   const saveMutation = useMutation({
     mutationFn: async (driverHandle: string) => {
-      const r = await apiRequest("PATCH", "/api/me/settings", { driverHandle });
+      const r = await apiRequest("PATCH", "/api/user/settings", { driverHandle });
       return r.json();
     },
     onSuccess: (data) => {

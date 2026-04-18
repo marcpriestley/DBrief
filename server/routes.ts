@@ -1789,7 +1789,8 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
         reminderTime: updatedUser.reminderTime,
         reminderTime2: updatedUser.reminderTime2,
         timezone: updatedUser.timezone,
-        healthMetricsEnabled: updatedUser.healthMetricsEnabled ?? ["sleep", "readiness", "activity"]
+        healthMetricsEnabled: updatedUser.healthMetricsEnabled ?? ["sleep", "readiness", "activity"],
+        driverHandle: updatedUser.driverHandle ?? null,
       });
     } catch (error) {
       console.error("Settings update error:", error);
