@@ -189,7 +189,12 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
   return (
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+          onTouchStart={(e) => e.stopPropagation()}
+          onTouchMove={(e) => e.stopPropagation()}
+          onTouchEnd={(e) => e.stopPropagation()}
+        >
           <motion.div
             className="fixed inset-0 bg-black/50"
             initial={{ opacity: 0 }}
