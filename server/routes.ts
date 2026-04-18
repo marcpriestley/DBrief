@@ -270,6 +270,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         id: user.id,
         username: user.username,
         displayName: user.displayName ?? null,
+        driverHandle: user.driverHandle ?? null,
         hasCompletedOnboarding: user.hasCompletedOnboarding ?? false,
         journalPreference: user.journalPreference ?? "evening",
         userProfile: user.userProfile ?? null,
@@ -390,15 +391,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/onboarding/complete", async (req, res) => {
     try {
       const userId = getUserId(req);
-      const { journalPreference, goalPreference, userProfile, displayName } = req.body;
+      const { journalPreference, goalPreference, userProfile, displayName, driverHandle } = req.body;
       const pref = journalPreference === "morning" ? "morning" : "evening";
       const goalPref = goalPreference === "evening" ? "evening" : "morning";
+
+      let cleanHandle: string | undefined;
+      if (driverHandle) {
+        const h = driverHandle.trim().toLowerCase().replace(/^@/, "");
+        if (!/^[a-z0-9_]{3,20}$/.test(h)) {
+          return res.status(400).json({ message: "Invalid handle format" });
+        }
+        const available = await storage.isHandleAvailable(h, userId);
+        if (!available) return res.status(409).json({ message: "That callsign is already taken" });
+        cleanHandle = h;
+      }
+
       const updatedUser = await storage.updateUserSettings(userId, {
         hasCompletedOnboarding: true,
         journalPreference: pref,
         goalPreference: goalPref,
         ...(userProfile && { userProfile }),
         ...(displayName && { displayName: displayName.trim() }),
+        ...(cleanHandle && { driverHandle: cleanHandle }),
       });
       if (!updatedUser) {
         return res.status(404).json({ message: "User not found" });
@@ -1726,6 +1740,7 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
         healthMetricsEnabled: user.healthMetricsEnabled ?? ["sleep", "readiness", "activity"],
         goalPreference: user.goalPreference || "morning",
         displayName: user.displayName ?? "",
+        driverHandle: user.driverHandle ?? "",
       });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch user settings" });
@@ -1735,7 +1750,22 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
   app.patch("/api/user/settings", async (req, res) => {
     try {
       const userId = getUserId(req);
-      const { notificationsEnabled, moodRemindersEnabled, reminderTime, reminderTime2, timezone, healthMetricsEnabled, goalPreference, displayName } = req.body;
+      const { notificationsEnabled, moodRemindersEnabled, reminderTime, reminderTime2, timezone, healthMetricsEnabled, goalPreference, displayName, driverHandle } = req.body;
+
+      let cleanHandle: string | null | undefined;
+      if (driverHandle !== undefined) {
+        if (driverHandle === "" || driverHandle === null) {
+          cleanHandle = null;
+        } else {
+          const h = driverHandle.toString().trim().toLowerCase().replace(/^@/, "");
+          if (!/^[a-z0-9_]{3,20}$/.test(h)) {
+            return res.status(400).json({ message: "Callsign must be 3-20 characters: letters, numbers, underscores only" });
+          }
+          const available = await storage.isHandleAvailable(h, userId);
+          if (!available) return res.status(409).json({ message: "That callsign is already taken" });
+          cleanHandle = h;
+        }
+      }
 
       const updatedUser = await storage.updateUserSettings(userId, {
         ...(notificationsEnabled !== undefined && { notificationsEnabled }),
@@ -1746,6 +1776,7 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
         ...(healthMetricsEnabled !== undefined && { healthMetricsEnabled }),
         ...(goalPreference !== undefined && { goalPreference }),
         ...(displayName !== undefined && { displayName: displayName.trim() || null }),
+        ...(cleanHandle !== undefined && { driverHandle: cleanHandle }),
       });
 
       if (!updatedUser) {
@@ -1938,14 +1969,27 @@ Convert the habit to a natural English verb phrase. Return ONLY the sentence, no
 
   // ── User Connections (Squad / Accountability Pairs) ──────────────────────────
 
+  app.get("/api/users/check-handle", async (req, res) => {
+    try {
+      const handle = String(req.query.handle ?? "").trim().toLowerCase().replace(/^@/, "");
+      if (!handle || !/^[a-z0-9_]{3,20}$/.test(handle)) {
+        return res.json({ available: false, error: "Handle must be 3-20 characters: letters, numbers, underscores only" });
+      }
+      const userId = (req.session as any)?.userId;
+      const available = await storage.isHandleAvailable(handle, userId);
+      res.json({ available });
+    } catch (error) {
+      res.status(500).json({ message: "Check failed" });
+    }
+  });
+
   app.get("/api/users/search", async (req, res) => {
     try {
       const userId = getUserId(req);
       const q = String(req.query.q ?? "").trim();
       if (q.length < 2) return res.json([]);
       const results = await storage.searchUsers(q, userId);
-      // Never expose password field
-      res.json(results.map(u => ({ id: u.id, username: u.username, displayName: u.displayName })));
+      res.json(results.map(u => ({ id: u.id, driverHandle: u.driverHandle, displayName: u.displayName })));
     } catch (error) {
       res.status(500).json({ message: "Search failed" });
     }
@@ -1986,11 +2030,12 @@ Convert the habit to a natural English verb phrase. Return ONLY the sentence, no
   app.post("/api/connections/request", async (req, res) => {
     try {
       const userId = getUserId(req);
-      const { username } = req.body;
-      if (!username) return res.status(400).json({ message: "Username is required" });
+      const { handle } = req.body;
+      if (!handle) return res.status(400).json({ message: "Handle is required" });
 
-      const target = await storage.getUserByUsername(username);
-      if (!target) return res.status(404).json({ message: "User not found" });
+      const cleanHandle = handle.toString().trim().toLowerCase().replace(/^@/, "");
+      const target = await storage.getUserByHandle(cleanHandle);
+      if (!target) return res.status(404).json({ message: "Driver not found" });
       if (target.id === userId) return res.status(400).json({ message: "You can't connect with yourself" });
 
       // Check if connection already exists

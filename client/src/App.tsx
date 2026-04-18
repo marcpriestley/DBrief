@@ -145,18 +145,17 @@ function AuthenticatedRouter() {
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [user]);
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center mx-auto mb-3 animate-pulse">
-            <span className="text-white text-lg font-bold">D</span>
-          </div>
-          <p className="text-gray-500 text-sm">Loading...</p>
-        </div>
-      </div>
-    );
-  }
+  // Dismiss the HTML-level splash screen once auth is resolved
+  useEffect(() => {
+    if (isLoading) return;
+    const splash = document.getElementById("dbrief-splash");
+    if (!splash) return;
+    splash.classList.add("fade-out");
+    const t = setTimeout(() => splash.remove(), 400);
+    return () => clearTimeout(t);
+  }, [isLoading]);
+
+  if (isLoading) return null;
 
   if (!user) {
     return <Welcome />;

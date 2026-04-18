@@ -22,7 +22,10 @@ export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
-  updateUserSettings(userId: number, settings: Partial<Pick<User, 'notificationsEnabled' | 'moodRemindersEnabled' | 'reminderTime' | 'reminderTime2' | 'timezone' | 'healthMetricsEnabled' | 'hasCompletedOnboarding' | 'journalPreference' | 'goalPreference' | 'userProfile' | 'displayName'>>): Promise<User | undefined>;
+  updateUserSettings(userId: number, settings: Partial<Pick<User, 'notificationsEnabled' | 'moodRemindersEnabled' | 'reminderTime' | 'reminderTime2' | 'timezone' | 'healthMetricsEnabled' | 'hasCompletedOnboarding' | 'journalPreference' | 'goalPreference' | 'userProfile' | 'displayName' | 'driverHandle'>>): Promise<User | undefined>;
+  getUserByHandle(handle: string): Promise<User | undefined>;
+  isHandleAvailable(handle: string, excludeUserId?: number): Promise<boolean>;
+  searchUsers(query: string, excludeUserId: number): Promise<Pick<User, "id" | "driverHandle" | "displayName">[]>;
 
   // Journal entry methods
   getJournalEntry(id: number): Promise<JournalEntry | undefined>;
@@ -455,7 +458,7 @@ export class MemStorage implements IStorage {
     }
   }
 
-  async updateUserSettings(userId: number, settings: Partial<Pick<User, 'notificationsEnabled' | 'moodRemindersEnabled' | 'reminderTime' | 'reminderTime2' | 'timezone' | 'healthMetricsEnabled' | 'hasCompletedOnboarding' | 'journalPreference' | 'goalPreference' | 'userProfile' | 'displayName'>>): Promise<User | undefined> {
+  async updateUserSettings(userId: number, settings: Partial<Pick<User, 'notificationsEnabled' | 'moodRemindersEnabled' | 'reminderTime' | 'reminderTime2' | 'timezone' | 'healthMetricsEnabled' | 'hasCompletedOnboarding' | 'journalPreference' | 'goalPreference' | 'userProfile' | 'displayName' | 'driverHandle'>>): Promise<User | undefined> {
     const user = this.users.get(userId);
     if (user) {
       Object.assign(user, settings);
@@ -463,6 +466,16 @@ export class MemStorage implements IStorage {
       return user;
     }
     return undefined;
+  }
+
+  async getUserByHandle(handle: string): Promise<User | undefined> {
+    return Array.from(this.users.values()).find(u => u.driverHandle?.toLowerCase() === handle.toLowerCase());
+  }
+
+  async isHandleAvailable(handle: string, excludeUserId?: number): Promise<boolean> {
+    return !Array.from(this.users.values()).some(u =>
+      u.driverHandle?.toLowerCase() === handle.toLowerCase() && u.id !== excludeUserId
+    );
   }
 
   async getPushSubscriptions(userId: number): Promise<PushSubscription[]> {
@@ -583,7 +596,9 @@ export class MemStorage implements IStorage {
   async replacePerformancePatterns(_userId: number, _patterns: InsertPerformancePattern[]): Promise<PerformancePattern[]> { return []; }
   async deleteUser(_userId: number): Promise<void> {}
   // Connection stubs
-  async searchUsers(_q: string, _ex: number): Promise<Pick<User, "id" | "username" | "displayName">[]> { return []; }
+  async searchUsers(_q: string, _ex: number): Promise<Pick<User, "id" | "driverHandle" | "displayName">[]> { return []; }
+  async getUserByHandle(_handle: string): Promise<User | undefined> { return undefined; }
+  async isHandleAvailable(_handle: string, _excludeUserId?: number): Promise<boolean> { return true; }
   async sendConnectionRequest(_rId: number, _rcId: number): Promise<UserConnection> { throw new Error("Not implemented"); }
   async getConnectionsByUser(_userId: number): Promise<UserConnection[]> { return []; }
   async getConnectionById(_id: number): Promise<UserConnection | undefined> { return undefined; }
@@ -801,12 +816,29 @@ export class DatabaseStorage implements IStorage {
       .where(eq(aiInsights.id, id));
   }
 
-  async updateUserSettings(userId: number, settings: Partial<Pick<User, 'notificationsEnabled' | 'moodRemindersEnabled' | 'reminderTime' | 'reminderTime2' | 'timezone' | 'healthMetricsEnabled' | 'hasCompletedOnboarding' | 'journalPreference' | 'goalPreference' | 'userProfile' | 'displayName'>>): Promise<User | undefined> {
+  async updateUserSettings(userId: number, settings: Partial<Pick<User, 'notificationsEnabled' | 'moodRemindersEnabled' | 'reminderTime' | 'reminderTime2' | 'timezone' | 'healthMetricsEnabled' | 'hasCompletedOnboarding' | 'journalPreference' | 'goalPreference' | 'userProfile' | 'displayName' | 'driverHandle'>>): Promise<User | undefined> {
     const [updated] = await db.update(users)
       .set(settings)
       .where(eq(users.id, userId))
       .returning();
     return updated || undefined;
+  }
+
+  async getUserByHandle(handle: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users)
+      .where(sql`LOWER(${users.driverHandle}) = ${handle.toLowerCase()}`);
+    return user || undefined;
+  }
+
+  async isHandleAvailable(handle: string, excludeUserId?: number): Promise<boolean> {
+    const conditions = [sql`LOWER(${users.driverHandle}) = ${handle.toLowerCase()}`];
+    if (excludeUserId !== undefined) conditions.push(ne(users.id, excludeUserId));
+    const [existing] = await db.select({ id: users.id }).from(users)
+      .where(excludeUserId !== undefined
+        ? and(sql`LOWER(${users.driverHandle}) = ${handle.toLowerCase()}`, ne(users.id, excludeUserId))
+        : sql`LOWER(${users.driverHandle}) = ${handle.toLowerCase()}`
+      );
+    return !existing;
   }
 
   async getPushSubscriptions(userId: number): Promise<PushSubscription[]> {
@@ -1326,16 +1358,15 @@ export class DatabaseStorage implements IStorage {
 
   // ─── User Connections ────────────────────────────────────────────────────────
 
-  async searchUsers(query: string, excludeUserId: number): Promise<Pick<User, "id" | "username" | "displayName">[]> {
-    const q = `%${query.toLowerCase()}%`;
-    const rows = await db.select({ id: users.id, username: users.username, displayName: users.displayName })
+  async searchUsers(query: string, excludeUserId: number): Promise<Pick<User, "id" | "driverHandle" | "displayName">[]> {
+    const stripped = query.replace(/^@/, "");
+    const q = `%${stripped.toLowerCase()}%`;
+    const rows = await db.select({ id: users.id, driverHandle: users.driverHandle, displayName: users.displayName })
       .from(users)
       .where(and(
         ne(users.id, excludeUserId),
-        or(
-          sql`LOWER(${users.username}) LIKE ${q}`,
-          sql`LOWER(COALESCE(${users.displayName}, '')) LIKE ${q}`
-        )
+        sql`${users.driverHandle} IS NOT NULL`,
+        sql`LOWER(COALESCE(${users.driverHandle}, '')) LIKE ${q}`
       ))
       .limit(10);
     return rows;
@@ -1570,6 +1601,7 @@ export class DatabaseStorage implements IStorage {
       userId: targetUserId,
       username: user.username,
       displayName: user.displayName,
+      driverHandle: user.driverHandle ?? null,
       currentStreak: streak?.currentStreak ?? 0,
       longestStreak: streak?.longestStreak ?? 0,
       sevenDayConsistency,

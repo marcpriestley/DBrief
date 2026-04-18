@@ -169,7 +169,7 @@ function ConnectionCard({ stats, onRemove }: { stats: ConnectionPublicStats; onR
             </div>
             <div>
               <p className="font-semibold text-sm text-foreground leading-tight">{name}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">@{stats.username}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{stats.driverHandle ? `@${stats.driverHandle}` : stats.username.split("@")[0]}</p>
             </div>
           </div>
           <button
@@ -371,7 +371,7 @@ export default function SquadPage() {
     staleTime: 30000,
   });
 
-  const { data: searchResults = [] } = useQuery<{ id: number; username: string; displayName: string | null }[]>({
+  const { data: searchResults = [] } = useQuery<{ id: number; driverHandle: string | null; displayName: string | null }[]>({
     queryKey: ["/api/users/search", debouncedQ],
     queryFn: () => debouncedQ.length >= 2
       ? fetch(`/api/users/search?q=${encodeURIComponent(debouncedQ)}`, { credentials: "include" }).then(r => r.json())
@@ -381,7 +381,7 @@ export default function SquadPage() {
   });
 
   const requestMutation = useMutation({
-    mutationFn: (username: string) => apiRequest("POST", "/api/connections/request", { username }).then(r => r.json()),
+    mutationFn: (handle: string) => apiRequest("POST", "/api/connections/request", { handle }).then(r => r.json()),
     onSuccess: (data) => {
       if (data.message && data.status) {
         toast({ title: data.message });
@@ -547,7 +547,7 @@ export default function SquadPage() {
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium text-foreground truncate">{name}</p>
-                              <p className="text-xs text-muted-foreground">@{s.username} · request sent</p>
+                              <p className="text-xs text-muted-foreground">{s.driverHandle ? `@${s.driverHandle}` : s.username} · request sent</p>
                             </div>
                             <button
                               onClick={() => { haptic("light"); nudgeMutation.mutate(s.connectionId); }}
@@ -602,11 +602,12 @@ export default function SquadPage() {
                 <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Find people</h2>
                 <div className="relative mb-3">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/50" />
+                  <span className="absolute left-9 top-1/2 -translate-y-1/2 text-muted-foreground/60 text-sm pointer-events-none">@</span>
                   <Input
                     value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
-                    placeholder="Search by username or name…"
-                    className="pl-9 bg-card border-border/50"
+                    onChange={e => setSearchQuery(e.target.value.replace(/^@/, ""))}
+                    placeholder="callsign"
+                    className="pl-[3.25rem] bg-card border-border/50"
                   />
                 </div>
 
@@ -615,13 +616,13 @@ export default function SquadPage() {
                     <motion.p key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                       className="text-sm text-muted-foreground text-center py-4"
                     >
-                      No users found for "{debouncedQ}"
+                      No drivers found for "@{debouncedQ}"
                     </motion.p>
                   )}
                   {searchResults.map(u => {
                     const alreadyConnected = connectedIds.has(u.id);
                     const pending = outgoing.some(s => s.userId === u.id);
-                    const name = u.displayName || u.username;
+                    const name = u.displayName || u.driverHandle || "Driver";
                     const initials = name.slice(0, 2).toUpperCase();
                     return (
                       <motion.div
@@ -637,14 +638,14 @@ export default function SquadPage() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-foreground truncate">{name}</p>
-                          <p className="text-xs text-muted-foreground">@{u.username}</p>
+                          {u.driverHandle && <p className="text-xs text-muted-foreground">@{u.driverHandle}</p>}
                         </div>
                         {alreadyConnected ? (
                           <span className="text-xs text-primary font-medium shrink-0">{pending ? "Sent" : "Connected"}</span>
                         ) : (
                           <button
-                            onClick={() => { haptic("medium"); requestMutation.mutate(u.username); }}
-                            disabled={requestMutation.isPending}
+                            onClick={() => { if (u.driverHandle) { haptic("medium"); requestMutation.mutate(u.driverHandle); } }}
+                            disabled={!u.driverHandle || requestMutation.isPending}
                             className="flex items-center gap-1 text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 shrink-0"
                           >
                             <UserPlus className="h-3 w-3" />

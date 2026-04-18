@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,9 @@ import {
   ArrowRight,
   Lock,
   Sparkles,
+  CheckCircle2,
+  XCircle,
+  Loader2,
 } from "lucide-react";
 
 const STEPS = [
@@ -32,15 +35,42 @@ interface OnboardingFlowProps {
   username: string;
 }
 
+type HandleStatus = "idle" | "checking" | "available" | "taken" | "invalid";
+
+function sanitizeHandle(raw: string) {
+  return raw.toLowerCase().replace(/^@/, "").replace(/[^a-z0-9_]/g, "");
+}
+
 export default function OnboardingFlow({ username }: OnboardingFlowProps) {
   const [currentStep, setCurrentStep] = useState<Step>("welcome");
   const [journalPreference, setJournalPreference] = useState<"morning" | "evening" | null>(null);
   const [goalPreference, setGoalPreference] = useState<"morning" | "evening">("morning");
   const [profileAnswers, setProfileAnswers] = useState<Record<string, string>>({});
   const [displayName, setDisplayName] = useState("");
+  const [driverHandle, setDriverHandle] = useState("");
+  const [handleStatus, setHandleStatus] = useState<HandleStatus>("idle");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    const raw = sanitizeHandle(driverHandle);
+    if (!raw) { setHandleStatus("idle"); return; }
+    if (raw.length < 3 || raw.length > 20) { setHandleStatus("invalid"); return; }
+    setHandleStatus("checking");
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/users/check-handle?handle=${encodeURIComponent(raw)}`);
+        const data = await res.json();
+        setHandleStatus(data.available ? "available" : "taken");
+      } catch {
+        setHandleStatus("idle");
+      }
+    }, 450);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [driverHandle]);
 
   const completeMutation = useMutation({
-    mutationFn: async (data: { journalPreference: string; goalPreference: string; userProfile: Record<string, string>; displayName?: string }) => {
+    mutationFn: async (data: { journalPreference: string; goalPreference: string; userProfile: Record<string, string>; displayName?: string; driverHandle?: string }) => {
       return apiRequest("POST", "/api/onboarding/complete", data);
     },
     onSuccess: () => {
@@ -58,14 +88,20 @@ export default function OnboardingFlow({ username }: OnboardingFlowProps) {
 
   const handleComplete = () => {
     if (journalPreference) {
+      const cleanHandle = sanitizeHandle(driverHandle);
       completeMutation.mutate({
         journalPreference,
         goalPreference,
         userProfile: profileAnswers,
         ...(displayName.trim() && { displayName: displayName.trim() }),
+        ...(cleanHandle && handleStatus === "available" && { driverHandle: cleanHandle }),
       });
     }
   };
+
+  const canProceedFromWelcome = !!displayName.trim() && (
+    !driverHandle || handleStatus === "available"
+  );
 
   const profileComplete = PROFILE_QUESTIONS.every(q => profileAnswers[q.key]);
   const firstName = username.split("@")[0];
@@ -106,40 +142,73 @@ export default function OnboardingFlow({ username }: OnboardingFlowProps) {
                 </p>
               </div>
 
-              <div className="space-y-2 max-w-xs mx-auto text-left">
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  What should we call you?
-                </label>
-                <Input
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  placeholder="First name"
-                  className="h-11 text-base"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && displayName.trim()) next();
-                  }}
-                  autoFocus
-                />
-                <p className="text-xs text-muted-foreground px-0.5">
-                  Your AI engineer will use this to personalise your sessions.
-                </p>
+              <div className="space-y-4 max-w-xs mx-auto text-left">
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    What should we call you?
+                  </label>
+                  <Input
+                    value={displayName}
+                    onChange={(e) => {
+                      setDisplayName(e.target.value);
+                      if (!driverHandle) {
+                        const suggested = sanitizeHandle(e.target.value.split(" ")[0]);
+                        if (suggested.length >= 3) setDriverHandle(suggested);
+                      }
+                    }}
+                    placeholder="First name"
+                    className="h-11 text-base"
+                    onKeyDown={(e) => { if (e.key === "Enter" && canProceedFromWelcome) next(); }}
+                    autoFocus
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Choose your driver callsign
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium text-sm">@</span>
+                    <Input
+                      value={driverHandle}
+                      onChange={(e) => setDriverHandle(sanitizeHandle(e.target.value))}
+                      placeholder="yourhandle"
+                      className={`h-11 text-base pl-7 pr-9 ${
+                        handleStatus === "available" ? "border-green-500 focus-visible:ring-green-500/30" :
+                        handleStatus === "taken" || handleStatus === "invalid" ? "border-red-500 focus-visible:ring-red-500/30" : ""
+                      }`}
+                      onKeyDown={(e) => { if (e.key === "Enter" && canProceedFromWelcome) next(); }}
+                      maxLength={20}
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2">
+                      {handleStatus === "checking" && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                      {handleStatus === "available" && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+                      {(handleStatus === "taken" || handleStatus === "invalid") && <XCircle className="h-4 w-4 text-red-500" />}
+                    </span>
+                  </div>
+                  <p className={`text-xs px-0.5 ${
+                    handleStatus === "available" ? "text-green-500" :
+                    handleStatus === "taken" ? "text-red-500" :
+                    handleStatus === "invalid" ? "text-red-500" :
+                    "text-muted-foreground"
+                  }`}>
+                    {handleStatus === "available" ? "Callsign available — locking it in." :
+                     handleStatus === "taken" ? "That callsign is already taken. Try another." :
+                     handleStatus === "invalid" ? "3–20 characters: letters, numbers, underscores." :
+                     "Unique ID used to find you in Crew. Letters, numbers, underscores."}
+                  </p>
+                </div>
               </div>
 
               <div className="space-y-2 max-w-xs mx-auto">
                 <Button
                   onClick={next}
-                  disabled={!displayName.trim()}
+                  disabled={!canProceedFromWelcome}
                   className="w-full h-11"
                 >
                   Let's go
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
-                <button
-                  onClick={next}
-                  className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors underline-offset-2 hover:underline"
-                >
-                  Skip for now
-                </button>
               </div>
             </motion.div>
           )}

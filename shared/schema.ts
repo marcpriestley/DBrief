@@ -8,6 +8,7 @@ export const users = pgTable("users", {
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
   displayName: text("display_name"),
+  driverHandle: text("driver_handle").unique(),
   notificationsEnabled: boolean("notifications_enabled").default(true),
   moodRemindersEnabled: boolean("mood_reminders_enabled").default(true),
   reminderTime: text("reminder_time").default("09:00"),
@@ -454,6 +455,7 @@ export type ConnectionPublicStats = {
   userId: number;
   username: string;
   displayName: string | null;
+  driverHandle: string | null;
   currentStreak: number;
   longestStreak: number;
   sevenDayConsistency: number; // 0-100 %

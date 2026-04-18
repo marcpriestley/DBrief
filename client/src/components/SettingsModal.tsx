@@ -17,6 +17,7 @@ import { apiRequest } from "@/lib/queryClient";
 import {
   Bell, BellOff, AlertCircle, CheckCircle2, Heart, Plus, Check, Info,
   User, Map, RefreshCw, KeyRound, ChevronDown, Sun, Moon, Trash2,
+  XCircle, Loader2,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { haptic } from "@/lib/haptics";
@@ -317,6 +318,7 @@ interface UserSettings {
   reminderTime2: string;
   timezone: string;
   displayName: string;
+  driverHandle: string;
 }
 
 export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
@@ -340,6 +342,27 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [reminderTime, setReminderTime] = useState("09:00");
   const [reminderTime2, setReminderTime2] = useState("21:00");
   const [displayName, setDisplayName] = useState("");
+  const [driverHandle, setDriverHandle] = useState("");
+  const [handleStatus, setHandleStatus] = useState<"idle" | "checking" | "available" | "taken" | "invalid" | "unchanged">("idle");
+  const handleDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const originalHandleRef = useRef<string>("");
+
+  useEffect(() => {
+    if (handleDebounceRef.current) clearTimeout(handleDebounceRef.current);
+    const raw = driverHandle.toLowerCase().replace(/^@/, "").replace(/[^a-z0-9_]/g, "");
+    if (!raw) { setHandleStatus("idle"); return; }
+    if (raw === originalHandleRef.current) { setHandleStatus("unchanged"); return; }
+    if (raw.length < 3 || raw.length > 20) { setHandleStatus("invalid"); return; }
+    setHandleStatus("checking");
+    handleDebounceRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/users/check-handle?handle=${encodeURIComponent(raw)}`);
+        const data = await res.json();
+        setHandleStatus(data.available ? "available" : "taken");
+      } catch { setHandleStatus("idle"); }
+    }, 500);
+    return () => { if (handleDebounceRef.current) clearTimeout(handleDebounceRef.current); };
+  }, [driverHandle]);
 
   // Dark mode
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem("dbrief_theme") === "dark");
@@ -383,6 +406,10 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       setReminderTime(settings.reminderTime);
       setReminderTime2(settings.reminderTime2);
       setDisplayName(settings.displayName ?? "");
+      const h = settings.driverHandle ?? "";
+      setDriverHandle(h);
+      originalHandleRef.current = h;
+      setHandleStatus(h ? "unchanged" : "idle");
     }
   }, [settings]);
 
@@ -438,8 +465,17 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
   const handleSave = () => {
     const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    updateSettingsMutation.mutate({ notificationsEnabled, moodRemindersEnabled, reminderTime, reminderTime2, timezone: userTimezone, displayName });
-    // Also save profile section so users don't need to click a separate button
+    const cleanHandle = driverHandle.toLowerCase().replace(/^@/, "").replace(/[^a-z0-9_]/g, "");
+    const includeHandle = handleStatus === "available" || handleStatus === "unchanged" || !driverHandle;
+    if (handleStatus === "taken" || handleStatus === "invalid") {
+      toast({ title: "Fix your callsign before saving", variant: "destructive" });
+      return;
+    }
+    updateSettingsMutation.mutate({
+      notificationsEnabled, moodRemindersEnabled, reminderTime, reminderTime2, timezone: userTimezone,
+      displayName,
+      ...(includeHandle && { driverHandle: cleanHandle }),
+    });
     profileRef.current?.save();
   };
 
@@ -651,6 +687,40 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     maxLength={40}
                   />
                   <p className="text-[11px] text-muted-foreground">Your name as the AI refers to you in debriefs.</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="driverHandle" className="text-xs font-medium text-muted-foreground">Driver Callsign</Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">@</span>
+                    <Input
+                      id="driverHandle"
+                      value={driverHandle}
+                      onChange={(e) => setDriverHandle(e.target.value.toLowerCase().replace(/^@/, "").replace(/[^a-z0-9_]/g, ""))}
+                      placeholder="yourhandle"
+                      className={`h-9 pl-7 pr-8 ${
+                        handleStatus === "available" ? "border-green-500" :
+                        handleStatus === "taken" || handleStatus === "invalid" ? "border-red-500" : ""
+                      }`}
+                      maxLength={20}
+                    />
+                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2">
+                      {handleStatus === "checking" && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+                      {(handleStatus === "available") && <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />}
+                      {handleStatus === "unchanged" && driverHandle && <CheckCircle2 className="h-3.5 w-3.5 text-muted-foreground/40" />}
+                      {(handleStatus === "taken" || handleStatus === "invalid") && <XCircle className="h-3.5 w-3.5 text-red-500" />}
+                    </span>
+                  </div>
+                  <p className={`text-[11px] ${
+                    handleStatus === "available" ? "text-green-500" :
+                    handleStatus === "taken" ? "text-red-500" :
+                    handleStatus === "invalid" ? "text-red-500" :
+                    "text-muted-foreground"
+                  }`}>
+                    {handleStatus === "available" ? "Callsign available." :
+                     handleStatus === "taken" ? "That callsign is already taken." :
+                     handleStatus === "invalid" ? "3–20 chars: letters, numbers, underscores." :
+                     "Unique ID for Crew search. Letters, numbers, underscores only."}
+                  </p>
                 </div>
                 <div className="pt-1">
                   <p className="text-xs font-medium text-muted-foreground mb-2">Driver Profile</p>

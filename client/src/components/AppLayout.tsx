@@ -393,6 +393,11 @@ function AppLayoutInner({ children }: AppLayoutProps) {
 
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
       <AppTour />
+      {/* Covers the native iOS home-indicator zone so no white strip shows beneath web content */}
+      <div
+        className="fixed bottom-0 left-0 right-0 pointer-events-none z-40 bg-background"
+        style={{ height: "env(safe-area-inset-bottom)" }}
+      />
     </div>
   );
 }

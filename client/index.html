@@ -29,8 +29,74 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+    #dbrief-splash {
+      position: fixed;
+      inset: 0;
+      z-index: 99999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background-color: hsl(0, 0%, 8%);
+      transition: opacity 0.35s ease;
+      gap: 0;
+    }
+    html:not(.dark) #dbrief-splash {
+      background-color: hsl(0, 0%, 97%);
+    }
+    #dbrief-splash.fade-out {
+      opacity: 0;
+      pointer-events: none;
+    }
+    #dbrief-splash-logo {
+      width: 80px;
+      height: 80px;
+      border-radius: 22px;
+      background: hsl(40, 95%, 48%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 8px 32px rgba(245, 168, 0, 0.35);
+      margin-bottom: 20px;
+    }
+    #dbrief-splash-logo span {
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+      font-size: 40px;
+      font-weight: 900;
+      color: #000;
+      letter-spacing: -1px;
+      line-height: 1;
+    }
+    #dbrief-splash-name {
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+      font-size: 26px;
+      font-weight: 800;
+      color: hsl(0, 0%, 97%);
+      letter-spacing: -0.5px;
+    }
+    html:not(.dark) #dbrief-splash-name {
+      color: hsl(0, 0%, 8%);
+    }
+    #dbrief-splash-sub {
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+      font-size: 13px;
+      font-weight: 400;
+      color: rgba(255,255,255,0.45);
+      margin-top: 6px;
+      letter-spacing: 0.3px;
+    }
+    html:not(.dark) #dbrief-splash-sub {
+      color: rgba(0,0,0,0.4);
+    }
+  </style>
   </head>
   <body>
+    <div id="dbrief-splash">
+      <div id="dbrief-splash-logo"><span>D</span></div>
+      <div id="dbrief-splash-name">DBrief</div>
+      <div id="dbrief-splash-sub">Your daily debrief</div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script type="text/javascript" src="https://replit.com/public/js/replit-dev-banner.js"></script>
