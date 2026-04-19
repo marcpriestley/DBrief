@@ -475,6 +475,9 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const debriefCardRef = useRef<HTMLDivElement>(null);
   const streamingMsgRef = useRef<HTMLDivElement>(null);
+  // When true, suppress auto-scroll-to-bottom so the user reads the response from the start.
+  // Reset in sendMessage so the next outgoing message can scroll normally.
+  const lockScrollAfterStreamRef = useRef(false);
   const hasScrolledToStreamStart = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const focusMountedRef = useRef(false);
@@ -672,6 +675,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     // to viewport position 0 — the sticky header then covers it, making the messages invisible.
     inputRef.current?.blur();
     hasScrolledToStreamStart.current = false;
+    lockScrollAfterStreamRef.current = false; // Allow scroll-to-bottom for the outgoing message
     setTimeout(() => {
       const card = debriefCardRef.current;
       const root = document.getElementById("root");
@@ -680,7 +684,9 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
       const headerH = header?.getBoundingClientRect().height ?? 130;
       const cardAbsTop = card.getBoundingClientRect().top - root.getBoundingClientRect().top + root.scrollTop;
       root.scrollTo({ top: cardAbsTop - headerH - 4, behavior: "smooth" });
-    }, 80);
+    // 350 ms gives iOS time to finish the keyboard-dismiss animation before we
+    // read getBoundingClientRect() — at 80 ms the layout is still in flux.
+    }, 350);
     setIsStreaming(true);
     setStreamingContent("");
     ttsFirstSentenceRef.current = 0;
@@ -1037,27 +1043,28 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     if (!container) return;
 
     if (isStreaming && streamingContent) {
-      // First content token: position container so the START of the streaming bubble is visible.
-      // Subsequent updates keep scrolling to the bottom so the user sees new text arriving.
+      // First content token: scroll so the START of the streaming bubble is visible.
+      // Lock out further auto-scrolls so the user can read from the beginning.
       if (!hasScrolledToStreamStart.current) {
         hasScrolledToStreamStart.current = true;
+        lockScrollAfterStreamRef.current = true;
         const el = streamingMsgRef.current;
         if (el) {
           const containerRect = container.getBoundingClientRect();
           const elRect = el.getBoundingClientRect();
           container.scrollTop += elRect.top - containerRect.top - 8;
-          return;
         }
       }
-      // Keep following the growing response
-      container.scrollTop = container.scrollHeight;
+      // Subsequent tokens: do NOT chase scrollHeight — keep start of response pinned.
       return;
     }
 
     if (!isStreaming) {
       hasScrolledToStreamStart.current = false;
+      // Streaming just finished (or DB refetch after finish): stay at the start of the response.
+      if (lockScrollAfterStreamRef.current) return;
     }
-    // Non-streaming: scroll to bottom to show latest complete message
+    // Non-streaming (page load / history navigation): show latest message.
     container.scrollTop = container.scrollHeight;
   }, [debrief?.messages, streamingContent, realtimeMessages, isStreaming]);
 

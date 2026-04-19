@@ -405,7 +405,9 @@ function AppLayoutInner({ children }: AppLayoutProps) {
             ? "max(env(safe-area-inset-bottom), 34px)"
             : "env(safe-area-inset-bottom)",
           zIndex: 9999,
-          backgroundColor: "var(--background)",
+          // --background holds raw HSL components (e.g. "0 0% 8%"), not a full color string.
+          // Without hsl() it's an invalid value and the browser ignores it → element transparent.
+          backgroundColor: "hsl(var(--background))",
         }}
       />
     </div>
