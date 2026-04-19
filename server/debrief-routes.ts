@@ -834,6 +834,50 @@ export function registerDebriefRoutes(app: Express): void {
         res.write(`data: ${JSON.stringify({ actions })}\n\n`);
       }
 
+      // When the AI called tools (possibly with no preceding text), we need a
+      // follow-up streaming call so the assistant can confirm what it did.
+      if (Object.keys(toolCallAccumulator).length > 0) {
+        const tcValues = Object.values(toolCallAccumulator);
+        const assistantToolMsg: OpenAI.Chat.Completions.ChatCompletionMessageParam = {
+          role: "assistant",
+          content: fullResponse || null,
+          tool_calls: tcValues.map(tc => ({
+            id: tc.id,
+            type: "function" as const,
+            function: { name: tc.name, arguments: tc.arguments },
+          })),
+        };
+        // One tool result per call, matched by position
+        const toolResultMsgs: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = tcValues.map((tc, i) => ({
+          role: "tool" as const,
+          tool_call_id: tc.id,
+          content: actions[i]?.message ?? "Action completed.",
+        }));
+
+        try {
+          const followUp = await openai.chat.completions.create({
+            model: "gpt-4o",
+            messages: [...chatMessages, assistantToolMsg, ...toolResultMsgs],
+            stream: true,
+            max_tokens: 250,
+          });
+          let followUpText = "";
+          for await (const chunk of followUp) {
+            const delta = chunk.choices[0]?.delta;
+            if (delta?.content) {
+              followUpText += delta.content;
+              res.write(`data: ${JSON.stringify({ content: delta.content })}\n\n`);
+            }
+          }
+          if (followUpText) {
+            fullResponse = fullResponse ? `${fullResponse}\n\n${followUpText}` : followUpText;
+          }
+        } catch (followUpErr) {
+          console.error("Follow-up AI call failed:", followUpErr);
+          // Non-fatal — the tool action still succeeded; just no confirmation text
+        }
+      }
+
       await db.insert(debriefMessages).values({
         debriefId,
         role: "assistant",

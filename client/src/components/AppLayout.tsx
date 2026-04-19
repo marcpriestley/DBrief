@@ -405,10 +405,18 @@ function AppLayoutInner({ children }: AppLayoutProps) {
         data-bottom-fill
         className="fixed bottom-0 left-0 right-0 pointer-events-none"
         style={{
-          height: Capacitor.isNativePlatform() && Capacitor.getPlatform() === "ios"
-            ? "max(env(safe-area-inset-bottom), 34px)"
-            : "env(safe-area-inset-bottom)",
+          // Always use max() so even if env() reports 0 (Capacitor contentInset:'never'),
+          // or if Capacitor.isNativePlatform() returns false on remote-URL builds,
+          // the home-indicator zone is still covered. On web browsers 34px of extra
+          // space at the very bottom of the viewport is harmless.
+          height: "max(env(safe-area-inset-bottom, 34px), 34px)",
           zIndex: 9999,
+          // Inline colour — bypasses ALL CSS cascade questions.
+          // The theme script in <head> applies html.dark synchronously before React
+          // renders, so this check is always correct on first paint.
+          backgroundColor: document.documentElement.classList.contains("dark")
+            ? "hsl(0, 0%, 8%)"
+            : "hsl(0, 0%, 97%)",
         }}
       />
     </div>
