@@ -95,20 +95,28 @@ function NativeSlider({ value, onChange, min = 0, max = 100, color = "hsl(40, 95
       return Math.round(minRef.current + ratio * (maxRef.current - minRef.current));
     };
 
-    const onTouchStart = (e: TouchEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      isDragging.current = true;
-      lastHapticVal.current = null;
-      if (e.touches[0]) emitWithHaptic(getVal(e.touches[0].clientX));
-    };
     const onTouchMove = (e: TouchEvent) => {
       if (!isDragging.current) return;
       e.preventDefault();
-      e.stopPropagation();
       if (e.touches[0]) emitWithHaptic(getVal(e.touches[0].clientX));
     };
-    const onTouchEnd = () => { isDragging.current = false; };
+    const onTouchEnd = () => {
+      isDragging.current = false;
+      document.removeEventListener("touchmove", onTouchMove);
+      document.removeEventListener("touchend", onTouchEnd);
+      document.removeEventListener("touchcancel", onTouchEnd);
+    };
+
+    const onTouchStart = (e: TouchEvent) => {
+      e.preventDefault();
+      isDragging.current = true;
+      lastHapticVal.current = null;
+      if (e.touches[0]) emitWithHaptic(getVal(e.touches[0].clientX));
+      // Track on document so drags outside the element still work
+      document.addEventListener("touchmove", onTouchMove, { passive: false });
+      document.addEventListener("touchend", onTouchEnd);
+      document.addEventListener("touchcancel", onTouchEnd);
+    };
 
     const onMouseDown = (e: MouseEvent) => {
       e.preventDefault();
@@ -127,18 +135,16 @@ function NativeSlider({ value, onChange, min = 0, max = 100, color = "hsl(40, 95
       document.addEventListener("mouseup", onMouseUp);
     };
 
-    el.addEventListener("touchstart", onTouchStart, { passive: false, capture: true });
-    el.addEventListener("touchmove", onTouchMove, { passive: false, capture: true });
-    el.addEventListener("touchend", onTouchEnd, { capture: true });
-    el.addEventListener("touchcancel", onTouchEnd, { capture: true });
+    el.addEventListener("touchstart", onTouchStart, { passive: false });
     el.addEventListener("mousedown", onMouseDown);
 
     return () => {
-      el.removeEventListener("touchstart", onTouchStart, { capture: true });
-      el.removeEventListener("touchmove", onTouchMove, { capture: true });
-      el.removeEventListener("touchend", onTouchEnd, { capture: true });
-      el.removeEventListener("touchcancel", onTouchEnd, { capture: true });
+      el.removeEventListener("touchstart", onTouchStart);
       el.removeEventListener("mousedown", onMouseDown);
+      // Clean up any lingering document listeners
+      document.removeEventListener("touchmove", onTouchMove);
+      document.removeEventListener("touchend", onTouchEnd);
+      document.removeEventListener("touchcancel", onTouchEnd);
     };
   }, []);
 

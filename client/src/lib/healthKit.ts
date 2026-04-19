@@ -240,32 +240,30 @@ async function queryRawMetric(dataType: DataType, dateStr: string): Promise<numb
       endDate   = `${dateStr}T23:59:59.999Z`;
     }
 
-    // ── Sleep Quality ─────────────────────────────────────────────────────────
+    // ── Sleep Score ───────────────────────────────────────────────────────────
+    // Reads sleep efficiency from Apple Health sleep stage data (0–100).
+    // The < 3-hour duration guard downstream discards iPhone motion-sensor
+    // fallback data (which inflates efficiency when no wearable is present).
+    // We do NOT cap at 96 here so wearables reporting 97–100 are preserved.
     if (dataType === "sleep-quality") {
       if (!onAndroid) {
         // iOS primary: Health.querySleepQuality
-        // Guard: efficiency ≥ 97 is almost certainly the iPhone motion-sensor fallback
-        // (which reports unrealistically high efficiency when a wearable isn't available).
-        // Fall through to other paths in that case and use the first plausible value found.
         try {
           const r = await (Health as any).querySleepQuality({ startDate, endDate });
           const eff = r?.efficiency ?? 0;
-          if (eff > 0 && eff < 97) {
+          if (eff > 0) {
             console.log(`${tag} sleep-quality via querySleepQuality:`, eff);
-            return Math.min(96, Math.round(eff));
+            return Math.min(100, Math.round(eff));
           }
-          if (eff >= 97) {
-            console.warn(`${tag} querySleepQuality efficiency=${eff} — looks like iPhone sensor fallback, trying other paths`);
-          }
-          // Only use minutes-based proxy from this path if efficiency is absent
-          if (eff === 0 && (r?.minutes ?? 0) > 0) return Math.min(96, Math.round((r.minutes / 480) * 100));
+          // Efficiency absent but minutes present — use duration proxy
+          if ((r?.minutes ?? 0) > 0) return Math.min(100, Math.round((r.minutes / 480) * 100));
         } catch (e) { console.warn(`${tag} querySleepQuality failed:`, e); }
 
         // iOS fallback: ExtendedHealth Swift plugin
         try {
           const r = await ExtendedHealth.querySleepQuality({ startDate, endDate });
-          if (r.efficiency > 0 && r.efficiency < 97) return Math.min(96, Math.round(r.efficiency));
-          if (r.minutes > 0)    return Math.min(96, Math.round((r.minutes / 480) * 100));
+          if (r.efficiency > 0) return Math.min(100, Math.round(r.efficiency));
+          if (r.minutes > 0)    return Math.min(100, Math.round((r.minutes / 480) * 100));
         } catch (_) {}
 
         // iOS fallback: queryAggregated sleep-quality (patched HealthPlugin path)
@@ -274,7 +272,7 @@ async function queryRawMetric(dataType: DataType, dateStr: string): Promise<numb
           const agg: any[] = r?.aggregatedData ?? r?.data ?? [];
           const best = agg.reduce((b: any, d: any) => (d.value ?? 0) > (b?.value ?? 0) ? d : b, agg[0]);
           const val = best?.value ?? 0;
-          if (val > 0 && val < 97) return Math.min(96, Math.round(val));
+          if (val > 0) return Math.min(100, Math.round(val));
         } catch (_) {}
       } else {
         // Android: queryAggregated with sleep-quality
