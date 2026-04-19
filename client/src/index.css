@@ -113,12 +113,9 @@ html.dark #root {
     @apply font-sans antialiased bg-background text-foreground;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     font-weight: 450;
-    /* No padding-top here — the sticky header covers the status-bar area and
-       applies env(safe-area-inset-top) internally. Adding it on body too caused
-       triple-stacking with Capacitor's contentInset. */
-    padding-bottom: env(safe-area-inset-bottom);
-    padding-left: env(safe-area-inset-left);
-    padding-right: env(safe-area-inset-right);
+    /* No padding on body — safe-area insets are handled by #root (bottom)
+       and the sticky header (top). Padding here caused a double-stacking
+       gap that appeared as a white band at the bottom of the screen. */
     min-height: 100dvh;
     -webkit-font-smoothing: antialiased;
     /* Prevent iOS from resizing text after orientation change */

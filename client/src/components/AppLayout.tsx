@@ -9,7 +9,7 @@ import AppTour from "@/components/AppTour";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { haptic } from "@/lib/haptics";
 import { DateProvider, useDateContext } from "@/contexts/DateContext";
-import logoSrc from "@assets/9071F600-13EE-4563-BC00-D0D7AB8E3782_1_105_c_1775250530025.jpeg";
+import logoSrc from "@assets/IMG_1282_1776582526490.jpeg";
 import { isNativeHealth, getHealthAuthState, syncHealthData } from "@/lib/healthKit";
 import { useMoodOpen } from "@/contexts/MoodContext";
 
@@ -393,10 +393,16 @@ function AppLayoutInner({ children }: AppLayoutProps) {
 
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
       <AppTour />
-      {/* Covers the native iOS home-indicator zone so no white strip shows beneath web content */}
+      {/* Covers the native iOS home-indicator zone so no white strip shows beneath web content.
+          z-[9999] ensures it sits above every other element. Inline background-color
+          bypasses any CSS-variable resolution delay that could expose the raw WKWebView layer. */}
       <div
-        className="fixed bottom-0 left-0 right-0 pointer-events-none z-40 bg-background"
-        style={{ height: "env(safe-area-inset-bottom)" }}
+        className="fixed bottom-0 left-0 right-0 pointer-events-none"
+        style={{
+          height: "env(safe-area-inset-bottom, 34px)",
+          zIndex: 9999,
+          backgroundColor: "var(--background)",
+        }}
       />
     </div>
   );

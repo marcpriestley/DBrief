@@ -130,8 +130,8 @@ export default function OnboardingFlow({ username }: OnboardingFlowProps) {
               transition={{ duration: 0.3 }}
               className="text-center space-y-6"
             >
-              <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mx-auto shadow-lg shadow-primary/20">
-                <span className="text-primary-foreground text-2xl font-bold">D</span>
+              <div className="w-16 h-16 rounded-2xl overflow-hidden mx-auto shadow-lg shadow-primary/20">
+                <img src="/dbrief-logo.jpeg" alt="DBrief" className="w-full h-full object-cover" />
               </div>
 
               <div className="space-y-3">
