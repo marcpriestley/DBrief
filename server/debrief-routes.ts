@@ -502,6 +502,9 @@ export function registerDebriefRoutes(app: Express): void {
         return res.status(404).json({ error: "Debrief not found" });
       }
 
+      // Alias used throughout the tool-execution block below
+      const date = debrief.date;
+
       await db.insert(debriefMessages).values({
         debriefId,
         role: "user",
