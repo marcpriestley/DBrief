@@ -267,6 +267,14 @@ export async function sendMoodCheckinReminders(windowMinutes = MOOD_DELIVERY_WIN
         const alreadySentInDb = await storage.getServerConfig(key);
         if (alreadySentInDb) { lastMoodReminderSent.set(key, true); continue; }
 
+        // Skip if the user has already logged a mood today
+        const moodLogged = await storage.hasUserLoggedMoodToday(user.id, userDateStr);
+        if (moodLogged) {
+          lastMoodReminderSent.set(key, true);
+          console.log(`[Mood Reminders] Skipping ${checkinTime.label} for user ${user.id} — mood already logged today`);
+          continue;
+        }
+
         const payload: PushNotificationPayload = {
           title: checkinTime.title,
           body:  checkinTime.body,
@@ -326,6 +334,13 @@ export async function sendHabitReminders() {
       });
 
       if (!matchingSlot) continue;
+
+      // Skip if the habit has already been completed today
+      const alreadyDone = await storage.isHabitCompletedToday(habit.id, userDateStr);
+      if (alreadyDone) {
+        console.log(`[Habit Reminders] Skipping "${habit.name}" for user ${habit.userId} — already completed today`);
+        continue;
+      }
 
       // Dedup key includes the specific slot to allow multiple fires per day
       const slotKey = matchingSlot.replace(':', '');

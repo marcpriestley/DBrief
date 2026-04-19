@@ -104,6 +104,8 @@ export interface IStorage {
   toggleHabitCompletion(habitId: number, userId: number, date: string): Promise<{ habit: Habit; completed: boolean }>;
   getHabitLogsForRange(habitId: number, userId: number, startDate: string, endDate: string): Promise<HabitLog[]>;
   getAllHabitsForReminder(): Promise<Array<Habit & { user: User; subscriptions: PushSubscription[] }>>;
+  isHabitCompletedToday(habitId: number, date: string): Promise<boolean>;
+  hasUserLoggedMoodToday(userId: number, date: string): Promise<boolean>;
 
   // Server config methods
   getServerConfig(key: string): Promise<string | undefined>;
@@ -585,6 +587,8 @@ export class MemStorage implements IStorage {
   async toggleHabitCompletion(_habitId: number, _userId: number, _date: string): Promise<{ habit: Habit; completed: boolean }> { throw new Error("Not implemented in MemStorage"); }
   async getHabitLogsForRange(_habitId: number, _userId: number, _startDate: string, _endDate: string): Promise<HabitLog[]> { return []; }
   async getAllHabitsForReminder(): Promise<Array<Habit & { user: User; subscriptions: PushSubscription[] }>> { return []; }
+  async isHabitCompletedToday(_habitId: number, _date: string): Promise<boolean> { return false; }
+  async hasUserLoggedMoodToday(_userId: number, _date: string): Promise<boolean> { return false; }
   async getServerConfig(_key: string): Promise<string | undefined> { return undefined; }
   async setServerConfig(_key: string, _value: string): Promise<void> {}
   async getLatestWeeklyReport(_userId: number): Promise<WeeklyReport | undefined> { return undefined; }
@@ -1294,6 +1298,20 @@ export class DatabaseStorage implements IStorage {
       }
     }
     return result;
+  }
+
+  async isHabitCompletedToday(habitId: number, date: string): Promise<boolean> {
+    const [log] = await db.select({ id: habitLogs.id }).from(habitLogs)
+      .where(and(eq(habitLogs.habitId, habitId), eq(habitLogs.date, date)))
+      .limit(1);
+    return !!log;
+  }
+
+  async hasUserLoggedMoodToday(userId: number, date: string): Promise<boolean> {
+    const [entry] = await db.select({ id: moodCheckins.id }).from(moodCheckins)
+      .where(and(eq(moodCheckins.userId, userId), eq(moodCheckins.date, date)))
+      .limit(1);
+    return !!entry;
   }
 
   async getServerConfig(key: string): Promise<string | undefined> {

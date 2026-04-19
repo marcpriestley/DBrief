@@ -474,6 +474,8 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const debriefCardRef = useRef<HTMLDivElement>(null);
+  const streamingMsgRef = useRef<HTMLDivElement>(null);
+  const hasScrolledToStreamStart = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const focusMountedRef = useRef(false);
   // Index into `accumulated` where the first sentence ends (0 = no sentence spoken yet)
@@ -665,9 +667,10 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     if (!text.trim() || !debrief || isStreaming) return;
 
     setUserInput("");
-    // Scroll the page to top so the debrief conversation is in view (not Goals or other sections)
-    // Small delay lets iOS keyboard dismissal settle before we move the scroll position
-    setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 80);
+    // Dismiss keyboard and scroll the debrief card into view so the AI response is visible
+    inputRef.current?.blur();
+    hasScrolledToStreamStart.current = false;
+    setTimeout(() => debriefCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
     setIsStreaming(true);
     setStreamingContent("");
     ttsFirstSentenceRef.current = 0;
@@ -1020,13 +1023,33 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   };
 
   useEffect(() => {
-    // Scroll the chat container to its bottom so the latest message is visible.
-    // This only moves the inner fixed-height div — it does NOT touch page scroll.
     const container = chatContainerRef.current;
-    if (container) {
+    if (!container) return;
+
+    if (isStreaming && streamingContent) {
+      // First content token: position container so the START of the streaming bubble is visible.
+      // Subsequent updates keep scrolling to the bottom so the user sees new text arriving.
+      if (!hasScrolledToStreamStart.current) {
+        hasScrolledToStreamStart.current = true;
+        const el = streamingMsgRef.current;
+        if (el) {
+          const containerRect = container.getBoundingClientRect();
+          const elRect = el.getBoundingClientRect();
+          container.scrollTop += elRect.top - containerRect.top - 8;
+          return;
+        }
+      }
+      // Keep following the growing response
       container.scrollTop = container.scrollHeight;
+      return;
     }
-  }, [debrief?.messages, streamingContent, realtimeMessages]);
+
+    if (!isStreaming) {
+      hasScrolledToStreamStart.current = false;
+    }
+    // Non-streaming: scroll to bottom to show latest complete message
+    container.scrollTop = container.scrollHeight;
+  }, [debrief?.messages, streamingContent, realtimeMessages, isStreaming]);
 
   useEffect(() => {
     if (!focusMountedRef.current) {
@@ -1617,6 +1640,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
 
           {isStreaming && streamingContent && (
             <motion.div
+              ref={streamingMsgRef}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               className="flex justify-start"
