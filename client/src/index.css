@@ -93,11 +93,14 @@ html.dark body {
 #root {
   height: 100dvh;
   box-sizing: border-box;
-  padding-bottom: env(safe-area-inset-bottom);
+  /* max() ensures the home-indicator zone (34px) is always reserved even when
+     env() reports 0 (Capacitor contentInset:'never' makes it 0 in CSS even on
+     Face ID phones). #root's background-color then paints the reserved zone. */
+  padding-bottom: max(env(safe-area-inset-bottom), 34px);
   overflow-y: auto;
   overscroll-behavior-y: none;
-  /* Hardcoded rather than var() so the home-indicator zone
-     is always painted correctly even before CSS vars resolve. */
+  /* Hardcoded rather than var() so the safe-area zones are always painted the
+     correct colour even before CSS vars (which depend on html.dark) resolve. */
   background-color: hsl(0, 0%, 97%);
   /* Do NOT use -webkit-overflow-scrolling:touch — it creates a new stacking
      context that breaks position:fixed children on some WKWebView versions. */
@@ -107,11 +110,13 @@ html.dark #root {
   background-color: hsl(0, 0%, 8%);
 }
 
-/* Bottom fill div: hardcoded colours avoid CSS-variable resolution timing issues.
-   Selector targets the div via the data-attr set in AppLayout. */
+/* Safe-area fill divs: hardcoded colours avoid CSS-variable resolution timing issues.
+   Selectors target the divs via the data-attrs set in AppLayout. */
+[data-top-fill],
 [data-bottom-fill] {
   background-color: hsl(0, 0%, 97%);
 }
+html.dark [data-top-fill],
 html.dark [data-bottom-fill] {
   background-color: hsl(0, 0%, 8%);
 }

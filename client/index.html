@@ -37,6 +37,32 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
+    /* Safe-area fill strips: direct body children → always fixed to the
+       physical viewport, never clipped by a scroll container (#root).
+       Colors update instantly when html.dark is toggled. */
+    #dbrief-top-fill,
+    #dbrief-bottom-fill {
+      position: fixed;
+      left: 0;
+      right: 0;
+      pointer-events: none;
+      z-index: 9999;
+      background-color: hsl(0, 0%, 97%); /* light mode default */
+    }
+    html.dark #dbrief-top-fill,
+    html.dark #dbrief-bottom-fill {
+      background-color: hsl(0, 0%, 8%);  /* dark mode */
+    }
+    #dbrief-top-fill {
+      top: 0;
+      height: env(safe-area-inset-top);
+    }
+    #dbrief-bottom-fill {
+      bottom: 0;
+      /* max() so at least 34px even when env() reports 0 (Capacitor
+         contentInset:'never' suppresses env values on some iOS builds) */
+      height: max(env(safe-area-inset-bottom), 34px);
+    }
     #dbrief-splash {
       position: fixed;
       inset: 0;
@@ -97,6 +123,10 @@
   </style>
   </head>
   <body>
+    <!-- Safe-area fill strips: outside #root so position:fixed is always
+         relative to the WKWebView viewport, not a scroll container. -->
+    <div id="dbrief-top-fill"></div>
+    <div id="dbrief-bottom-fill"></div>
     <div id="dbrief-splash">
       <div id="dbrief-splash-logo">
         <img src="/dbrief-logo.jpeg" alt="DBrief" />

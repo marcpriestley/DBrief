@@ -394,26 +394,33 @@ function AppLayoutInner({ children }: AppLayoutProps) {
 
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
       <AppTour />
-      {/* Covers the native iOS home-indicator zone so the app background fills the space
-          instead of the native WKWebView white layer showing through.
-          - Height: env() returns 0 on some Capacitor builds even on Face ID phones, so we
-            force at least 34 px on native iOS via max().
-          - Colour: set via data-bottom-fill + CSS (see index.css) using hardcoded HSL values
-            so it is guaranteed to resolve correctly — inline CSS vars can fail before
-            the stylesheet loads or if the wrong hsl() nesting is used. */}
+
+      {/* TOP safe-area fill — covers the status bar zone so the transparent
+          iOS status bar never reveals a white flash when CSS vars re-evaluate.
+          Inline backgroundColor is evaluated once at initial render from html.dark
+          (set synchronously by the theme script), so it stays correct even during
+          any brief CSS-variable flash that occurs after hydration. */}
+      <div
+        data-top-fill
+        className="fixed top-0 left-0 right-0 pointer-events-none"
+        style={{
+          height: "env(safe-area-inset-top)",
+          zIndex: 9999,
+          backgroundColor: document.documentElement.classList.contains("dark")
+            ? "hsl(0, 0%, 8%)"
+            : "hsl(0, 0%, 97%)",
+        }}
+      />
+
+      {/* BOTTOM safe-area fill — covers the native iOS home-indicator zone.
+          max() guarantees at least 34px even when env() reports 0 (Capacitor
+          contentInset:'never' can cause env to return 0 in CSS on some builds). */}
       <div
         data-bottom-fill
         className="fixed bottom-0 left-0 right-0 pointer-events-none"
         style={{
-          // Always use max() so even if env() reports 0 (Capacitor contentInset:'never'),
-          // or if Capacitor.isNativePlatform() returns false on remote-URL builds,
-          // the home-indicator zone is still covered. On web browsers 34px of extra
-          // space at the very bottom of the viewport is harmless.
-          height: "max(env(safe-area-inset-bottom, 34px), 34px)",
+          height: "max(env(safe-area-inset-bottom), 34px)",
           zIndex: 9999,
-          // Inline colour — bypasses ALL CSS cascade questions.
-          // The theme script in <head> applies html.dark synchronously before React
-          // renders, so this check is always correct on first paint.
           backgroundColor: document.documentElement.classList.contains("dark")
             ? "hsl(0, 0%, 8%)"
             : "hsl(0, 0%, 97%)",
