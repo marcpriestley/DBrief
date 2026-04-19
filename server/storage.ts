@@ -105,7 +105,7 @@ export interface IStorage {
   getHabitLogsForRange(habitId: number, userId: number, startDate: string, endDate: string): Promise<HabitLog[]>;
   getAllHabitsForReminder(): Promise<Array<Habit & { user: User; subscriptions: PushSubscription[] }>>;
   isHabitCompletedToday(habitId: number, date: string): Promise<boolean>;
-  hasUserLoggedMoodToday(userId: number, date: string): Promise<boolean>;
+  hasUserLoggedMoodInPeriod(userId: number, date: string, periodStartHour: number, periodEndHour: number, timezone: string): Promise<boolean>;
 
   // Server config methods
   getServerConfig(key: string): Promise<string | undefined>;
@@ -588,7 +588,7 @@ export class MemStorage implements IStorage {
   async getHabitLogsForRange(_habitId: number, _userId: number, _startDate: string, _endDate: string): Promise<HabitLog[]> { return []; }
   async getAllHabitsForReminder(): Promise<Array<Habit & { user: User; subscriptions: PushSubscription[] }>> { return []; }
   async isHabitCompletedToday(_habitId: number, _date: string): Promise<boolean> { return false; }
-  async hasUserLoggedMoodToday(_userId: number, _date: string): Promise<boolean> { return false; }
+  async hasUserLoggedMoodInPeriod(_userId: number, _date: string, _periodStartHour: number, _periodEndHour: number, _timezone: string): Promise<boolean> { return false; }
   async getServerConfig(_key: string): Promise<string | undefined> { return undefined; }
   async setServerConfig(_key: string, _value: string): Promise<void> {}
   async getLatestWeeklyReport(_userId: number): Promise<WeeklyReport | undefined> { return undefined; }
@@ -1307,9 +1307,16 @@ export class DatabaseStorage implements IStorage {
     return !!log;
   }
 
-  async hasUserLoggedMoodToday(userId: number, date: string): Promise<boolean> {
+  async hasUserLoggedMoodInPeriod(userId: number, date: string, periodStartHour: number, periodEndHour: number, timezone: string): Promise<boolean> {
+    // Check if the user has a mood check-in on this date whose createdAt, converted to
+    // the user's local timezone, falls within [periodStartHour, periodEndHour).
     const [entry] = await db.select({ id: moodCheckins.id }).from(moodCheckins)
-      .where(and(eq(moodCheckins.userId, userId), eq(moodCheckins.date, date)))
+      .where(and(
+        eq(moodCheckins.userId, userId),
+        eq(moodCheckins.date, date),
+        sql`EXTRACT(HOUR FROM ${moodCheckins.createdAt} AT TIME ZONE ${timezone}) >= ${periodStartHour}`,
+        sql`EXTRACT(HOUR FROM ${moodCheckins.createdAt} AT TIME ZONE ${timezone}) < ${periodEndHour}`,
+      ))
       .limit(1);
     return !!entry;
   }

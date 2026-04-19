@@ -267,11 +267,18 @@ export async function sendMoodCheckinReminders(windowMinutes = MOOD_DELIVERY_WIN
         const alreadySentInDb = await storage.getServerConfig(key);
         if (alreadySentInDb) { lastMoodReminderSent.set(key, true); continue; }
 
-        // Skip if the user has already logged a mood today
-        const moodLogged = await storage.hasUserLoggedMoodToday(user.id, userDateStr);
+        // Skip only if the user has already checked in during THIS period of the day.
+        // morning = 0–11, afternoon = 12–17, evening = 18–23 (all in user's local time).
+        const PERIOD_HOURS: Record<string, [number, number]> = {
+          morning:   [0,  12],
+          afternoon: [12, 18],
+          evening:   [18, 24],
+        };
+        const [pStart, pEnd] = PERIOD_HOURS[checkinTime.label] ?? [0, 24];
+        const moodLogged = await storage.hasUserLoggedMoodInPeriod(user.id, userDateStr, pStart, pEnd, user.timezone);
         if (moodLogged) {
           lastMoodReminderSent.set(key, true);
-          console.log(`[Mood Reminders] Skipping ${checkinTime.label} for user ${user.id} — mood already logged today`);
+          console.log(`[Mood Reminders] Skipping ${checkinTime.label} for user ${user.id} — already checked in during this period`);
           continue;
         }
 
