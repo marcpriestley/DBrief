@@ -96,11 +96,23 @@ html.dark body {
   padding-bottom: env(safe-area-inset-bottom);
   overflow-y: auto;
   overscroll-behavior-y: none;
-  background-color: var(--background);
-  -webkit-overflow-scrolling: touch;
+  /* Hardcoded rather than var() so the home-indicator zone
+     is always painted correctly even before CSS vars resolve. */
+  background-color: hsl(0, 0%, 97%);
+  /* Do NOT use -webkit-overflow-scrolling:touch — it creates a new stacking
+     context that breaks position:fixed children on some WKWebView versions. */
 }
 
 html.dark #root {
+  background-color: hsl(0, 0%, 8%);
+}
+
+/* Bottom fill div: hardcoded colours avoid CSS-variable resolution timing issues.
+   Selector targets the div via the data-attr set in AppLayout. */
+[data-bottom-fill] {
+  background-color: hsl(0, 0%, 97%);
+}
+html.dark [data-bottom-fill] {
   background-color: hsl(0, 0%, 8%);
 }
 

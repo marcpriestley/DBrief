@@ -394,20 +394,21 @@ function AppLayoutInner({ children }: AppLayoutProps) {
 
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
       <AppTour />
-      {/* Covers the native iOS home-indicator zone so no white strip shows beneath web content.
-          With contentInset:'never' in capacitor.config, env(safe-area-inset-bottom) reports 0 to CSS
-          even on Face ID iPhones. We use max() to ensure at least 34 px on native iOS so the
-          home-indicator zone is always painted with the app background. */}
+      {/* Covers the native iOS home-indicator zone so the app background fills the space
+          instead of the native WKWebView white layer showing through.
+          - Height: env() returns 0 on some Capacitor builds even on Face ID phones, so we
+            force at least 34 px on native iOS via max().
+          - Colour: set via data-bottom-fill + CSS (see index.css) using hardcoded HSL values
+            so it is guaranteed to resolve correctly — inline CSS vars can fail before
+            the stylesheet loads or if the wrong hsl() nesting is used. */}
       <div
+        data-bottom-fill
         className="fixed bottom-0 left-0 right-0 pointer-events-none"
         style={{
           height: Capacitor.isNativePlatform() && Capacitor.getPlatform() === "ios"
             ? "max(env(safe-area-inset-bottom), 34px)"
             : "env(safe-area-inset-bottom)",
           zIndex: 9999,
-          // --background holds raw HSL components (e.g. "0 0% 8%"), not a full color string.
-          // Without hsl() it's an invalid value and the browser ignores it → element transparent.
-          backgroundColor: "hsl(var(--background))",
         }}
       />
     </div>

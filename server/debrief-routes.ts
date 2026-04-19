@@ -537,12 +537,13 @@ export function registerDebriefRoutes(app: Express): void {
           type: "function",
           function: {
             name: "add_daily_goal",
-            description: "Add a daily goal for the user. Only call AFTER clarifying whether it is recurring (repeats every day going forward) or one-off (just for today/tomorrow). Set recurring=true for ongoing, recurring=false for today only.",
+            description: "Add a daily goal for the user. Only call AFTER clarifying whether it is recurring (repeats every day going forward) or one-off. For one-off goals use recurring=false and set days to how many consecutive days to add it (e.g. days=2 for today and tomorrow). For a permanent daily goal use recurring=true (days is ignored).",
             parameters: {
               type: "object",
               properties: {
                 title: { type: "string", description: "Short, actionable goal title (e.g. '10 min meditation', 'Cold shower', 'Drink water')" },
-                recurring: { type: "boolean", description: "true = repeats every day going forward; false = one-off for today only" },
+                recurring: { type: "boolean", description: "true = repeats every day going forward; false = one-off for a fixed number of days" },
+                days: { type: "number", description: "Number of consecutive days to add this goal for when recurring=false (1 = today only, 2 = today and tomorrow, etc.). Ignored when recurring=true." },
               },
               required: ["title", "recurring"],
             },
@@ -689,30 +690,36 @@ export function registerDebriefRoutes(app: Express): void {
           const params = JSON.parse(tc.arguments);
           if (tc.name === "add_daily_goal") {
             const isRecurring = params.recurring !== false;
-            const existing = await db.select().from(goalTemplates)
+            const numDays = Math.max(1, Math.round(params.days ?? 1));
+            // Get or create template — idempotent so duplicate AI calls don't fail
+            const existingTemplates = await db.select().from(goalTemplates)
               .where(and(eq(goalTemplates.userId, userId), eq(goalTemplates.isActive, true)));
-            const alreadyExists = existing.some(g => g.title.toLowerCase() === params.title.toLowerCase());
-            if (!alreadyExists) {
-              const [tmpl] = await db.insert(goalTemplates).values({
+            let tmpl = existingTemplates.find(g => g.title.toLowerCase() === params.title.toLowerCase());
+            if (!tmpl) {
+              const [created] = await db.insert(goalTemplates).values({
                 userId,
                 title: params.title,
                 recurring: isRecurring,
                 isActive: true,
-                sortOrder: existing.length,
+                sortOrder: existingTemplates.length,
               }).returning();
-              // For one-off goals, immediately create today's daily goal record
-              if (!isRecurring && tmpl) {
-                await db.insert(dailyGoals).values({
-                  userId,
-                  date,
-                  goalTemplateId: tmpl.id,
-                  completed: false,
-                });
-              }
-              actions.push({ type: "add_daily_goal", params, success: true, message: `Added daily goal: ${params.title}${!isRecurring ? " (today only)" : ""}` });
-            } else {
-              actions.push({ type: "add_daily_goal", params, success: false, message: `Goal already exists: ${params.title}` });
+              tmpl = created;
             }
+            // For one-off goals, create a daily record for each requested day
+            if (!isRecurring && tmpl) {
+              for (let i = 0; i < numDays; i++) {
+                const [y, m, d2] = date.split("-").map(Number);
+                const target = new Date(Date.UTC(y, m - 1, d2 + i));
+                const targetDate = `${target.getUTCFullYear()}-${String(target.getUTCMonth() + 1).padStart(2, "0")}-${String(target.getUTCDate()).padStart(2, "0")}`;
+                const [exists] = await db.select().from(dailyGoals)
+                  .where(and(eq(dailyGoals.userId, userId), eq(dailyGoals.date, targetDate), eq(dailyGoals.goalTemplateId, tmpl.id)));
+                if (!exists) {
+                  await db.insert(dailyGoals).values({ userId, date: targetDate, goalTemplateId: tmpl.id, completed: false });
+                }
+              }
+            }
+            const label = isRecurring ? "every day going forward" : (numDays === 1 ? "today only" : `today + next ${numDays - 1} day(s)`);
+            actions.push({ type: "add_daily_goal", params, success: true, message: `Added daily goal: ${params.title} (${label})` });
           } else if (tc.name === "edit_daily_goal") {
             const allTemplates = await db.select().from(goalTemplates)
               .where(and(eq(goalTemplates.userId, userId), eq(goalTemplates.isActive, true)));
@@ -1032,19 +1039,30 @@ export const REALTIME_TOOLS: Array<{ type: "function"; name: string; description
 export async function executeDebriefTool(toolName: string, args: Record<string, any>, userId: number, date: string): Promise<{ success: boolean; message: string }> {
   if (toolName === "add_daily_goal") {
     const isRecurring = args.recurring !== false;
-    const existing = await db.select().from(goalTemplates)
+    const numDays = Math.max(1, Math.round(args.days ?? 1));
+    const existingTemplates = await db.select().from(goalTemplates)
       .where(and(eq(goalTemplates.userId, userId), eq(goalTemplates.isActive, true)));
-    const alreadyExists = existing.some(g => g.title.toLowerCase() === args.title.toLowerCase());
-    if (!alreadyExists) {
-      const [tmpl] = await db.insert(goalTemplates).values({
-        userId, title: args.title, recurring: isRecurring, isActive: true, sortOrder: existing.length,
+    let tmpl = existingTemplates.find(g => g.title.toLowerCase() === args.title.toLowerCase());
+    if (!tmpl) {
+      const [created] = await db.insert(goalTemplates).values({
+        userId, title: args.title, recurring: isRecurring, isActive: true, sortOrder: existingTemplates.length,
       }).returning();
-      if (!isRecurring && tmpl) {
-        await db.insert(dailyGoals).values({ userId, date, goalTemplateId: tmpl.id, completed: false });
-      }
-      return { success: true, message: `Added daily goal: ${args.title}${!isRecurring ? " (today only)" : ""}` };
+      tmpl = created;
     }
-    return { success: false, message: `Goal already exists: ${args.title}` };
+    if (!isRecurring && tmpl) {
+      for (let i = 0; i < numDays; i++) {
+        const [y, m, d2] = date.split("-").map(Number);
+        const target = new Date(Date.UTC(y, m - 1, d2 + i));
+        const targetDate = `${target.getUTCFullYear()}-${String(target.getUTCMonth() + 1).padStart(2, "0")}-${String(target.getUTCDate()).padStart(2, "0")}`;
+        const [exists] = await db.select().from(dailyGoals)
+          .where(and(eq(dailyGoals.userId, userId), eq(dailyGoals.date, targetDate), eq(dailyGoals.goalTemplateId, tmpl.id)));
+        if (!exists) {
+          await db.insert(dailyGoals).values({ userId, date: targetDate, goalTemplateId: tmpl.id, completed: false });
+        }
+      }
+    }
+    const label = isRecurring ? "every day going forward" : (numDays === 1 ? "today only" : `today + next ${numDays - 1} day(s)`);
+    return { success: true, message: `Added daily goal: ${args.title} (${label})` };
   }
 
   if (toolName === "edit_daily_goal") {
