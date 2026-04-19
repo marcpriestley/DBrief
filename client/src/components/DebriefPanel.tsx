@@ -667,10 +667,20 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     if (!text.trim() || !debrief || isStreaming) return;
 
     setUserInput("");
-    // Dismiss keyboard and scroll the debrief card into view so the AI response is visible
+    // Dismiss keyboard, then scroll so the debrief card's top sits just below the sticky header.
+    // We must NOT use scrollIntoView({ block: "start" }) because that scrolls the card's top
+    // to viewport position 0 — the sticky header then covers it, making the messages invisible.
     inputRef.current?.blur();
     hasScrolledToStreamStart.current = false;
-    setTimeout(() => debriefCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
+    setTimeout(() => {
+      const card = debriefCardRef.current;
+      const root = document.getElementById("root");
+      const header = document.querySelector("header");
+      if (!card || !root) return;
+      const headerH = header?.getBoundingClientRect().height ?? 130;
+      const cardAbsTop = card.getBoundingClientRect().top - root.getBoundingClientRect().top + root.scrollTop;
+      root.scrollTo({ top: cardAbsTop - headerH - 4, behavior: "smooth" });
+    }, 80);
     setIsStreaming(true);
     setStreamingContent("");
     ttsFirstSentenceRef.current = 0;

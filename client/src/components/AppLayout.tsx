@@ -11,6 +11,7 @@ import { haptic } from "@/lib/haptics";
 import { DateProvider, useDateContext } from "@/contexts/DateContext";
 import logoSrc from "@assets/IMG_1282_1776582526490.jpeg";
 import { isNativeHealth, getHealthAuthState, syncHealthData } from "@/lib/healthKit";
+import { Capacitor } from "@capacitor/core";
 import { useMoodOpen } from "@/contexts/MoodContext";
 
 interface AppLayoutProps {
@@ -394,12 +395,15 @@ function AppLayoutInner({ children }: AppLayoutProps) {
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
       <AppTour />
       {/* Covers the native iOS home-indicator zone so no white strip shows beneath web content.
-          z-[9999] ensures it sits above every other element. Inline background-color
-          bypasses any CSS-variable resolution delay that could expose the raw WKWebView layer. */}
+          With contentInset:'never' in capacitor.config, env(safe-area-inset-bottom) reports 0 to CSS
+          even on Face ID iPhones. We use max() to ensure at least 34 px on native iOS so the
+          home-indicator zone is always painted with the app background. */}
       <div
         className="fixed bottom-0 left-0 right-0 pointer-events-none"
         style={{
-          height: "env(safe-area-inset-bottom, 34px)",
+          height: Capacitor.isNativePlatform() && Capacitor.getPlatform() === "ios"
+            ? "max(env(safe-area-inset-bottom), 34px)"
+            : "env(safe-area-inset-bottom)",
           zIndex: 9999,
           backgroundColor: "var(--background)",
         }}
