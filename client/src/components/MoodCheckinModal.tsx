@@ -80,7 +80,8 @@ function MoodSlider({ value, onChange }: { value: number; onChange: (v: number) 
     };
     const onTouchEnd = () => {
       isDragging.current = false;
-      document.removeEventListener("touchmove", onTouchMove);
+      // Must use capture:true to match the listener added in onTouchStart
+      document.removeEventListener("touchmove", onTouchMove, { capture: true });
       document.removeEventListener("touchend", onTouchEnd);
       document.removeEventListener("touchcancel", onTouchEnd);
     };
@@ -90,8 +91,10 @@ function MoodSlider({ value, onChange }: { value: number; onChange: (v: number) 
       isDragging.current = true;
       lastHapticVal.current = null;
       if (e.touches[0]) emitWithHaptic(getVal(e.touches[0].clientX));
-      // Track on document so drags outside the element still work
-      document.addEventListener("touchmove", onTouchMove, { passive: false });
+      // Use capture:true so the listener fires before any element's stopPropagation
+      // call (the modal wrapper calls e.stopPropagation on touchmove, which would
+      // otherwise prevent the event from reaching a bubble-phase document listener).
+      document.addEventListener("touchmove", onTouchMove, { passive: false, capture: true });
       document.addEventListener("touchend", onTouchEnd);
       document.addEventListener("touchcancel", onTouchEnd);
     };
@@ -119,8 +122,8 @@ function MoodSlider({ value, onChange }: { value: number; onChange: (v: number) 
     return () => {
       el.removeEventListener("touchstart", onTouchStart);
       el.removeEventListener("mousedown", onMouseDown);
-      // Clean up any lingering document listeners
-      document.removeEventListener("touchmove", onTouchMove);
+      // Clean up any lingering document listeners — capture flag must match add
+      document.removeEventListener("touchmove", onTouchMove, { capture: true });
       document.removeEventListener("touchend", onTouchEnd);
       document.removeEventListener("touchcancel", onTouchEnd);
     };

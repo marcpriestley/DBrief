@@ -102,7 +102,7 @@ function NativeSlider({ value, onChange, min = 0, max = 100, color = "hsl(40, 95
     };
     const onTouchEnd = () => {
       isDragging.current = false;
-      document.removeEventListener("touchmove", onTouchMove);
+      document.removeEventListener("touchmove", onTouchMove, { capture: true });
       document.removeEventListener("touchend", onTouchEnd);
       document.removeEventListener("touchcancel", onTouchEnd);
     };
@@ -112,8 +112,8 @@ function NativeSlider({ value, onChange, min = 0, max = 100, color = "hsl(40, 95
       isDragging.current = true;
       lastHapticVal.current = null;
       if (e.touches[0]) emitWithHaptic(getVal(e.touches[0].clientX));
-      // Track on document so drags outside the element still work
-      document.addEventListener("touchmove", onTouchMove, { passive: false });
+      // capture:true so the listener fires before any ancestor stopPropagation
+      document.addEventListener("touchmove", onTouchMove, { passive: false, capture: true });
       document.addEventListener("touchend", onTouchEnd);
       document.addEventListener("touchcancel", onTouchEnd);
     };
@@ -141,8 +141,7 @@ function NativeSlider({ value, onChange, min = 0, max = 100, color = "hsl(40, 95
     return () => {
       el.removeEventListener("touchstart", onTouchStart);
       el.removeEventListener("mousedown", onMouseDown);
-      // Clean up any lingering document listeners
-      document.removeEventListener("touchmove", onTouchMove);
+      document.removeEventListener("touchmove", onTouchMove, { capture: true });
       document.removeEventListener("touchend", onTouchEnd);
       document.removeEventListener("touchcancel", onTouchEnd);
     };

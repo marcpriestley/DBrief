@@ -430,6 +430,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
   const handleToggleDarkMode = (enabled: boolean) => {
     setDarkMode(enabled);
+    const bg = enabled ? "#141414" : "#f7f7f7";
     if (enabled) {
       document.documentElement.classList.add("dark");
       localStorage.setItem("dbrief_theme", "dark");
@@ -437,6 +438,8 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       document.documentElement.classList.remove("dark");
       localStorage.setItem("dbrief_theme", "light");
     }
+    // Keep --pre-bg in sync so the safe-area fill strips show the right colour
+    document.documentElement.style.setProperty("--pre-bg", bg);
     haptic("select");
   };
 
