@@ -289,14 +289,30 @@ ${phase === "core" ? `
 
 APP TOOLS — USE THESE STRATEGICALLY, NOT REFLEXIVELY:
 You have direct access to these actions. Use them only when the conversation naturally surfaces a clear need — never force them:
-- add_habit: when the driver mentions wanting to build a recurring behaviour (e.g. "I want to start meditating every morning"). Adding it directly removes friction.
-- add_daily_goal: when they want to commit to something specific every day. Keep titles short and actionable.
+- add_habit: when the driver mentions wanting to build a recurring behaviour (e.g. "I want to start meditating every morning").
+- add_daily_goal: when they want to commit to something specific. Keep titles short and actionable.
 - add_long_term_goal: when a bigger objective emerges from the conversation (e.g. a milestone or outcome they're aiming for over weeks/months).
+- edit_daily_goal / edit_habit: when the driver wants to rename or adjust an existing goal or habit.
+- remove_daily_goal / remove_habit / remove_long_term_goal: when the driver explicitly wants to delete something.
 Beyond direct actions, you can also suggest (in natural language — not a list) things the driver could do inside the app:
 - "Tracking your sleep score daily would give us a proper baseline — you can add it in Settings."
 - "Given what you've said about energy crashes, adding an Energy circle to your daily scores could surface patterns."
 - "A habit streak for X would help make this stick."
 Only suggest when it's genuinely useful and follows from what they've shared. Never suggest more than one thing at a time. Don't mention features unprompted.
+
+TOOL USAGE PROTOCOL — CRITICAL:
+NEVER call a tool silently on the first mention. Always resolve ambiguity through one conversational question first, then call the tool immediately once the answer is clear.
+
+Before calling add_daily_goal, you MUST confirm:
+  (a) Is this recurring — repeating every day going forward — or a one-off for just today or tomorrow?
+  (b) Confirm the exact wording if it wasn't explicit. Example: "Add 'Drink water' as a recurring daily goal that repeats every day, or just for today?" Then call the tool with the right recurring value.
+
+Before calling add_habit, confirm the habit name and what counts as completing it if it's ambiguous.
+
+Before calling remove_* or edit_*, state the exact item and ask once for confirmation ("Remove 'Drink water' from your daily goals?"). Then execute immediately on confirmation.
+
+Once you have enough info — call the tool without asking again. Do not re-confirm what the user just confirmed.
+One clarifying question per message — never stack.
 
 TONE AND STYLE — THIS IS CRITICAL:
 - Direct, clear, and precise. No filler. No padding. Every sentence earns its place.
@@ -521,13 +537,29 @@ export function registerDebriefRoutes(app: Express): void {
           type: "function",
           function: {
             name: "add_daily_goal",
-            description: "Add a new recurring daily goal/habit for the user. Use when the user mentions wanting to build a habit, do something every day, or add a routine. Only call this if the user clearly wants this goal added.",
+            description: "Add a daily goal for the user. Only call AFTER clarifying whether it is recurring (repeats every day going forward) or one-off (just for today/tomorrow). Set recurring=true for ongoing, recurring=false for today only.",
             parameters: {
               type: "object",
               properties: {
-                title: { type: "string", description: "Short, actionable goal title (e.g. '10 min meditation', 'Cold shower', 'Read 20 pages')" },
+                title: { type: "string", description: "Short, actionable goal title (e.g. '10 min meditation', 'Cold shower', 'Drink water')" },
+                recurring: { type: "boolean", description: "true = repeats every day going forward; false = one-off for today only" },
               },
-              required: ["title"],
+              required: ["title", "recurring"],
+            },
+          },
+        },
+        {
+          type: "function",
+          function: {
+            name: "edit_daily_goal",
+            description: "Rename or update an existing daily goal. Only call after confirming with the user which goal to change and what the new title should be.",
+            parameters: {
+              type: "object",
+              properties: {
+                oldTitle: { type: "string", description: "Current title of the goal (exact or close match)" },
+                newTitle: { type: "string", description: "New title for the goal" },
+              },
+              required: ["oldTitle", "newTitle"],
             },
           },
         },
@@ -549,8 +581,22 @@ export function registerDebriefRoutes(app: Express): void {
         {
           type: "function",
           function: {
+            name: "remove_long_term_goal",
+            description: "Remove a long-term target. Only call after the user confirms they want it removed.",
+            parameters: {
+              type: "object",
+              properties: {
+                title: { type: "string", description: "Exact or approximate title of the long-term goal to remove" },
+              },
+              required: ["title"],
+            },
+          },
+        },
+        {
+          type: "function",
+          function: {
             name: "remove_daily_goal",
-            description: "Remove a recurring daily goal from the user's list. Use when the user explicitly asks to delete, remove, or stop tracking a daily goal. Never remove 'Make my bed'.",
+            description: "Remove a recurring daily goal from the user's list. Only call after the user confirms. Never remove 'Make my bed'.",
             parameters: {
               type: "object",
               properties: {
@@ -564,7 +610,7 @@ export function registerDebriefRoutes(app: Express): void {
           type: "function",
           function: {
             name: "add_habit",
-            description: "Add a new habit to the user's Habit Lab. Use when the user explicitly asks to add or start tracking a new habit (distinct from daily goals — habits are about building behavioral routines).",
+            description: "Add a new habit to the user's Habit Lab. Only call after confirming the habit name and what counts as completing it.",
             parameters: {
               type: "object",
               properties: {
@@ -578,8 +624,24 @@ export function registerDebriefRoutes(app: Express): void {
         {
           type: "function",
           function: {
+            name: "edit_habit",
+            description: "Rename or update an existing habit. Only call after confirming with the user which habit to change and the new name/emoji.",
+            parameters: {
+              type: "object",
+              properties: {
+                oldName: { type: "string", description: "Current habit name (exact or close match)" },
+                newName: { type: "string", description: "New habit name" },
+                emoji: { type: "string", description: "Optional updated emoji" },
+              },
+              required: ["oldName", "newName"],
+            },
+          },
+        },
+        {
+          type: "function",
+          function: {
             name: "remove_habit",
-            description: "Remove (archive) a habit from the user's Habit Lab. Use only when the user explicitly asks to delete or remove a habit.",
+            description: "Remove (archive) a habit from the user's Habit Lab. Only call after the user confirms.",
             parameters: {
               type: "object",
               properties: {
@@ -626,20 +688,43 @@ export function registerDebriefRoutes(app: Express): void {
         try {
           const params = JSON.parse(tc.arguments);
           if (tc.name === "add_daily_goal") {
+            const isRecurring = params.recurring !== false;
             const existing = await db.select().from(goalTemplates)
               .where(and(eq(goalTemplates.userId, userId), eq(goalTemplates.isActive, true)));
             const alreadyExists = existing.some(g => g.title.toLowerCase() === params.title.toLowerCase());
             if (!alreadyExists) {
-              await db.insert(goalTemplates).values({
+              const [tmpl] = await db.insert(goalTemplates).values({
                 userId,
                 title: params.title,
-                recurring: true,
+                recurring: isRecurring,
                 isActive: true,
                 sortOrder: existing.length,
-              });
-              actions.push({ type: "add_daily_goal", params, success: true, message: `Added daily goal: ${params.title}` });
+              }).returning();
+              // For one-off goals, immediately create today's daily goal record
+              if (!isRecurring && tmpl) {
+                await db.insert(dailyGoals).values({
+                  userId,
+                  date,
+                  goalTemplateId: tmpl.id,
+                  completed: false,
+                });
+              }
+              actions.push({ type: "add_daily_goal", params, success: true, message: `Added daily goal: ${params.title}${!isRecurring ? " (today only)" : ""}` });
             } else {
               actions.push({ type: "add_daily_goal", params, success: false, message: `Goal already exists: ${params.title}` });
+            }
+          } else if (tc.name === "edit_daily_goal") {
+            const allTemplates = await db.select().from(goalTemplates)
+              .where(and(eq(goalTemplates.userId, userId), eq(goalTemplates.isActive, true)));
+            const match = allTemplates.find(t =>
+              t.title.toLowerCase().includes(params.oldTitle.toLowerCase()) ||
+              params.oldTitle.toLowerCase().includes(t.title.toLowerCase())
+            );
+            if (match) {
+              await db.update(goalTemplates).set({ title: params.newTitle }).where(eq(goalTemplates.id, match.id));
+              actions.push({ type: "edit_daily_goal", params, success: true, message: `Updated daily goal: "${match.title}" → "${params.newTitle}"` });
+            } else {
+              actions.push({ type: "edit_daily_goal", params, success: false, message: `Goal not found: ${params.oldTitle}` });
             }
           } else if (tc.name === "add_long_term_goal") {
             const existing = await db.select().from(longTermGoals)
@@ -656,8 +741,20 @@ export function registerDebriefRoutes(app: Express): void {
               });
               actions.push({ type: "add_long_term_goal", params, success: true, message: `Added long-term target: ${params.title}` });
             }
+          } else if (tc.name === "remove_long_term_goal") {
+            const allLtg = await db.select().from(longTermGoals)
+              .where(and(eq(longTermGoals.userId, userId), eq(longTermGoals.isActive, true)));
+            const match = allLtg.find(g =>
+              g.title.toLowerCase().includes(params.title.toLowerCase()) ||
+              params.title.toLowerCase().includes(g.title.toLowerCase())
+            );
+            if (match) {
+              await db.update(longTermGoals).set({ isActive: false }).where(eq(longTermGoals.id, match.id));
+              actions.push({ type: "remove_long_term_goal", params, success: true, message: `Removed long-term target: ${match.title}` });
+            } else {
+              actions.push({ type: "remove_long_term_goal", params, success: false, message: `Long-term goal not found: ${params.title}` });
+            }
           } else if (tc.name === "remove_daily_goal") {
-            // Never allow removing "Make my bed"
             if (params.title.toLowerCase().includes("make my bed")) {
               actions.push({ type: "remove_daily_goal", params, success: false, message: "Make my bed cannot be removed — it's your foundational daily goal." });
             } else {
@@ -690,6 +787,22 @@ export function registerDebriefRoutes(app: Express): void {
                 isArchived: false,
               });
               actions.push({ type: "add_habit", params, success: true, message: `Added habit: ${params.name}` });
+            }
+          } else if (tc.name === "edit_habit") {
+            const allHabits = await db.select().from(habits)
+              .where(and(eq(habits.userId, userId), eq(habits.isArchived, false)));
+            const match = allHabits.find(h =>
+              h.name.toLowerCase().includes(params.oldName.toLowerCase()) ||
+              params.oldName.toLowerCase().includes(h.name.toLowerCase())
+            );
+            if (match) {
+              await db.update(habits).set({
+                name: params.newName,
+                ...(params.emoji ? { emoji: params.emoji } : {}),
+              }).where(eq(habits.id, match.id));
+              actions.push({ type: "edit_habit", params, success: true, message: `Updated habit: "${match.name}" → "${params.newName}"` });
+            } else {
+              actions.push({ type: "edit_habit", params, success: false, message: `Habit not found: ${params.oldName}` });
             }
           } else if (tc.name === "remove_habit") {
             const allHabits = await db.select().from(habits)
@@ -815,19 +928,33 @@ export const REALTIME_TOOLS: Array<{ type: "function"; name: string; description
   {
     type: "function",
     name: "add_daily_goal",
-    description: "Add a new recurring daily goal for the user. Only call this if the user clearly wants this goal added.",
+    description: "Add a daily goal. Only call AFTER clarifying whether it's recurring (repeats every day) or one-off (today only). Set recurring=true for ongoing, recurring=false for today only.",
     parameters: {
       type: "object",
       properties: {
         title: { type: "string", description: "Short, actionable goal title" },
+        recurring: { type: "boolean", description: "true = repeats every day; false = today only" },
       },
-      required: ["title"],
+      required: ["title", "recurring"],
+    },
+  },
+  {
+    type: "function",
+    name: "edit_daily_goal",
+    description: "Rename an existing daily goal. Only call after confirming with the user.",
+    parameters: {
+      type: "object",
+      properties: {
+        oldTitle: { type: "string", description: "Current goal title" },
+        newTitle: { type: "string", description: "New goal title" },
+      },
+      required: ["oldTitle", "newTitle"],
     },
   },
   {
     type: "function",
     name: "add_long_term_goal",
-    description: "Add a new long-term target for the user (max 3 total). Use when the user mentions a bigger objective they're working toward.",
+    description: "Add a new long-term target (max 3 total).",
     parameters: {
       type: "object",
       properties: {
@@ -839,12 +966,24 @@ export const REALTIME_TOOLS: Array<{ type: "function"; name: string; description
   },
   {
     type: "function",
-    name: "remove_daily_goal",
-    description: "Remove a recurring daily goal. Never remove 'Make my bed'.",
+    name: "remove_long_term_goal",
+    description: "Remove a long-term target. Only call after the user confirms.",
     parameters: {
       type: "object",
       properties: {
-        title: { type: "string", description: "Exact or approximate title of the goal to remove" },
+        title: { type: "string", description: "Approximate title of the goal to remove" },
+      },
+      required: ["title"],
+    },
+  },
+  {
+    type: "function",
+    name: "remove_daily_goal",
+    description: "Remove a daily goal. Only call after the user confirms. Never remove 'Make my bed'.",
+    parameters: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Approximate title of the goal to remove" },
       },
       required: ["title"],
     },
@@ -852,7 +991,7 @@ export const REALTIME_TOOLS: Array<{ type: "function"; name: string; description
   {
     type: "function",
     name: "add_habit",
-    description: "Add a new habit to the user's Habit Lab.",
+    description: "Add a new habit to the user's Habit Lab. Only call after confirming the name.",
     parameters: {
       type: "object",
       properties: {
@@ -864,12 +1003,26 @@ export const REALTIME_TOOLS: Array<{ type: "function"; name: string; description
   },
   {
     type: "function",
-    name: "remove_habit",
-    description: "Archive a habit from the user's Habit Lab.",
+    name: "edit_habit",
+    description: "Rename or update an existing habit. Only call after confirming with the user.",
     parameters: {
       type: "object",
       properties: {
-        name: { type: "string", description: "Exact or approximate name of the habit to remove" },
+        oldName: { type: "string", description: "Current habit name" },
+        newName: { type: "string", description: "New habit name" },
+        emoji: { type: "string", description: "Optional updated emoji" },
+      },
+      required: ["oldName", "newName"],
+    },
+  },
+  {
+    type: "function",
+    name: "remove_habit",
+    description: "Archive a habit. Only call after the user confirms.",
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Approximate name of the habit to remove" },
       },
       required: ["name"],
     },
@@ -878,14 +1031,34 @@ export const REALTIME_TOOLS: Array<{ type: "function"; name: string; description
 
 export async function executeDebriefTool(toolName: string, args: Record<string, any>, userId: number, date: string): Promise<{ success: boolean; message: string }> {
   if (toolName === "add_daily_goal") {
+    const isRecurring = args.recurring !== false;
     const existing = await db.select().from(goalTemplates)
       .where(and(eq(goalTemplates.userId, userId), eq(goalTemplates.isActive, true)));
     const alreadyExists = existing.some(g => g.title.toLowerCase() === args.title.toLowerCase());
     if (!alreadyExists) {
-      await db.insert(goalTemplates).values({ userId, title: args.title, recurring: true, isActive: true, sortOrder: existing.length });
-      return { success: true, message: `Added daily goal: ${args.title}` };
+      const [tmpl] = await db.insert(goalTemplates).values({
+        userId, title: args.title, recurring: isRecurring, isActive: true, sortOrder: existing.length,
+      }).returning();
+      if (!isRecurring && tmpl) {
+        await db.insert(dailyGoals).values({ userId, date, goalTemplateId: tmpl.id, completed: false });
+      }
+      return { success: true, message: `Added daily goal: ${args.title}${!isRecurring ? " (today only)" : ""}` };
     }
     return { success: false, message: `Goal already exists: ${args.title}` };
+  }
+
+  if (toolName === "edit_daily_goal") {
+    const allTemplates = await db.select().from(goalTemplates)
+      .where(and(eq(goalTemplates.userId, userId), eq(goalTemplates.isActive, true)));
+    const match = allTemplates.find(t =>
+      t.title.toLowerCase().includes(args.oldTitle.toLowerCase()) ||
+      args.oldTitle.toLowerCase().includes(t.title.toLowerCase())
+    );
+    if (match) {
+      await db.update(goalTemplates).set({ title: args.newTitle }).where(eq(goalTemplates.id, match.id));
+      return { success: true, message: `Updated daily goal: "${match.title}" → "${args.newTitle}"` };
+    }
+    return { success: false, message: `Goal not found: ${args.oldTitle}` };
   }
 
   if (toolName === "add_long_term_goal") {
@@ -894,6 +1067,20 @@ export async function executeDebriefTool(toolName: string, args: Record<string, 
     if (existing.length >= 3) return { success: false, message: "Already at 3 long-term targets (maximum reached)" };
     await db.insert(longTermGoals).values({ userId, title: encrypt(args.title), description: args.description ? encrypt(args.description) : null, isActive: true, sortOrder: existing.length });
     return { success: true, message: `Added long-term target: ${args.title}` };
+  }
+
+  if (toolName === "remove_long_term_goal") {
+    const allLtg = await db.select().from(longTermGoals)
+      .where(and(eq(longTermGoals.userId, userId), eq(longTermGoals.isActive, true)));
+    const match = allLtg.find(g =>
+      g.title.toLowerCase().includes(args.title.toLowerCase()) ||
+      args.title.toLowerCase().includes(g.title.toLowerCase())
+    );
+    if (match) {
+      await db.update(longTermGoals).set({ isActive: false }).where(eq(longTermGoals.id, match.id));
+      return { success: true, message: `Removed long-term target: ${match.title}` };
+    }
+    return { success: false, message: `Long-term goal not found: ${args.title}` };
   }
 
   if (toolName === "remove_daily_goal") {
@@ -915,6 +1102,22 @@ export async function executeDebriefTool(toolName: string, args: Record<string, 
     if (alreadyExists) return { success: false, message: `Habit already exists: ${args.name}` };
     await db.insert(habits).values({ userId, name: args.name, emoji: args.emoji || "⭐", category: "general", isArchived: false });
     return { success: true, message: `Added habit: ${args.name}` };
+  }
+
+  if (toolName === "edit_habit") {
+    const allHabits = await db.select().from(habits).where(and(eq(habits.userId, userId), eq(habits.isArchived, false)));
+    const match = allHabits.find(h =>
+      h.name.toLowerCase().includes(args.oldName.toLowerCase()) ||
+      args.oldName.toLowerCase().includes(h.name.toLowerCase())
+    );
+    if (match) {
+      await db.update(habits).set({
+        name: args.newName,
+        ...(args.emoji ? { emoji: args.emoji } : {}),
+      }).where(eq(habits.id, match.id));
+      return { success: true, message: `Updated habit: "${match.name}" → "${args.newName}"` };
+    }
+    return { success: false, message: `Habit not found: ${args.oldName}` };
   }
 
   if (toolName === "remove_habit") {
