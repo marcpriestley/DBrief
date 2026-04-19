@@ -22,7 +22,7 @@ async function seed() {
     { userId, name: "Productivity", color: "#4F46E5", maxValue: 10, isDefault: true, isActive: true },
     { userId, name: "Energy", color: "#F59E0B", maxValue: 10, isDefault: true, isActive: true },
     { userId, name: "Nutrition", color: "#EC4899", maxValue: 10, isDefault: true, isActive: true },
-    { userId, name: "Sleep Quality", color: "#8B5CF6", maxValue: 100, isDefault: false, isActive: true },
+    { userId, name: "Sleep Score", color: "#8B5CF6", maxValue: 100, isDefault: false, isActive: true },
     { userId, name: "Readiness", color: "#EF4444", maxValue: 100, isDefault: false, isActive: true },
   ];
 

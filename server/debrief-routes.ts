@@ -57,6 +57,7 @@ export async function gatherDayContext(userId: number, date: string) {
     "Mindful Minutes":  "min",
     "Respiratory Rate": "brpm",
     "VO2 Max":          "ml/kg/min",
+    "Sleep Score":      "/100",
   };
 
   // Build a map of metricName → maxValue from the user's configured metrics
@@ -221,7 +222,10 @@ export function buildSystemPrompt(context: Awaited<ReturnType<typeof gatherDayCo
   if (isToday) {
     const timeOfDay = currentHour < 12 ? "morning" : currentHour < 17 ? "afternoon" : "evening";
     const dayStillOpen = currentHour < 20;
-    timingContext = `This is TODAY's debrief — current time is ${timeOfDay} (hour ${currentHour}).
+    const morningCaveat = currentHour < 11
+      ? `\nMORNING DEBRIEF CAVEAT: It is early in the day (${currentHour}:xx). Activity metrics like Steps, Active Energy, Exercise Minutes, Flights Climbed, and Walking Distance reflect what has accumulated SO FAR — they will grow throughout the day. Do NOT question, flag, or comment on low values for these metrics. They are expected to be low at this hour. Sleep and recovery metrics (Sleep Score, HRV, Resting Heart Rate) are valid because they reflect the night just completed.`
+      : "";
+    timingContext = `This is TODAY's debrief — current time is ${timeOfDay} (hour ${currentHour}).${morningCaveat}
 ${dayStillOpen
   ? `IMPORTANT: The day is still in progress. For any daily goals not yet marked complete, treat them as still achievable — do NOT ask why they weren't done or imply failure. Note what's been done and encourage completing the remaining goals before end of day. Phrase open goals as in-progress, not missed.`
   : `It is late in the day — remaining open goals are unlikely to be completed today. You can analyse them as session outcomes.`}`;
@@ -282,6 +286,17 @@ ${phase === "core" ? `
 - Pursue the most interesting thread with engineering precision. Look for causal links, recurring patterns, or untested assumptions.
 - Every 3 extended exchanges, connect back to their long-term targets if any are set.
 `}
+
+APP TOOLS — USE THESE STRATEGICALLY, NOT REFLEXIVELY:
+You have direct access to these actions. Use them only when the conversation naturally surfaces a clear need — never force them:
+- add_habit: when the driver mentions wanting to build a recurring behaviour (e.g. "I want to start meditating every morning"). Adding it directly removes friction.
+- add_daily_goal: when they want to commit to something specific every day. Keep titles short and actionable.
+- add_long_term_goal: when a bigger objective emerges from the conversation (e.g. a milestone or outcome they're aiming for over weeks/months).
+Beyond direct actions, you can also suggest (in natural language — not a list) things the driver could do inside the app:
+- "Tracking your sleep score daily would give us a proper baseline — you can add it in Settings."
+- "Given what you've said about energy crashes, adding an Energy circle to your daily scores could surface patterns."
+- "A habit streak for X would help make this stick."
+Only suggest when it's genuinely useful and follows from what they've shared. Never suggest more than one thing at a time. Don't mention features unprompted.
 
 TONE AND STYLE — THIS IS CRITICAL:
 - Direct, clear, and precise. No filler. No padding. Every sentence earns its place.

@@ -79,9 +79,9 @@ const METRIC_MAP: Record<string, MetricDef> = {
     normalize: (v) => Math.round(v / 60 * 10) / 10, // minutes → hours, 1 decimal
     permission: "READ_SLEEP",
   },
-  "Sleep Quality": {
+  "Sleep Score": {
     dataType: "sleep-quality",
-    normalize: (v) => Math.min(100, Math.round(v)), // efficiency % (0–100)
+    normalize: (v) => Math.min(100, Math.round(v)), // Apple Health sleep score (0–100)
     permission: "READ_SLEEP",
   },
   "Heart Rate": {
@@ -376,13 +376,13 @@ export interface HealthSyncResult {
 export async function syncHealthData(dateStr: string, enabledMetricNames: string[]): Promise<HealthSyncResult> {
   const results: Array<{ name: string; value: number }> = [];
 
-  // Ensure Sleep Duration is queried whenever Sleep Quality is requested (needed for fallback)
+  // Ensure Sleep Duration is queried whenever Sleep Score is requested (needed for the < 3h guard)
   const toSync = new Set(enabledMetricNames.filter(n => METRIC_MAP[n]));
-  if (toSync.has("Sleep Quality") && !toSync.has("Sleep Duration")) {
+  if (toSync.has("Sleep Score") && !toSync.has("Sleep Duration")) {
     toSync.add("Sleep Duration");
   }
 
-  // Track normalised sleep hours for the Sleep Quality fallback.
+  // Track normalised sleep hours for the Sleep Score guard (< 3h = discard unreliable score).
   // We use the *normalised* value (hours) rather than the raw HealthKit value
   // because different plugin/OS versions may return sleep duration in seconds,
   // minutes, or hours — the normalize() function already handles the conversion.
@@ -399,15 +399,15 @@ export async function syncHealthData(dateStr: string, enabledMetricNames: string
 
       // Only add to results if it was in the user's requested list
       if (enabledMetricNames.includes(name) && raw !== null && raw > 0) {
-        // Sleep Quality: require at least 3 hours of sleep (180 min raw) to be valid.
+        // Sleep Score: require at least 3 hours of sleep (180 min raw) to be valid.
         // When a wearable battery dies mid-night, Apple Health falls back to iPhone
         // motion sensors and often reports 100% efficiency for the brief tracked period.
-        // We discard any Sleep Quality score backed by < 3 h of sleep as unreliable.
-        if (name === "Sleep Quality") {
+        // We discard any Sleep Score backed by < 3 h of sleep as unreliable.
+        if (name === "Sleep Score") {
           const minSleepMinutes = 180;
           const rawSleepMinutes = (normalizedSleepHours ?? 0) * 60;
           if (rawSleepMinutes < minSleepMinutes && normalizedSleepHours !== null) {
-            console.warn(`[HealthKit] Sleep Quality skipped — only ${rawSleepMinutes.toFixed(0)} min of sleep recorded (min 180 min required)`);
+            console.warn(`[HealthKit] Sleep Score skipped — only ${rawSleepMinutes.toFixed(0)} min of sleep recorded (min 180 min required)`);
           } else if (normalizedSleepHours === null) {
             // Sleep duration not available yet (parallel fetch) — add with guard below
             const score = def.normalize(raw);
@@ -424,31 +424,21 @@ export async function syncHealthData(dateStr: string, enabledMetricNames: string
     })
   );
 
-  // Remove Sleep Quality if sleep duration turned out to be < 3 h
-  // (handles the case where Sleep Quality resolved in parallel before Sleep Duration)
-  const sleepQualityIdx = results.findIndex(r => r.name === "Sleep Quality");
-  if (sleepQualityIdx !== -1 && normalizedSleepHours !== null && normalizedSleepHours < 3) {
-    console.warn(`[HealthKit] Sleep Quality removed post-sync — only ${(normalizedSleepHours * 60).toFixed(0)} min of sleep`);
-    results.splice(sleepQualityIdx, 1);
+  // Remove Sleep Score if sleep duration turned out to be < 3 h
+  // (handles the case where Sleep Score resolved in parallel before Sleep Duration)
+  const sleepScoreIdx = results.findIndex(r => r.name === "Sleep Score");
+  if (sleepScoreIdx !== -1 && normalizedSleepHours !== null && normalizedSleepHours < 3) {
+    console.warn(`[HealthKit] Sleep Score removed post-sync — only ${(normalizedSleepHours * 60).toFixed(0)} min of sleep`);
+    results.splice(sleepScoreIdx, 1);
   }
 
-  // Sleep Quality fallback: if native "sleep-quality" returned nothing, compute from
-  // sleep duration (efficiency proxy: hours / 8 * 100, where 8 h = 100 quality).
-  // Only apply if sleep duration is at least 3 hours (reliable data).
-  if (
-    enabledMetricNames.includes("Sleep Quality") &&
-    !results.find(r => r.name === "Sleep Quality") &&
-    normalizedSleepHours !== null &&
-    normalizedSleepHours >= 3
-  ) {
-    const quality = Math.min(100, Math.round((normalizedSleepHours / 8) * 100));
-    if (quality > 0) results.push({ name: "Sleep Quality", value: quality });
-  }
+  // No duration-based fallback — only use the actual Apple Health sleep score.
+  // If Apple Health doesn't have sleep data, leave it blank rather than show a misleading estimate.
 
   // Metrics the user has enabled but that produced no result (null from HealthKit or
-  // filtered out by a guard, e.g. Sleep Quality blocked because sleep < 3 h).
+  // filtered out by a guard, e.g. Sleep Score blocked because sleep < 3 h).
   // We tell the server to clear any previously auto-synced value so stale data
-  // (e.g. a 100% Sleep Quality from an Oura-dead iPhone-sensor reading) is removed.
+  // (e.g. a 100% Sleep Score from an Oura-dead iPhone-sensor reading) is removed.
   const savedNames = new Set(results.map(r => r.name));
   const clearedMetricNames = enabledMetricNames.filter(n => !savedNames.has(n) && METRIC_MAP[n]);
 

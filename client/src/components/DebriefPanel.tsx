@@ -1816,18 +1816,53 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
             </div>
           ) : (
             <>
-              {/* Normal mode — mic waveform indicator */}
-              {voice.isListening && (
-                <div className="flex items-center gap-2 mb-2 px-2">
-                  <div className="flex items-center gap-1">
-                    <span className="w-1 h-3 bg-red-500 rounded-full animate-pulse" />
-                    <span className="w-1 h-4 bg-red-500 rounded-full animate-pulse" style={{ animationDelay: "150ms" }} />
-                    <span className="w-1 h-2.5 bg-red-500 rounded-full animate-pulse" style={{ animationDelay: "300ms" }} />
-                    <span className="w-1 h-3.5 bg-red-500 rounded-full animate-pulse" style={{ animationDelay: "100ms" }} />
-                  </div>
-                  <span className="text-xs text-red-500 font-medium">Recording — tap mic to stop</span>
+              {/* ── Input mode toggle — Voice Note vs Keyboard ── */}
+              {voice.isSupported && (
+                <div className="flex gap-1.5 mb-2">
+                  <button
+                    disabled={isStreaming}
+                    onClick={() => {
+                      if (textMode) {
+                        haptic("light");
+                        setTextMode(false);
+                      } else {
+                        haptic("medium");
+                        warmAudioCtx();
+                        startVoiceNote();
+                      }
+                    }}
+                    className={`flex-1 h-8 rounded-lg flex items-center justify-center gap-1.5 text-xs font-medium transition-all disabled:opacity-40 ${
+                      !textMode
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "bg-muted text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <Mic className="h-3.5 w-3.5" />
+                    Voice Note
+                  </button>
+                  <button
+                    disabled={isStreaming}
+                    onClick={() => {
+                      if (!textMode) {
+                        haptic("light");
+                        setTextMode(true);
+                        if (voice.isListening) voice.stop();
+                        setTimeout(() => inputRef.current?.focus(), 50);
+                      }
+                    }}
+                    className={`flex-1 h-8 rounded-lg flex items-center justify-center gap-1.5 text-xs font-medium transition-all disabled:opacity-40 ${
+                      textMode
+                        ? "bg-muted text-foreground border border-border/60"
+                        : "bg-muted text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <Keyboard className="h-3.5 w-3.5" />
+                    Keyboard
+                  </button>
                 </div>
               )}
+
+              {/* Mic error banner */}
               {voice.micError && (
                 <div className="flex items-start gap-2 mb-2 px-2 py-1.5 bg-destructive/10 rounded-lg">
                   {voice.micError === "SETTINGS_NEEDED" ? (
@@ -1848,89 +1883,32 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                   <button onClick={voice.clearMicError} className="text-destructive/60 hover:text-destructive text-xs shrink-0">✕</button>
                 </div>
               )}
-              <div className="flex items-end gap-2 bg-muted/50 rounded-xl border border-border/50 p-2">
-                {/* Mode toggle: mic (voice) ↔ keyboard (text) */}
-                {voice.isSupported && (
-                  <button
-                    onClick={() => {
-                      if (isStreaming) return;
-                      if (textMode) {
-                        // Switch to voice mode
-                        haptic("light");
-                        setTextMode(false);
-                      } else if (voice.isListening) {
-                        // Already listening — tap mic to stop
-                        haptic("medium");
-                        voice.stop();
-                      } else {
-                        // Start voice
-                        haptic("medium");
-                        warmAudioCtx();
-                        startVoiceNote();
-                      }
-                    }}
+
+              {/* Text input row — only shown in keyboard mode (or when voice unsupported) */}
+              {(textMode || !voice.isSupported) && (
+                <div className="flex items-end gap-2 bg-muted/50 rounded-xl border border-border/50 p-2">
+                  <textarea
+                    ref={inputRef}
+                    rows={1}
+                    value={displayInput}
+                    onChange={(e) => setUserInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    onInput={handleTextareaInput}
+                    placeholder="Type your message…"
+                    className="flex-1 min-w-0 bg-transparent border-0 outline-none text-sm placeholder:text-muted-foreground/60 text-foreground p-1 resize-none overflow-hidden leading-5"
+                    style={{ height: "20px" }}
                     disabled={isStreaming}
-                    className={`h-8 w-8 rounded-lg shrink-0 flex items-center justify-center transition-all ${
-                      voice.isListening
-                        ? "bg-red-500 text-white shadow-sm shadow-red-200"
-                        : textMode
-                        ? "text-primary bg-primary/10"
-                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                    } ${isStreaming ? "opacity-40 cursor-not-allowed" : ""}`}
-                    aria-label={textMode ? "Switch to voice" : voice.isListening ? "Stop recording" : "Start voice"}
+                  />
+                  <Button
+                    size="icon"
+                    onClick={handleSend}
+                    disabled={!userInput.trim() || isStreaming}
+                    className="h-8 w-8 rounded-lg shrink-0"
                   >
-                    {voice.isListening ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
-                  </button>
-                )}
-                <textarea
-                  ref={inputRef}
-                  rows={1}
-                  value={displayInput}
-                  onChange={(e) => setUserInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  onInput={handleTextareaInput}
-                  onFocus={() => {
-                    // In text mode (or if voice not supported) — let the keyboard open normally
-                    if (textMode || !voice.isSupported) return;
-                    // Voice mode: hijack focus → start recording
-                    if (!isStreaming) {
-                      inputRef.current?.blur();
-                      warmAudioCtx();
-                      startVoiceNote();
-                    }
-                  }}
-                  placeholder={
-                    textMode
-                      ? "Type your message…"
-                      : voice.isListening
-                      ? "Speak freely — pausing is fine, mic stays on..."
-                      : "Tap to speak or use keyboard →"
-                  }
-                  className="flex-1 min-w-0 bg-transparent border-0 outline-none text-sm placeholder:text-muted-foreground/60 text-foreground p-1 resize-none overflow-hidden leading-5"
-                  style={{ height: "20px" }}
-                  disabled={isStreaming}
-                />
-                {/* Keyboard toggle when voice is NOT supported (always text mode) OR as a text-mode switch */}
-                {voice.isSupported && !textMode && (
-                  <button
-                    onClick={() => { haptic("light"); setTextMode(true); if (voice.isListening) voice.stop(); }}
-                    disabled={isStreaming}
-                    className="h-8 w-8 rounded-lg shrink-0 flex items-center justify-center text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted transition-all disabled:opacity-40"
-                    aria-label="Switch to text input"
-                    title="Type instead"
-                  >
-                    <Keyboard className="h-3.5 w-3.5" />
-                  </button>
-                )}
-            <Button
-              size="icon"
-              onClick={handleSend}
-              disabled={!userInput.trim() || isStreaming}
-              className="h-8 w-8 rounded-lg shrink-0"
-            >
-              <Send className="h-3.5 w-3.5" />
-            </Button>
-              </div>
+                    <Send className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              )}
             </>
           )}
         </div>
