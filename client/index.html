@@ -59,9 +59,10 @@
     }
     #dbrief-bottom-fill {
       bottom: 0;
-      /* max() so at least 34px even when env() reports 0 (Capacitor
-         contentInset:'never' suppresses env values on some iOS builds) */
-      height: max(env(safe-area-inset-bottom), 34px);
+      /* No 34px minimum — use env() directly so the fill collapses to 0
+         on builds where env() reports 0. A hardcoded minimum caused a
+         dark band that covered app content on the current TestFlight build. */
+      height: env(safe-area-inset-bottom, 0px);
     }
     #dbrief-splash {
       position: fixed;

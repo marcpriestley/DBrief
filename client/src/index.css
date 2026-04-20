@@ -86,17 +86,17 @@ html.dark body {
 /* #root is the sole scroll container.
    - height: 100dvh pins it to the real viewport regardless of body padding.
    - box-sizing: border-box means the safe-area padding is INSIDE the height,
-     so the home-indicator zone (bottom 34px) shows #root's own background
-     and the scroll track ends exactly at the right place.
+     so the home-indicator zone shows #root's own background.
    - overscroll-behavior-y: none is respected by WebKit on CSS overflow
      elements (unlike on body, which WKWebView handles natively). */
 #root {
   height: 100dvh;
   box-sizing: border-box;
-  /* max() ensures the home-indicator zone (34px) is always reserved even when
-     env() reports 0 (Capacitor contentInset:'never' makes it 0 in CSS even on
-     Face ID phones). #root's background-color then paints the reserved zone. */
-  padding-bottom: max(env(safe-area-inset-bottom), 34px);
+  /* Use env() directly — no 34px minimum. On the current TestFlight build
+     env() correctly returns the true safe-area value (or 0 if the native
+     config hasn't been rebuilt yet). A hardcoded minimum was causing a
+     visible dark band that covered app content when env() returned 0. */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
   overflow-y: auto;
   overscroll-behavior-y: none;
   /* Hardcoded rather than var() so the safe-area zones are always painted the
