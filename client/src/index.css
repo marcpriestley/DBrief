@@ -110,16 +110,6 @@ html.dark #root {
   background-color: hsl(0, 0%, 8%);
 }
 
-/* Safe-area fill divs: hardcoded colours avoid CSS-variable resolution timing issues.
-   Selectors target the divs via the data-attrs set in AppLayout. */
-[data-top-fill],
-[data-bottom-fill] {
-  background-color: hsl(0, 0%, 97%);
-}
-html.dark [data-top-fill],
-html.dark [data-bottom-fill] {
-  background-color: hsl(0, 0%, 8%);
-}
 
 @layer base {
   * {

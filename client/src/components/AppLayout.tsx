@@ -170,7 +170,18 @@ function AppLayoutInner({ children }: AppLayoutProps) {
     };
     setVh();
     vv.addEventListener("resize", setVh);
-    vv.addEventListener("scroll", setVh);
+
+    // When iOS opens the keyboard it silently scrolls the WKWebView's native
+    // scroll layer (separate from our CSS #root overflow), which shifts the
+    // viewport upward and exposes the raw WKWebView background (white) above
+    // the app content. Counteract it by snapping window scroll back to 0 every
+    // time the visual viewport moves (the keyboard is the only thing that
+    // causes this on Capacitor where body scrolling is disabled).
+    const lockScroll = () => {
+      setVh();
+      if (window.scrollY !== 0) window.scrollTo(0, 0);
+    };
+    vv.addEventListener("scroll", lockScroll);
 
     // Scroll focused input/textarea into the visible area after keyboard opens
     const onFocus = (e: FocusEvent) => {
@@ -185,7 +196,7 @@ function AppLayoutInner({ children }: AppLayoutProps) {
 
     return () => {
       vv.removeEventListener("resize", setVh);
-      vv.removeEventListener("scroll", setVh);
+      vv.removeEventListener("scroll", lockScroll);
       document.removeEventListener("focus", onFocus, true);
     };
   }, []);
@@ -395,37 +406,6 @@ function AppLayoutInner({ children }: AppLayoutProps) {
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
       <AppTour />
 
-      {/* TOP safe-area fill — covers the status bar zone so the transparent
-          iOS status bar never reveals a white flash when CSS vars re-evaluate.
-          Inline backgroundColor is evaluated once at initial render from html.dark
-          (set synchronously by the theme script), so it stays correct even during
-          any brief CSS-variable flash that occurs after hydration. */}
-      <div
-        data-top-fill
-        className="fixed top-0 left-0 right-0 pointer-events-none"
-        style={{
-          height: "env(safe-area-inset-top)",
-          zIndex: 9999,
-          backgroundColor: document.documentElement.classList.contains("dark")
-            ? "hsl(0, 0%, 8%)"
-            : "hsl(0, 0%, 97%)",
-        }}
-      />
-
-      {/* BOTTOM safe-area fill — covers the native iOS home-indicator zone.
-          max() guarantees at least 34px even when env() reports 0 (Capacitor
-          contentInset:'never' can cause env to return 0 in CSS on some builds). */}
-      <div
-        data-bottom-fill
-        className="fixed bottom-0 left-0 right-0 pointer-events-none"
-        style={{
-          height: "max(env(safe-area-inset-bottom), 34px)",
-          zIndex: 9999,
-          backgroundColor: document.documentElement.classList.contains("dark")
-            ? "hsl(0, 0%, 8%)"
-            : "hsl(0, 0%, 97%)",
-        }}
-      />
     </div>
   );
 }
