@@ -312,6 +312,7 @@ Before calling add_daily_goal, you MUST confirm:
 Before calling add_habit, confirm the habit name and what counts as completing it if it's ambiguous.
 
 Before calling remove_* or edit_*, state the exact item and ask once for confirmation ("Remove 'Drink water' from your job list?"). Then execute immediately on confirmation.
+For remove_daily_goal: if the user says "remove from today" or "remove from [specific day]", pass specificDate (YYYY-MM-DD) so only that day's entry is deleted and future days remain. If they say "remove it entirely" or don't specify a date, omit specificDate to permanently deactivate.
 
 Once you have enough info — call the tool without asking again. Do not re-confirm what the user just confirmed.
 One clarifying question per message — never stack.
@@ -542,13 +543,14 @@ export function registerDebriefRoutes(app: Express): void {
           type: "function",
           function: {
             name: "add_daily_goal",
-            description: "Add a daily goal for the user. Only call AFTER clarifying whether it is recurring (repeats every day going forward) or one-off. For one-off goals use recurring=false and set days to how many consecutive days to add it (e.g. days=2 for today and tomorrow). For a permanent daily goal use recurring=true (days is ignored).",
+            description: "Add a daily goal for the user. Only call AFTER clarifying whether it is recurring (repeats every day going forward) or one-off. For one-off goals use recurring=false, set days to the number of consecutive days, and set startOffset to how many days from today to start (0=today, 1=tomorrow, 2=day after tomorrow). Example: 'tomorrow and the day after' → days=2, startOffset=1. For a permanent daily goal use recurring=true (days and startOffset are ignored).",
             parameters: {
               type: "object",
               properties: {
                 title: { type: "string", description: "Short, actionable goal title (e.g. '10 min meditation', 'Cold shower', 'Drink water')" },
                 recurring: { type: "boolean", description: "true = repeats every day going forward; false = one-off for a fixed number of days" },
-                days: { type: "number", description: "Number of consecutive days to add this goal for when recurring=false (1 = today only, 2 = today and tomorrow, etc.). Ignored when recurring=true." },
+                days: { type: "number", description: "Number of consecutive days to add this goal for when recurring=false (default 1)." },
+                startOffset: { type: "number", description: "Days from today to start (0=today, 1=tomorrow, 2=day after tomorrow). Default 0. Use 1 when the user says 'tomorrow', 2 for 'day after tomorrow', etc." },
               },
               required: ["title", "recurring"],
             },
@@ -602,11 +604,12 @@ export function registerDebriefRoutes(app: Express): void {
           type: "function",
           function: {
             name: "remove_daily_goal",
-            description: "Remove a recurring daily goal from the user's list. Only call after the user confirms. Never remove 'Make my bed'.",
+            description: "Remove a daily goal. If the user wants to remove it from all days (permanently), omit specificDate. If the user only wants to remove it from one specific date (e.g. 'remove from today'), set specificDate to that date in YYYY-MM-DD format. Never remove 'Make my bed'.",
             parameters: {
               type: "object",
               properties: {
                 title: { type: "string", description: "Exact or approximate title of the goal to remove" },
+                specificDate: { type: "string", description: "YYYY-MM-DD date to remove the goal from only that day. Omit to remove from all days permanently." },
               },
               required: ["title"],
             },
@@ -710,13 +713,14 @@ export function registerDebriefRoutes(app: Express): void {
               }).returning();
               tmpl = created;
             }
-            // Always create dailyGoals rows so the goal is immediately visible —
-            // recurring goals get today's row, one-off goals get each requested day.
+            // Always create dailyGoals rows so the goal is immediately visible.
+            // startOffset: 0=today, 1=tomorrow, 2=day after tomorrow, etc.
             if (tmpl) {
+              const startOffset = Math.max(0, Math.round(params.startOffset ?? 0));
               const daysToInsert = isRecurring ? 1 : numDays;
               for (let i = 0; i < daysToInsert; i++) {
                 const [y, m, d2] = date.split("-").map(Number);
-                const target = new Date(Date.UTC(y, m - 1, d2 + i));
+                const target = new Date(Date.UTC(y, m - 1, d2 + startOffset + i));
                 const targetDate = `${target.getUTCFullYear()}-${String(target.getUTCMonth() + 1).padStart(2, "0")}-${String(target.getUTCDate()).padStart(2, "0")}`;
                 const [exists] = await db.select().from(dailyGoals)
                   .where(and(eq(dailyGoals.userId, userId), eq(dailyGoals.date, targetDate), eq(dailyGoals.goalTemplateId, tmpl.id)));
@@ -725,7 +729,9 @@ export function registerDebriefRoutes(app: Express): void {
                 }
               }
             }
-            const label = isRecurring ? "every day going forward" : (numDays === 1 ? "today only" : `today + next ${numDays - 1} day(s)`);
+            const startOffset = Math.max(0, Math.round(params.startOffset ?? 0));
+            const startLabel = startOffset === 0 ? "today" : startOffset === 1 ? "tomorrow" : `in ${startOffset} days`;
+            const label = isRecurring ? "every day going forward" : (numDays === 1 ? startLabel : `${startLabel} + next ${numDays - 1} day(s)`);
             actions.push({ type: "add_daily_goal", params, success: true, message: `Added daily goal: ${params.title} (${label})` });
           } else if (tc.name === "edit_daily_goal") {
             const allTemplates = await db.select().from(goalTemplates)
@@ -772,16 +778,29 @@ export function registerDebriefRoutes(app: Express): void {
             if (params.title.toLowerCase().includes("make my bed")) {
               actions.push({ type: "remove_daily_goal", params, success: false, message: "Make my bed cannot be removed — it's your foundational daily goal." });
             } else {
+              // Search all templates (active OR inactive) so goals that were partially
+              // removed (template deactivated but dailyGoals rows left behind) can still be cleaned up.
               const allTemplates = await db.select().from(goalTemplates)
-                .where(and(eq(goalTemplates.userId, userId), eq(goalTemplates.isActive, true)));
+                .where(eq(goalTemplates.userId, userId));
               const match = allTemplates.find(t =>
                 t.title.toLowerCase().includes(params.title.toLowerCase()) ||
                 params.title.toLowerCase().includes(t.title.toLowerCase())
               );
               if (match) {
-                await db.update(goalTemplates).set({ isActive: false }).where(eq(goalTemplates.id, match.id));
-                await db.delete(dailyGoals).where(and(eq(dailyGoals.userId, userId), eq(dailyGoals.goalTemplateId, match.id)));
-                actions.push({ type: "remove_daily_goal", params, success: true, message: `Removed daily goal: ${match.title}` });
+                if (params.specificDate) {
+                  // Remove only from this specific date's dailyGoals entry
+                  await db.delete(dailyGoals).where(and(
+                    eq(dailyGoals.userId, userId),
+                    eq(dailyGoals.goalTemplateId, match.id),
+                    eq(dailyGoals.date, params.specificDate),
+                  ));
+                  actions.push({ type: "remove_daily_goal", params, success: true, message: `Removed daily goal from ${params.specificDate}: ${match.title}` });
+                } else {
+                  // Remove permanently — deactivate template and delete all rows
+                  await db.update(goalTemplates).set({ isActive: false }).where(eq(goalTemplates.id, match.id));
+                  await db.delete(dailyGoals).where(and(eq(dailyGoals.userId, userId), eq(dailyGoals.goalTemplateId, match.id)));
+                  actions.push({ type: "remove_daily_goal", params, success: true, message: `Removed daily goal: ${match.title}` });
+                }
               } else {
                 actions.push({ type: "remove_daily_goal", params, success: false, message: `Goal not found: ${params.title}` });
               }
@@ -986,12 +1005,14 @@ export const REALTIME_TOOLS: Array<{ type: "function"; name: string; description
   {
     type: "function",
     name: "add_daily_goal",
-    description: "Add a daily goal. Only call AFTER clarifying whether it's recurring (repeats every day) or one-off (today only). Set recurring=true for ongoing, recurring=false for today only.",
+    description: "Add a daily goal. Only call AFTER clarifying whether it's recurring (repeats every day) or one-off. Set recurring=true for ongoing; recurring=false for specific days. Use startOffset to control start day (0=today, 1=tomorrow, 2=day after tomorrow). Example: 'tomorrow and the day after' → recurring=false, days=2, startOffset=1.",
     parameters: {
       type: "object",
       properties: {
         title: { type: "string", description: "Short, actionable goal title" },
-        recurring: { type: "boolean", description: "true = repeats every day; false = today only" },
+        recurring: { type: "boolean", description: "true = repeats every day; false = specific days only" },
+        days: { type: "number", description: "Number of consecutive days (default 1, only used when recurring=false)" },
+        startOffset: { type: "number", description: "Days from today to start (0=today, 1=tomorrow, 2=day after tomorrow). Default 0." },
       },
       required: ["title", "recurring"],
     },
@@ -1037,11 +1058,12 @@ export const REALTIME_TOOLS: Array<{ type: "function"; name: string; description
   {
     type: "function",
     name: "remove_daily_goal",
-    description: "Remove a daily goal. Only call after the user confirms. Never remove 'Make my bed'.",
+    description: "Remove a daily goal. If the user says 'remove from today' or a specific date, set specificDate (YYYY-MM-DD) to delete only that day's entry. Omit specificDate to remove permanently from all days. Never remove 'Make my bed'.",
     parameters: {
       type: "object",
       properties: {
         title: { type: "string", description: "Approximate title of the goal to remove" },
+        specificDate: { type: "string", description: "YYYY-MM-DD date to remove from only that day. Omit to remove permanently." },
       },
       required: ["title"],
     },
@@ -1100,12 +1122,13 @@ export async function executeDebriefTool(toolName: string, args: Record<string, 
       }).returning();
       tmpl = created;
     }
-    // Always create dailyGoals rows — recurring gets today, one-off gets each requested day.
+    // Always create dailyGoals rows — startOffset controls start day, recurring gets 1 row, one-off gets numDays.
     if (tmpl) {
+      const startOffset = Math.max(0, Math.round(args.startOffset ?? 0));
       const daysToInsert = isRecurring ? 1 : numDays;
       for (let i = 0; i < daysToInsert; i++) {
         const [y, m, d2] = date.split("-").map(Number);
-        const target = new Date(Date.UTC(y, m - 1, d2 + i));
+        const target = new Date(Date.UTC(y, m - 1, d2 + startOffset + i));
         const targetDate = `${target.getUTCFullYear()}-${String(target.getUTCMonth() + 1).padStart(2, "0")}-${String(target.getUTCDate()).padStart(2, "0")}`;
         const [exists] = await db.select().from(dailyGoals)
           .where(and(eq(dailyGoals.userId, userId), eq(dailyGoals.date, targetDate), eq(dailyGoals.goalTemplateId, tmpl.id)));
@@ -1114,7 +1137,9 @@ export async function executeDebriefTool(toolName: string, args: Record<string, 
         }
       }
     }
-    const label = isRecurring ? "every day going forward" : (numDays === 1 ? "today only" : `today + next ${numDays - 1} day(s)`);
+    const startOffset = Math.max(0, Math.round(args.startOffset ?? 0));
+    const startLabel = startOffset === 0 ? "today" : startOffset === 1 ? "tomorrow" : `in ${startOffset} days`;
+    const label = isRecurring ? "every day going forward" : (numDays === 1 ? startLabel : `${startLabel} + next ${numDays - 1} day(s)`);
     return { success: true, message: `Added daily goal: ${args.title} (${label})` };
   }
 
@@ -1156,13 +1181,25 @@ export async function executeDebriefTool(toolName: string, args: Record<string, 
 
   if (toolName === "remove_daily_goal") {
     if (args.title.toLowerCase().includes("make my bed")) return { success: false, message: "Make my bed cannot be removed." };
+    // Search all templates (active or inactive) so partially-removed goals can still be cleaned up
     const allTemplates = await db.select().from(goalTemplates)
-      .where(and(eq(goalTemplates.userId, userId), eq(goalTemplates.isActive, true)));
+      .where(eq(goalTemplates.userId, userId));
     const match = allTemplates.find(t => t.title.toLowerCase().includes(args.title.toLowerCase()) || args.title.toLowerCase().includes(t.title.toLowerCase()));
     if (match) {
-      await db.update(goalTemplates).set({ isActive: false }).where(eq(goalTemplates.id, match.id));
-      await db.delete(dailyGoals).where(and(eq(dailyGoals.userId, userId), eq(dailyGoals.goalTemplateId, match.id)));
-      return { success: true, message: `Removed daily goal: ${match.title}` };
+      if (args.specificDate) {
+        // Remove only from this specific date's dailyGoals entry
+        await db.delete(dailyGoals).where(and(
+          eq(dailyGoals.userId, userId),
+          eq(dailyGoals.goalTemplateId, match.id),
+          eq(dailyGoals.date, args.specificDate),
+        ));
+        return { success: true, message: `Removed daily goal from ${args.specificDate}: ${match.title}` };
+      } else {
+        // Remove permanently — deactivate template and delete all rows
+        await db.update(goalTemplates).set({ isActive: false }).where(eq(goalTemplates.id, match.id));
+        await db.delete(dailyGoals).where(and(eq(dailyGoals.userId, userId), eq(dailyGoals.goalTemplateId, match.id)));
+        return { success: true, message: `Removed daily goal: ${match.title}` };
+      }
     }
     return { success: false, message: `Goal not found: ${args.title}` };
   }
