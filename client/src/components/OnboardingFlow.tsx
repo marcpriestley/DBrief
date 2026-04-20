@@ -247,7 +247,7 @@ export default function OnboardingFlow({ username }: OnboardingFlowProps) {
                   iconBg="bg-orange-500/10"
                   iconColor="text-orange-500"
                   title="Streaks & Targets"
-                  description="Set daily goals and long-term targets. Consistency compounds — the best teams never miss a session."
+                  description="Build your daily job list and long-term targets. Consistency compounds — the best teams never miss a session."
                 />
                 <FeatureCard
                   icon={<Sparkles className="h-4 w-4" />}

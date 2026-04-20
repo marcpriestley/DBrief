@@ -290,7 +290,7 @@ ${phase === "core" ? `
 APP TOOLS — USE THESE STRATEGICALLY, NOT REFLEXIVELY:
 You have direct access to these actions. Use them only when the conversation naturally surfaces a clear need — never force them:
 - add_habit: when the driver mentions wanting to build a recurring behaviour (e.g. "I want to start meditating every morning").
-- add_daily_goal: when they want to commit to something specific. Keep titles short and actionable.
+- add_daily_goal: when they want to commit to something specific for their job list. Keep titles short and actionable.
 - add_long_term_goal: when a bigger objective emerges from the conversation (e.g. a milestone or outcome they're aiming for over weeks/months).
 - edit_daily_goal / edit_habit: when the driver wants to rename or adjust an existing goal or habit.
 - remove_daily_goal / remove_habit / remove_long_term_goal: when the driver explicitly wants to delete something.
@@ -303,13 +303,15 @@ Only suggest when it's genuinely useful and follows from what they've shared. Ne
 TOOL USAGE PROTOCOL — CRITICAL:
 NEVER call a tool silently on the first mention. Always resolve ambiguity through one conversational question first, then call the tool immediately once the answer is clear.
 
+The user's daily goals section is now called "Today's Job List" in the UI — refer to it that way in conversation (e.g. "I'll add that to your job list").
+
 Before calling add_daily_goal, you MUST confirm:
   (a) Is this recurring — repeating every day going forward — or a one-off for just today or tomorrow?
   (b) Confirm the exact wording if it wasn't explicit. Example: "Add 'Drink water' as a recurring daily goal that repeats every day, or just for today?" Then call the tool with the right recurring value.
 
 Before calling add_habit, confirm the habit name and what counts as completing it if it's ambiguous.
 
-Before calling remove_* or edit_*, state the exact item and ask once for confirmation ("Remove 'Drink water' from your daily goals?"). Then execute immediately on confirmation.
+Before calling remove_* or edit_*, state the exact item and ask once for confirmation ("Remove 'Drink water' from your job list?"). Then execute immediately on confirmation.
 
 Once you have enough info — call the tool without asking again. Do not re-confirm what the user just confirmed.
 One clarifying question per message — never stack.
@@ -708,16 +710,18 @@ export function registerDebriefRoutes(app: Express): void {
               }).returning();
               tmpl = created;
             }
-            // For one-off goals, create a daily record for each requested day
-            if (!isRecurring && tmpl) {
-              for (let i = 0; i < numDays; i++) {
+            // Always create dailyGoals rows so the goal is immediately visible —
+            // recurring goals get today's row, one-off goals get each requested day.
+            if (tmpl) {
+              const daysToInsert = isRecurring ? 1 : numDays;
+              for (let i = 0; i < daysToInsert; i++) {
                 const [y, m, d2] = date.split("-").map(Number);
                 const target = new Date(Date.UTC(y, m - 1, d2 + i));
                 const targetDate = `${target.getUTCFullYear()}-${String(target.getUTCMonth() + 1).padStart(2, "0")}-${String(target.getUTCDate()).padStart(2, "0")}`;
                 const [exists] = await db.select().from(dailyGoals)
                   .where(and(eq(dailyGoals.userId, userId), eq(dailyGoals.date, targetDate), eq(dailyGoals.goalTemplateId, tmpl.id)));
                 if (!exists) {
-                  await db.insert(dailyGoals).values({ userId, date: targetDate, goalTemplateId: tmpl.id, completed: false });
+                  await db.insert(dailyGoals).values({ userId, date: targetDate, goalTemplateId: tmpl.id, title: params.title, completed: false });
                 }
               }
             }
@@ -1096,15 +1100,17 @@ export async function executeDebriefTool(toolName: string, args: Record<string, 
       }).returning();
       tmpl = created;
     }
-    if (!isRecurring && tmpl) {
-      for (let i = 0; i < numDays; i++) {
+    // Always create dailyGoals rows — recurring gets today, one-off gets each requested day.
+    if (tmpl) {
+      const daysToInsert = isRecurring ? 1 : numDays;
+      for (let i = 0; i < daysToInsert; i++) {
         const [y, m, d2] = date.split("-").map(Number);
         const target = new Date(Date.UTC(y, m - 1, d2 + i));
         const targetDate = `${target.getUTCFullYear()}-${String(target.getUTCMonth() + 1).padStart(2, "0")}-${String(target.getUTCDate()).padStart(2, "0")}`;
         const [exists] = await db.select().from(dailyGoals)
           .where(and(eq(dailyGoals.userId, userId), eq(dailyGoals.date, targetDate), eq(dailyGoals.goalTemplateId, tmpl.id)));
         if (!exists) {
-          await db.insert(dailyGoals).values({ userId, date: targetDate, goalTemplateId: tmpl.id, completed: false });
+          await db.insert(dailyGoals).values({ userId, date: targetDate, goalTemplateId: tmpl.id, title: args.title, completed: false });
         }
       }
     }

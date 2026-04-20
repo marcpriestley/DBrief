@@ -52,7 +52,7 @@ const STEPS: TourStep[] = [
     iconColor: "text-emerald-500",
     title: "Goals & Targets",
     subtitle: "What you're actually racing toward",
-    description: "Set daily goals that compound over time, and up to 3 Long-Term Targets sitting between today's actions and your Infinite Goal. One tap to mark them done.",
+    description: "Build your daily job list — the specific actions you commit to today — plus up to 3 Long-Term Targets between today's actions and your Infinite Goal. One tap to mark them done.",
     tip: "Completed goals feed directly into your debrief context.",
   },
   {

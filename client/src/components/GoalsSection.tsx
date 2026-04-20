@@ -28,7 +28,7 @@ const GOAL_MESSAGES = [
 ];
 
 const ALL_COMPLETE_MESSAGES = [
-  { icon: "🏆", title: "All Goals Complete!", sub: "Session complete. Outstanding execution." },
+  { icon: "🏆", title: "Job List Cleared!", sub: "Session complete. Outstanding execution." },
   { icon: "🏁", title: "Chequered Flag!", sub: "Full points haul. Race pace confirmed." },
   { icon: "🥇", title: "Perfect Score!", sub: "P1 performance. Zero dropped objectives." },
   { icon: "⚡", title: "Clean Sheet!", sub: "All sectors green. Maximum output delivered." },
@@ -229,7 +229,7 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
     <div className="relative">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
-          {tomorrowMode ? "Tomorrow's Goals" : "Today's Goals"}
+          {tomorrowMode ? "Tomorrow's Job List" : "Today's Job List"}
           <span className="text-sm font-normal text-muted-foreground">
             {completedCount}/{displayTotal}
           </span>

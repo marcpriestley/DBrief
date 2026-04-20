@@ -25,7 +25,7 @@ export default function PrivacyPolicy() {
               <li><strong>Account information:</strong> Your email address and password (stored as a secure hash) when you create an account.</li>
               <li><strong>Performance data:</strong> Daily metric scores (0–100 scale) you choose to log, including sleep, energy, focus, and other custom metrics.</li>
               <li><strong>Journal and debrief content:</strong> Text you write in your daily journal or during AI debrief sessions.</li>
-              <li><strong>Goals:</strong> Your infinite goal, long-term targets, and daily goals.</li>
+              <li><strong>Goals:</strong> Your infinite goal, long-term targets, and daily job list.</li>
               <li><strong>Mood check-ins:</strong> Mood ratings you submit through the app.</li>
               <li><strong>Usage data:</strong> Streak counts and activity timestamps used to power your streak tracking.</li>
               <li><strong>Push notification tokens:</strong> Device tokens used to deliver your daily reminders, if you opt in.</li>

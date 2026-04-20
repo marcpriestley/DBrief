@@ -1308,12 +1308,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async hasUserLoggedMoodInPeriod(userId: number, date: string, periodStartHour: number, periodEndHour: number, timezone: string): Promise<boolean> {
-    // Check if the user has a mood check-in on this date whose createdAt, converted to
-    // the user's local timezone, falls within [periodStartHour, periodEndHour).
+    // Use createdAt AT TIME ZONE for BOTH the date and the hour checks.
+    // The stored `date` column uses UTC date which can differ from the user's local
+    // date for western timezones (e.g. 9 PM Pacific = next UTC day), causing false misses.
     const [entry] = await db.select({ id: moodCheckins.id }).from(moodCheckins)
       .where(and(
         eq(moodCheckins.userId, userId),
-        eq(moodCheckins.date, date),
+        sql`DATE(${moodCheckins.createdAt} AT TIME ZONE ${timezone}) = ${date}::date`,
         sql`EXTRACT(HOUR FROM ${moodCheckins.createdAt} AT TIME ZONE ${timezone}) >= ${periodStartHour}`,
         sql`EXTRACT(HOUR FROM ${moodCheckins.createdAt} AT TIME ZONE ${timezone}) < ${periodEndHour}`,
       ))
