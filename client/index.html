@@ -1,16 +1,34 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <!-- Apply theme class synchronously before ANYTHING else renders.
-         Without this, WKWebView shows a white flash (from :root light-mode vars)
-         before React mounts and the ThemeProvider adds the .dark class. -->
+    <!-- ── Theme bootstrap ───────────────────────────────────────────────────
+         Step 1 (STYLE tag): Set dark background on html/body/#root as the
+         absolute CSS default — no class, no variable, no external file.
+         This fires as part of the initial CSS cascade, before ANY script or
+         Vite bundle loads.  Light-mode override is handled by html.light below.
+
+         Step 2 (SCRIPT tag): Reads localStorage, adds html.dark / html.light
+         class, sets the inline style on <html> (highest specificity), and sets
+         --pre-bg so the fill strips use the right colour.
+
+         Together these mean: zero white frames, zero timing races. -->
+    <style>
+      /* Hard-code dark as the global default so WKWebView NEVER shows white
+         before the Vite CSS bundle arrives.  html.light overrides to light. */
+      html { background-color: #141414; }
+      body { background-color: #141414; }
+      #root { background-color: #141414; }
+      html.light,
+      html.light body,
+      html.light #root { background-color: #f7f7f7; }
+    </style>
     <script>
       try {
         var t = localStorage.getItem('dbrief_theme');
         var isDark = t !== 'light';
         document.documentElement.classList.add(isDark ? 'dark' : 'light');
-        // Hard-set bg on html immediately so WKWebView shows the right colour
-        // before any CSS loads — prevents the white-band flash at the bottom.
+        // Inline style on <html> — highest possible specificity, overrides all
+        // CSS rules including the Vite bundle and the <style> block above.
         var bg = isDark ? '#141414' : '#f7f7f7';
         document.documentElement.style.backgroundColor = bg;
         document.documentElement.style.setProperty('--pre-bg', bg);
