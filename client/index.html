@@ -43,6 +43,36 @@
         document.documentElement.style.colorScheme = 'dark';
         document.documentElement.style.setProperty('--pre-bg', '#141414');
       }
+
+      // ── Safe-area bottom detection ──────────────────────────────────────
+      // Capacitor's contentInset:'never' makes env(safe-area-inset-bottom)
+      // return 0 in CSS, so padding/height rules that use env() silently
+      // collapse to 0 — leaving the iOS home-indicator zone uncovered (white).
+      //
+      // Fix: detect Face ID iPhones by CSS-pixel screen height (all models
+      // are >= 812 px) and force --sai-bottom to at least 34 px so every
+      // element that uses var(--sai-bottom) covers the home-indicator zone.
+      // env() is still preferred when it returns a real value (non-Capacitor
+      // browser, or future rebuild without contentInset:never).
+      try {
+        var isFaceId = window.screen.height >= 812;
+        var saibFallback = isFaceId ? '34px' : '0px';
+        // max(env(), fallback) — on Capacitor where env()=0 this resolves to
+        // the fallback; in a browser where env()=34px it resolves to 34px.
+        document.documentElement.style.setProperty(
+          '--sai-bottom',
+          'max(env(safe-area-inset-bottom, 0px), ' + saibFallback + ')'
+        );
+        // Also set top safe area the same way (status bar ~47px on Face ID)
+        var saibTop = isFaceId ? '47px' : '20px';
+        document.documentElement.style.setProperty(
+          '--sai-top',
+          'max(env(safe-area-inset-top, 0px), ' + saibTop + ')'
+        );
+      } catch (e) {
+        document.documentElement.style.setProperty('--sai-bottom', 'env(safe-area-inset-bottom, 0px)');
+        document.documentElement.style.setProperty('--sai-top', 'env(safe-area-inset-top, 0px)');
+      }
     </script>
     <meta charset="UTF-8" />
     <!-- Signals WKWebView to use dark chrome (overscroll bg, scrollbars, etc.)
@@ -82,14 +112,14 @@
     }
     #dbrief-top-fill {
       top: 0;
-      height: env(safe-area-inset-top);
+      height: var(--sai-top, env(safe-area-inset-top, 0px));
     }
     #dbrief-bottom-fill {
       bottom: 0;
-      /* No 34px minimum — use env() directly so the fill collapses to 0
-         on builds where env() reports 0. A hardcoded minimum caused a
-         dark band that covered app content on the current TestFlight build. */
-      height: env(safe-area-inset-bottom, 0px);
+      /* Use --sai-bottom which is set by the inline script above.
+         It falls back to env() but applies a 34px minimum on Face ID iPhones
+         where Capacitor's contentInset:'never' makes env() return 0. */
+      height: var(--sai-bottom, env(safe-area-inset-bottom, 0px));
     }
     #dbrief-splash {
       position: fixed;

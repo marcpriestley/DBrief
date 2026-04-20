@@ -103,7 +103,7 @@ html.dark body {
      env() correctly returns the true safe-area value (or 0 if the native
      config hasn't been rebuilt yet). A hardcoded minimum was causing a
      visible dark band that covered app content when env() returned 0. */
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-bottom: var(--sai-bottom, env(safe-area-inset-bottom, 0px));
   overflow-y: auto;
   overscroll-behavior-y: none;
   /* Hardcoded rather than var() so the safe-area zones are always painted the
