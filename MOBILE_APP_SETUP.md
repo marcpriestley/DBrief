@@ -335,22 +335,21 @@ func application(_ application: UIApplication,
 }
 ```
 
-4. Replace that entire function with this (adds two lines — storing the result first, setting the background, then returning):
+4. Add **one line** immediately above the existing `return` line — do not change the `return` line itself:
 
 ```swift
 func application(_ application: UIApplication,
                  didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
     // Override point for customization after application launch.
-    let result = ApplicationDelegateProxy.shared.application(application, didFinishLaunchingWithOptions: launchOptions)
-    // Force window background dark so the status-bar zone and home-indicator
-    // zone are never white — the WKWebView can't paint behind those iOS zones.
     window?.backgroundColor = UIColor(red: 20.0/255.0, green: 20.0/255.0, blue: 20.0/255.0, alpha: 1.0)
-    return result
+    return ApplicationDelegateProxy.shared.application(application, didFinishLaunchingWithOptions: launchOptions)
 }
 ```
 
+   > **Important:** Keep the `return ApplicationDelegateProxy...` line exactly as it was. Only add the `window?.backgroundColor` line above it — do not split or rename the return.
+
 5. Save the file (**Cmd+S**)
-6. Archive and upload a new build as described in Step 20 above
+6. Build should succeed (green checkmark). Archive and upload a new build as described in Step 20 above
 
 ### Why this works
 
