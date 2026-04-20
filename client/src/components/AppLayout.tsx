@@ -171,16 +171,10 @@ function AppLayoutInner({ children }: AppLayoutProps) {
     setVh();
     vv.addEventListener("resize", setVh);
 
-    // When iOS opens the keyboard it silently scrolls the WKWebView's native
-    // scroll layer (separate from our CSS #root overflow), which shifts the
-    // viewport upward and exposes the raw WKWebView background (white) above
-    // the app content. Counteract it by snapping window scroll back to 0 every
-    // time the visual viewport moves (the keyboard is the only thing that
-    // causes this on Capacitor where body scrolling is disabled).
-    const lockScroll = () => {
-      setVh();
-      if (window.scrollY !== 0) window.scrollTo(0, 0);
-    };
+    // Also update --visual-height when the viewport scrolls (e.g. keyboard open).
+    // Note: do NOT call window.scrollTo here — it triggers touchcancel on active
+    // touch gestures (sliders etc.) and freezes them.
+    const lockScroll = () => { setVh(); };
     vv.addEventListener("scroll", lockScroll);
 
     // Scroll focused input/textarea into the visible area after keyboard opens
