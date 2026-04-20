@@ -317,6 +317,41 @@ Whenever you make changes to DBrief and want to update the App Store version:
 
 ---
 
+## Fixing White Bands at Top/Bottom (Advanced)
+
+If you still see white strips at the very top (status bar) or bottom (home indicator) of the screen after the web fixes deploy, you need one small native code edit in Xcode. This is a one-time change and then your archive will always look correct.
+
+### What to change in Xcode
+
+1. In Xcode's file navigator (left sidebar), expand **App → App** and find **`AppDelegate.swift`**
+2. Double-click it to open it
+3. Find the line that says `return true` inside `func application(_ application: UIApplication, didFinishLaunchingWithOptions...)` and add these two lines **above** it:
+
+```swift
+// Force window background to match the app dark theme so the
+// status-bar zone and home-indicator zone are never white.
+window?.backgroundColor = UIColor(red: 20/255, green: 20/255, blue: 20/255, alpha: 1)
+```
+
+The finished function should look like this:
+
+```swift
+func application(_ application: UIApplication,
+                 didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+    window?.backgroundColor = UIColor(red: 20/255, green: 20/255, blue: 20/255, alpha: 1)
+    return true
+}
+```
+
+4. Save the file (**Cmd+S**)
+5. Archive and upload a new build as described in Step 20 above
+
+### Why this works
+
+The WKWebView fills the full screen, but iOS draws the status bar area and home indicator zone *on top of* the WKWebView. The `window?.backgroundColor` tells iOS what color to show in those system overlay zones. Setting it to `#141414` (the app dark background) makes those zones match the app seamlessly — same as how Instagram and other apps fill the entire screen.
+
+---
+
 ## Android (Google Play) — Future Option
 
 The project is also set up for Android. The process is similar but uses Android Studio instead of Xcode:

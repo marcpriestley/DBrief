@@ -14,31 +14,40 @@
          Together these mean: zero white frames, zero timing races. -->
     <style>
       /* Hard-code dark as the global default so WKWebView NEVER shows white
-         before the Vite CSS bundle arrives.  html.light overrides to light. */
-      html { background-color: #141414; }
+         before the Vite CSS bundle arrives.  html.light overrides to light.
+         color-scheme tells WKWebView the colour to use for its OWN chrome:
+         overscroll/rubber-band area, scrollbars, form controls.  Without this
+         the overscroll zone shows iOS-default white on a Light Mode device. */
+      html { background-color: #141414; color-scheme: dark; }
       body { background-color: #141414; }
       #root { background-color: #141414; }
       html.light,
       html.light body,
       html.light #root { background-color: #f7f7f7; }
+      html.light { color-scheme: light; }
     </style>
     <script>
       try {
         var t = localStorage.getItem('dbrief_theme');
         var isDark = t !== 'light';
         document.documentElement.classList.add(isDark ? 'dark' : 'light');
-        // Inline style on <html> — highest possible specificity, overrides all
-        // CSS rules including the Vite bundle and the <style> block above.
         var bg = isDark ? '#141414' : '#f7f7f7';
+        var cs = isDark ? 'dark' : 'light';
+        // Inline styles — highest specificity, override ALL external CSS.
         document.documentElement.style.backgroundColor = bg;
+        document.documentElement.style.colorScheme = cs;
         document.documentElement.style.setProperty('--pre-bg', bg);
       } catch (e) {
         document.documentElement.classList.add('dark');
         document.documentElement.style.backgroundColor = '#141414';
+        document.documentElement.style.colorScheme = 'dark';
         document.documentElement.style.setProperty('--pre-bg', '#141414');
       }
     </script>
     <meta charset="UTF-8" />
+    <!-- Signals WKWebView to use dark chrome (overscroll bg, scrollbars, etc.)
+         before ANY CSS or JS loads — eliminates the white overscroll band. -->
+    <meta name="color-scheme" content="dark light" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />

@@ -61,12 +61,19 @@
 
 html {
   height: 100%;
-  color-scheme: light;          /* hint for system-level UI chrome (scrollbars etc.) */
-  background-color: hsl(0, 0%, 97%);  /* match :root --background so bounce/overscroll shows the right colour */
+  /* Default to dark color-scheme so WKWebView paints overscroll / safe-area
+     chrome in dark colours before any class or Vite CSS loads.
+     html.light overrides for light-mode users. */
+  color-scheme: dark;
+  background-color: hsl(0, 0%, 8%);  /* match .dark --background */
+}
+html.light {
+  color-scheme: light;
+  background-color: hsl(0, 0%, 97%);
 }
 html.dark {
   color-scheme: dark;
-  background-color: hsl(0, 0%, 8%);  /* match .dark --background */
+  background-color: hsl(0, 0%, 8%);
 }
 
 body {
