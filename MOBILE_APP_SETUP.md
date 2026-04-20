@@ -325,26 +325,32 @@ If you still see white strips at the very top (status bar) or bottom (home indic
 
 1. In Xcode's file navigator (left sidebar), expand **App → App** and find **`AppDelegate.swift`**
 2. Double-click it to open it
-3. Find the line that says `return true` inside `func application(_ application: UIApplication, didFinishLaunchingWithOptions...)` and add these two lines **above** it:
-
-```swift
-// Force window background to match the app dark theme so the
-// status-bar zone and home-indicator zone are never white.
-window?.backgroundColor = UIColor(red: 20/255, green: 20/255, blue: 20/255, alpha: 1)
-```
-
-The finished function should look like this:
+3. The function currently looks like this (Capacitor's default):
 
 ```swift
 func application(_ application: UIApplication,
                  didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-    window?.backgroundColor = UIColor(red: 20/255, green: 20/255, blue: 20/255, alpha: 1)
-    return true
+    // Override point for customization after application launch.
+    return ApplicationDelegateProxy.shared.application(application, didFinishLaunchingWithOptions: launchOptions)
 }
 ```
 
-4. Save the file (**Cmd+S**)
-5. Archive and upload a new build as described in Step 20 above
+4. Replace that entire function with this (adds two lines — storing the result first, setting the background, then returning):
+
+```swift
+func application(_ application: UIApplication,
+                 didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+    // Override point for customization after application launch.
+    let result = ApplicationDelegateProxy.shared.application(application, didFinishLaunchingWithOptions: launchOptions)
+    // Force window background dark so the status-bar zone and home-indicator
+    // zone are never white — the WKWebView can't paint behind those iOS zones.
+    window?.backgroundColor = UIColor(red: 20.0/255.0, green: 20.0/255.0, blue: 20.0/255.0, alpha: 1.0)
+    return result
+}
+```
+
+5. Save the file (**Cmd+S**)
+6. Archive and upload a new build as described in Step 20 above
 
 ### Why this works
 
