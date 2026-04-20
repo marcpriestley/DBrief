@@ -1,7 +1,7 @@
 import { useLocation, Link } from "wouter";
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Settings, LogOut, Smile, ChevronLeft } from "lucide-react";
+import { Settings, LogOut, Smile, ChevronLeft, LayoutDashboard, CalendarDays, TrendingUp, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import StreakDisplay from "@/components/StreakDisplay";
 import SettingsModal from "@/components/SettingsModal";
@@ -241,10 +241,10 @@ function AppLayoutInner({ children }: AppLayoutProps) {
   const PAGE_ORDER = ["/", "/calendar", "/trends", "/squad"];
 
   const allTabs = [
-    { href: "/", label: "Dashboard" },
-    { href: "/calendar", label: "History" },
-    { href: "/trends", label: "Analytics" },
-    { href: "/squad", label: "Team" },
+    { href: "/", label: "Home", Icon: LayoutDashboard },
+    { href: "/calendar", label: "History", Icon: CalendarDays },
+    { href: "/trends", label: "Trends", Icon: TrendingUp },
+    { href: "/squad", label: "Team", Icon: Users },
   ];
 
   const isActive = (href: string) =>
@@ -294,12 +294,14 @@ function AppLayoutInner({ children }: AppLayoutProps) {
           opacity: 0.15,
         }}
       />
+
+      {/* ── Top header ─────────────────────────────────────────────────────── */}
       <header
         className="sticky top-0 z-50 bg-background backdrop-blur-xl border-b border-border/60"
         style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
         <div className="max-w-2xl mx-auto px-4">
-          <div className="flex justify-between items-center h-16">
+          <div className="flex justify-between items-center h-14">
             <Link href="/">
               <button
                 onClick={() => haptic("select")}
@@ -308,7 +310,7 @@ function AppLayoutInner({ children }: AppLayoutProps) {
                 <img
                   src={logoSrc}
                   alt="DBrief"
-                  className="w-10 h-10 rounded-xl object-cover shadow-sm"
+                  className="w-9 h-9 rounded-xl object-cover shadow-sm"
                 />
                 <span className="text-xl font-black text-foreground tracking-tight">DBrief</span>
               </button>
@@ -318,12 +320,10 @@ function AppLayoutInner({ children }: AppLayoutProps) {
               <div className="relative">
                 {showMoodPulse && (
                   <>
-                    {/* Pulsing amber dot — matches AttentionRing style */}
                     <span className="absolute -top-0.5 -right-0.5 z-20 flex h-2.5 w-2.5 pointer-events-none">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-70" />
                       <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary" />
                     </span>
-                    {/* Amber glow ring around button */}
                     <span className="absolute inset-0 rounded-lg ring-1 ring-primary/50 shadow-[0_0_10px_rgba(245,158,11,0.3)] pointer-events-none" />
                   </>
                 )}
@@ -356,40 +356,14 @@ function AppLayoutInner({ children }: AppLayoutProps) {
               </Button>
             </div>
           </div>
-
-          <div className="flex -mb-px">
-            {allTabs.map(({ href, label }) => {
-              const active = isActive(href);
-              const showChallengePulse = href === "/squad" && hasUnloggedChallenge && !active;
-              return (
-                <Link key={href} href={href} className="flex-1">
-                  <button
-                    onClick={() => haptic("select")}
-                    className={`relative w-full flex items-center justify-center gap-0.5 py-3 border-b-2 transition-all text-xs font-black uppercase tracking-tight ${
-                      active
-                        ? "border-primary text-foreground"
-                        : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
-                    }`}
-                  >
-                    {showChallengePulse && (
-                      <span className="absolute top-1.5 right-2 flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-70" />
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
-                      </span>
-                    )}
-                    {label}
-                  </button>
-                </Link>
-              );
-            })}
-          </div>
-
           <DateSelector />
         </div>
       </header>
 
+      {/* ── Page content ───────────────────────────────────────────────────── */}
       <main
-        className="max-w-2xl mx-auto px-4 py-4 pb-8"
+        className="max-w-2xl mx-auto px-4 pt-4"
+        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 72px)' }}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -397,9 +371,44 @@ function AppLayoutInner({ children }: AppLayoutProps) {
         {children}
       </main>
 
+      {/* ── Bottom nav bar — fills the home-indicator zone like a native app ── */}
+      <nav
+        className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-xl border-t border-border/60"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      >
+        <div className="flex max-w-2xl mx-auto">
+          {allTabs.map(({ href, label, Icon }) => {
+            const active = isActive(href);
+            const showChallengePulse = href === "/squad" && hasUnloggedChallenge && !active;
+            return (
+              <Link key={href} href={href} className="flex-1">
+                <button
+                  onClick={() => haptic("select")}
+                  className={`relative w-full flex flex-col items-center justify-center py-2.5 gap-0.5 transition-all ${
+                    active ? "text-primary" : "text-muted-foreground"
+                  }`}
+                >
+                  {showChallengePulse && (
+                    <span className="absolute top-1.5 right-[20%] flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-70" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
+                    </span>
+                  )}
+                  <Icon className={`h-[22px] w-[22px] transition-transform ${active ? "scale-110" : ""}`} />
+                  {active && (
+                    <span className="text-[10px] font-bold uppercase tracking-wider leading-none">
+                      {label}
+                    </span>
+                  )}
+                </button>
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
+
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
       <AppTour />
-
     </div>
   );
 }
