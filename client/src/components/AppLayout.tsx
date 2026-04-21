@@ -297,8 +297,8 @@ function AppLayoutInner({ children }: AppLayoutProps) {
 
       {/* ── Top header ─────────────────────────────────────────────────────── */}
       <header
-        className="sticky top-0 z-50 bg-background backdrop-blur-xl border-b border-border/60"
-        style={{ paddingTop: 'env(safe-area-inset-top)' }}
+        className="sticky top-0 z-50 border-b border-border/60"
+        style={{ paddingTop: 'var(--sai-top, env(safe-area-inset-top, 0px))', backgroundColor: 'var(--background)' }}
       >
         <div className="max-w-2xl mx-auto px-4">
           <div className="flex justify-between items-center h-14">
@@ -374,7 +374,7 @@ function AppLayoutInner({ children }: AppLayoutProps) {
       {/* ── Bottom nav bar — fills the home-indicator zone like a native app ── */}
       <nav
         className="fixed bottom-0 left-0 right-0 z-50 border-t border-border/60"
-        style={{ paddingBottom: 'var(--sai-bottom, env(safe-area-inset-bottom, 0px))', backgroundColor: 'rgba(20, 20, 20, 0.88)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}
+        style={{ paddingBottom: 'var(--sai-bottom, env(safe-area-inset-bottom, 0px))', backgroundColor: 'var(--background)' }}
       >
         <div className="flex max-w-2xl mx-auto">
           {allTabs.map(({ href, label, Icon }) => {

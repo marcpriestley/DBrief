@@ -99,17 +99,6 @@
        physical viewport, never clipped by a scroll container (#root).
        --pre-bg is set synchronously by the theme <script> above, so colour
        is correct from the very first paint without any CSS-class dependency. */
-    #dbrief-top-fill {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      pointer-events: none;
-      z-index: 9999;
-      /* var(--pre-bg) is set by the inline theme script before the body renders. */
-      background-color: var(--pre-bg, #141414);
-      height: var(--sai-top, env(safe-area-inset-top, 0px));
-    }
     #dbrief-splash {
       position: fixed;
       inset: 0;
@@ -170,8 +159,6 @@
   </style>
   </head>
   <body>
-    <!-- Top safe-area fill: covers the status-bar zone before CSS loads. -->
-    <div id="dbrief-top-fill"></div>
     <div id="dbrief-splash">
       <div id="dbrief-splash-logo">
         <img src="/dbrief-logo.jpeg" alt="DBrief" />
