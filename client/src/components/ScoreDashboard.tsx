@@ -26,7 +26,7 @@ function NativeOverlay({ open, onClose, title, description, children }: {
     <AnimatePresence>
       {open && (
         <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+          className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center"
           onTouchStart={(e) => e.stopPropagation()}
           onTouchMove={(e) => e.stopPropagation()}
           onTouchEnd={(e) => e.stopPropagation()}
@@ -43,7 +43,7 @@ function NativeOverlay({ open, onClose, title, description, children }: {
               paddingTop: '1.25rem',
               paddingLeft: '1.25rem',
               paddingRight: '1.25rem',
-              paddingBottom: 'calc(env(safe-area-inset-bottom) + 1.25rem)',
+              paddingBottom: 'calc(var(--sai-bottom, env(safe-area-inset-bottom, 0px)) + 1.25rem)',
             }}
             initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 40 }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
