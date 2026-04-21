@@ -22,7 +22,7 @@ export default function CalendarPage() {
       <div className="space-y-4">
         <div>
           <h2 className="text-xl font-black uppercase tracking-tight text-foreground">Session History</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">Long-press any date to view your journal and scores</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Tap any date to view your journal and scores</p>
         </div>
         <CalendarView selectedDate={selectedDate} onDateSelect={handleDateSelect} />
       </div>

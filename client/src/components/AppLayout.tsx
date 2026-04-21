@@ -374,7 +374,7 @@ function AppLayoutInner({ children }: AppLayoutProps) {
       {/* ── Bottom nav bar — fills the home-indicator zone like a native app ── */}
       <nav
         className="fixed bottom-0 left-0 right-0 z-50 border-t border-border/60"
-        style={{ paddingBottom: 'var(--sai-bottom, env(safe-area-inset-bottom, 0px))', backgroundColor: 'var(--background)' }}
+        style={{ paddingBottom: 'var(--sai-bottom, env(safe-area-inset-bottom, 0px))', backgroundColor: 'rgb(20,20,20)' }}
       >
         <div className="flex max-w-2xl mx-auto">
           {allTabs.map(({ href, label, Icon }) => {
