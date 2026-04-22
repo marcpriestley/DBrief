@@ -90,10 +90,16 @@ export default function CalendarView({ selectedDate, onDateSelect }: CalendarVie
                     style={{ WebkitTapHighlightColor: 'transparent', WebkitTouchCallout: 'none', userSelect: 'none' }}
                   >
                     <span>{day.getDate()}</span>
-                    {hasEntry && (
+                    {isToday && !isSelected && (
+                      <div className="w-4 h-0.5 rounded-full bg-primary mt-0.5" />
+                    )}
+                    {hasEntry && !isToday && (
                       <div className={`w-1 h-1 rounded-full mt-0.5 ${
                         isSelected ? 'bg-primary-foreground' : 'bg-emerald-500'
                       }`} />
+                    )}
+                    {hasEntry && isToday && !isSelected && (
+                      <div className="w-1 h-1 rounded-full bg-emerald-500" />
                     )}
                   </button>
                 )}
