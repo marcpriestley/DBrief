@@ -295,6 +295,13 @@ function AppLayoutInner({ children }: AppLayoutProps) {
         }}
       />
 
+      {/* ── Status-bar cap: fixed so keyboard-dismiss scroll never exposes gap ── */}
+      <div
+        aria-hidden="true"
+        className="fixed top-0 left-0 right-0 pointer-events-none"
+        style={{ height: 'var(--sai-top, env(safe-area-inset-top, 0px))', backgroundColor: 'var(--background)', zIndex: 9999 }}
+      />
+
       {/* ── Top header ─────────────────────────────────────────────────────── */}
       <header
         className="sticky top-0 z-50 border-b border-border/60"
