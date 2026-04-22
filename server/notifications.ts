@@ -277,6 +277,7 @@ export async function sendMoodCheckinReminders(windowMinutes = MOOD_DELIVERY_WIN
         const [pStart, pEnd] = PERIOD_HOURS[checkinTime.label] ?? [0, 24];
         const moodLogged = await storage.hasUserLoggedMoodInPeriod(user.id, userDateStr, pStart, pEnd, user.timezone);
         if (moodLogged) {
+          await storage.setServerConfig(key, '1');
           lastMoodReminderSent.set(key, true);
           console.log(`[Mood Reminders] Skipping ${checkinTime.label} for user ${user.id} — already checked in during this period`);
           continue;

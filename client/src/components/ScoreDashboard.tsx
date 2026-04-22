@@ -11,8 +11,8 @@ import type { DailyScore, UserMetric } from "@shared/schema";
 import { Heart, Edit, Plus, Settings, Trash2, X } from "lucide-react";
 import MetricTrendChart from "./MetricTrendChart";
 
-function NativeOverlay({ open, onClose, title, description, children }: {
-  open: boolean; onClose: () => void; title: string; description?: string; children: React.ReactNode;
+function NativeOverlay({ open, onClose, title, description, children, scrollable = false }: {
+  open: boolean; onClose: () => void; title: string; description?: string; children: React.ReactNode; scrollable?: boolean;
 }) {
   useEffect(() => {
     if (open) {
@@ -37,7 +37,7 @@ function NativeOverlay({ open, onClose, title, description, children }: {
             onClick={onClose}
           />
           <motion.div
-            className="relative bg-background rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-md mx-0 sm:mx-4 z-10 overflow-y-auto"
+            className={`relative bg-background rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-md mx-0 sm:mx-4 z-10 ${scrollable ? "overflow-y-auto" : "overflow-hidden"}`}
             style={{
               maxHeight: 'calc(88dvh - env(safe-area-inset-top))',
               paddingTop: '1.25rem',
@@ -542,6 +542,7 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
         onClose={() => { setDialogMode('trend'); setSelectedMetric(null); }}
         title={dialogMode === 'addMetric' ? 'Add Metric' : dialogMode === 'editMetric' ? 'Edit Metric' : 'Manage Metrics'}
         description={dialogMode === 'addMetric' ? 'Create a new metric to track.' : dialogMode === 'editMetric' ? 'Update the name or color.' : 'Add, edit, or remove your tracked metrics.'}
+        scrollable
       >
         {dialogMode === 'manage' && (
           <div className="space-y-1.5 py-1">

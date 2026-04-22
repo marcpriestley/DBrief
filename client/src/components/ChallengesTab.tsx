@@ -85,7 +85,7 @@ function ChallengeLeaderboardSheet({
       initial={{ opacity: 0, y: 30 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 30 }}
-      className="fixed inset-0 z-50 flex items-end"
+      className="fixed inset-0 z-[200] flex items-end"
       onClick={onClose}
     >
       <div
@@ -226,7 +226,7 @@ function JoinWithCommitmentSheet({
       initial={{ opacity: 0, y: 30 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 30 }}
-      className="fixed inset-0 z-50 flex items-end"
+      className="fixed inset-0 z-[200] flex items-end"
       onClick={onClose}
     >
       <div
@@ -365,7 +365,7 @@ function LogEntrySheet({
       initial={{ opacity: 0, y: 30 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 30 }}
-      className="fixed inset-0 z-50 flex items-end"
+      className="fixed inset-0 z-[200] flex items-end"
       onClick={onClose}
     >
       <div
@@ -826,7 +826,7 @@ function EditChallengeSheet({
       initial={{ opacity: 0, y: 30 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 30 }}
-      className="fixed inset-0 z-50 flex items-end"
+      className="fixed inset-0 z-[200] flex items-end"
       onClick={onClose}
     >
       <div
@@ -1014,7 +1014,7 @@ function CreateChallengeSheet({
       initial={{ opacity: 0, y: 30 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 30 }}
-      className="fixed inset-0 z-50 flex items-end"
+      className="fixed inset-0 z-[200] flex items-end"
       onClick={onClose}
     >
       <div
