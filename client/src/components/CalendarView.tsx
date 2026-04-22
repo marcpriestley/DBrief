@@ -12,9 +12,15 @@ interface CalendarViewProps {
 }
 
 export default function CalendarView({ selectedDate, onDateSelect }: CalendarViewProps) {
-  const [currentMonth, setCurrentMonth] = useState(new Date(selectedDate));
+  const [currentMonth, setCurrentMonth] = useState(() => {
+    const [y, m, d] = selectedDate.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  });
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = (() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  })();
 
   const { data: journalEntries = [] } = useQuery<JournalEntry[]>({
     queryKey: ["/api/journal-entries"],
@@ -65,7 +71,9 @@ export default function CalendarView({ selectedDate, onDateSelect }: CalendarVie
 
         <div className="grid grid-cols-7 gap-1">
           {calendarDays.map((day, index) => {
-            const dateStr = day ? day.toISOString().split('T')[0] : '';
+            const dateStr = day
+              ? `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`
+              : '';
             const isToday = dateStr === today;
             const isSelected = dateStr === selectedDate;
             const hasEntry = day && datesSet.has(dateStr);
