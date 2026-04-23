@@ -14,6 +14,20 @@ import { isNativeHealth, getHealthAuthState, syncHealthData } from "@/lib/health
 import { Capacitor } from "@capacitor/core";
 import { useMoodOpen } from "@/contexts/MoodContext";
 
+// Re-applies status-bar overlay + icon style. Called both at boot (App.tsx)
+// and after every keyboard open/close because iOS WKWebView resets the
+// overlay state during its keyboard-avoidance scroll adjustment.
+function reapplyStatusBar() {
+  if (!Capacitor.isNativePlatform()) return;
+  try {
+    const StatusBar = (Capacitor as any).Plugins?.StatusBar;
+    if (!StatusBar) return;
+    StatusBar.setOverlaysWebView({ overlay: true });
+    StatusBar.setStyle({ style: 'LIGHT' }); // white icons on dark bg
+  } catch (_) {}
+}
+
+
 interface AppLayoutProps {
   children: React.ReactNode;
 }
@@ -161,12 +175,20 @@ function AppLayoutInner({ children }: AppLayoutProps) {
   // components using calc(var(--visual-height)) shrink when the iOS keyboard appears,
   // even in WKWebView where 100dvh doesn't reflect the keyboard.
   // Also scrolls focused text inputs / textareas into view after the keyboard opens.
+  // Re-applies StatusBar overlay after each keyboard open/close because iOS WKWebView
+  // resets the overlay state during its keyboard-avoidance scroll adjustment.
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
 
+    let sbTimer: ReturnType<typeof setTimeout> | null = null;
+
     const setVh = () => {
       document.documentElement.style.setProperty("--visual-height", `${vv.height}px`);
+      // Debounce StatusBar re-application to fire once after the keyboard
+      // animation finishes (~350 ms), not on every frame during animation.
+      if (sbTimer) clearTimeout(sbTimer);
+      sbTimer = setTimeout(reapplyStatusBar, 400);
     };
     setVh();
     vv.addEventListener("resize", setVh);
@@ -189,6 +211,7 @@ function AppLayoutInner({ children }: AppLayoutProps) {
     document.addEventListener("focus", onFocus, true);
 
     return () => {
+      if (sbTimer) clearTimeout(sbTimer);
       vv.removeEventListener("resize", setVh);
       vv.removeEventListener("scroll", lockScroll);
       document.removeEventListener("focus", onFocus, true);
