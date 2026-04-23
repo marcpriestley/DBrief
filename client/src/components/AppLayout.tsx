@@ -199,10 +199,13 @@ function AppLayoutInner({ children }: AppLayoutProps) {
     const lockScroll = () => { setVh(); };
     vv.addEventListener("scroll", lockScroll);
 
-    // Scroll focused input/textarea into the visible area after keyboard opens
+    // Scroll focused input/textarea into the visible area after keyboard opens.
+    // Also re-assert StatusBar overlay immediately on focus — iOS resets it at
+    // the START of the keyboard animation, so we need to beat the animation.
     const onFocus = (e: FocusEvent) => {
       const el = e.target as HTMLElement;
       if (el.tagName !== "INPUT" && el.tagName !== "TEXTAREA") return;
+      reapplyStatusBar(); // immediate — fires before keyboard animation begins
       // Wait for keyboard animation to settle (~350 ms on iOS)
       setTimeout(() => {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -210,11 +213,21 @@ function AppLayoutInner({ children }: AppLayoutProps) {
     };
     document.addEventListener("focus", onFocus, true);
 
+    // Re-apply on blur too — keyboard dismiss also triggers a reset.
+    const onBlur = (e: FocusEvent) => {
+      const el = e.target as HTMLElement;
+      if (el.tagName !== "INPUT" && el.tagName !== "TEXTAREA") return;
+      reapplyStatusBar(); // immediate
+      setTimeout(reapplyStatusBar, 450); // again after dismiss animation
+    };
+    document.addEventListener("blur", onBlur, true);
+
     return () => {
       if (sbTimer) clearTimeout(sbTimer);
       vv.removeEventListener("resize", setVh);
       vv.removeEventListener("scroll", lockScroll);
       document.removeEventListener("focus", onFocus, true);
+      document.removeEventListener("blur", onBlur, true);
     };
   }, []);
 
@@ -318,11 +331,19 @@ function AppLayoutInner({ children }: AppLayoutProps) {
         }}
       />
 
-      {/* ── Status-bar cap: fixed so keyboard-dismiss scroll never exposes gap ── */}
+      {/* ── Status-bar cap (top) ────────────────────────────────────────────── */}
       <div
         aria-hidden="true"
         className="fixed top-0 left-0 right-0 pointer-events-none"
         style={{ height: 'var(--sai-top, env(safe-area-inset-top, 0px))', backgroundColor: 'var(--background)', zIndex: 9999 }}
+      />
+
+      {/* ── Home-indicator cap (bottom) — covers the zone during nav transitions
+           that happen when the keyboard opens/closes in WKWebView ────────── */}
+      <div
+        aria-hidden="true"
+        className="fixed bottom-0 left-0 right-0 pointer-events-none"
+        style={{ height: 'var(--sai-bottom, env(safe-area-inset-bottom, 0px))', backgroundColor: 'rgb(20,20,20)', zIndex: 9999 }}
       />
 
       {/* ── Top header ─────────────────────────────────────────────────────── */}

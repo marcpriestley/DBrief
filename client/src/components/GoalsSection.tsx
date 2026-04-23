@@ -197,7 +197,12 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
   });
 
   const handleEditKeyDown = (e: React.KeyboardEvent, templateId: number) => {
-    if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLElement).blur(); }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const trimmed = editTitle.trim();
+      if (trimmed) updateTemplateMutation.mutate({ id: templateId, title: trimmed });
+      else setEditingId(null);
+    }
     if (e.key === "Escape") { editCancelledRef.current = true; setEditingId(null); }
   };
 
@@ -288,19 +293,33 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
               </motion.button>
 
               {isEditing ? (
-                <Input
-                  value={editTitle}
-                  onChange={(e) => setEditTitle(e.target.value)}
-                  onKeyDown={(e) => handleEditKeyDown(e, goal.goalTemplateId)}
-                  onBlur={() => {
-                    if (editCancelledRef.current) { editCancelledRef.current = false; return; }
-                    const trimmed = editTitle.trim();
-                    if (trimmed) updateTemplateMutation.mutate({ id: goal.goalTemplateId, title: trimmed });
-                    else setEditingId(null);
-                  }}
-                  className="flex-1 h-8 text-sm"
-                  autoFocus
-                />
+                <>
+                  <Input
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    onKeyDown={(e) => handleEditKeyDown(e, goal.goalTemplateId)}
+                    className="flex-1 h-8 text-sm"
+                    autoFocus
+                  />
+                  <button
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      const trimmed = editTitle.trim();
+                      if (trimmed) updateTemplateMutation.mutate({ id: goal.goalTemplateId, title: trimmed });
+                      else setEditingId(null);
+                    }}
+                    className="flex-shrink-0 w-7 h-7 rounded-full bg-primary flex items-center justify-center"
+                  >
+                    <Check className="h-3.5 w-3.5 text-white" />
+                  </button>
+                  <button
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => { editCancelledRef.current = true; setEditingId(null); }}
+                    className="flex-shrink-0 p-1 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </>
               ) : (
                 <span
                   className={`flex-1 text-sm ${goal.completed ? "line-through text-muted-foreground" : "text-foreground"}`}
