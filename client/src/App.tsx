@@ -20,6 +20,23 @@ import { MoodProvider } from "@/contexts/MoodContext";
 import { useLocation } from "wouter";
 import { registerNativePush, isNativePlatform, clearBadge, setupNotificationTapListener, consumePendingMoodOpen, consumePendingSquadNav } from "@/hooks/useNativeNotifications";
 import { useToast } from "@/hooks/use-toast";
+import { Capacitor } from "@capacitor/core";
+
+// ── Status-bar: overlay + light-icon style ──────────────────────────────────
+// StatusBar is bundled into every Capacitor 8 iOS shell by default (Swift
+// package), so we can access it via the bridge even without the npm package.
+// setOverlaysWebView(true) → WKWebView extends behind the status bar so our
+// dark header fills the area; LIGHT style → white clock/battery icons visible
+// on our dark background. Silently no-ops on Android / web.
+if (Capacitor.isNativePlatform()) {
+  try {
+    const StatusBar = (Capacitor as any).Plugins?.StatusBar;
+    if (StatusBar) {
+      StatusBar.setOverlaysWebView({ overlay: true });
+      StatusBar.setStyle({ style: 'LIGHT' }); // LIGHT = white icons on dark bg
+    }
+  } catch (_) {}
+}
 
 function AuthenticatedRouter() {
   const { toast } = useToast();

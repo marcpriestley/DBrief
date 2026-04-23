@@ -27,8 +27,9 @@ function NativeOverlay({ open, onClose, title, description, children, scrollable
       {open && (
         <div
           className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center"
+          style={scrollable ? undefined : { touchAction: 'none' }}
           onTouchStart={(e) => e.stopPropagation()}
-          onTouchMove={(e) => e.stopPropagation()}
+          onTouchMove={(e) => { if (!scrollable) e.preventDefault(); e.stopPropagation(); }}
           onTouchEnd={(e) => e.stopPropagation()}
         >
           <motion.div
