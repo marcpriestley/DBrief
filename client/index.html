@@ -75,9 +75,10 @@
       }
     </script>
     <meta charset="UTF-8" />
-    <!-- Signals WKWebView to use dark chrome (overscroll bg, scrollbars, etc.)
-         before ANY CSS or JS loads — eliminates the white overscroll band. -->
-    <meta name="color-scheme" content="dark light" />
+    <!-- Force WKWebView to use dark native chrome for ALL system-rendered areas
+         (safe zones, overscroll rubber-band, status bar background) so any
+         native layer that we can't paint over shows dark rather than white. -->
+    <meta name="color-scheme" content="dark" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
