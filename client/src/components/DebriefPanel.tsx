@@ -625,11 +625,14 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
       }
 
       // TTS remainder after streaming completes
-      if (accumulated && tts.enabled) {
+      if (accumulated) {
         const remainder = ttsFirstSentenceRef.current
           ? accumulated.slice(ttsFirstSentenceRef.current).trim()
           : accumulated;
-        if (remainder) tts.speakOrQueue(remainder);
+        if (remainder && tts.enabled) tts.speakOrQueue(remainder);
+        // Speculatively pre-fetch audio for the speaker button when TTS is off
+        if (!tts.enabled) tts.preFetchForButton(accumulated);
+        lastStreamedAiMsgRef.current = accumulated;
       }
 
       return null;
@@ -796,6 +799,11 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
           }
           tts.speakOrQueue(remainder);
           hadTtsResponseRef.current = tts.enabled;
+        }
+        // When TTS is off, speculatively pre-fetch the full response audio so the
+        // speaker button plays instantly instead of waiting for an API round-trip.
+        if (!tts.enabled) {
+          tts.preFetchForButton(accumulated);
         }
       }
       setTimeout(() => {
@@ -1050,9 +1058,21 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
         lockScrollAfterStreamRef.current = true;
         const el = streamingMsgRef.current;
         if (el) {
+          // 1. Scroll the internal chat container to pin the response top.
           const containerRect = container.getBoundingClientRect();
           const elRect = el.getBoundingClientRect();
           container.scrollTop += elRect.top - containerRect.top - 8;
+          // 2. Also scroll the PAGE so the chat container itself is in view —
+          //    the card-top scroll from sendMessage may have put the user at
+          //    the top of a tall card while the active chat is near the bottom.
+          const root = document.getElementById("root");
+          const header = document.querySelector("header");
+          if (root) {
+            const headerH = header?.getBoundingClientRect().height ?? 130;
+            const rootRect = root.getBoundingClientRect();
+            const containerAbsTop = containerRect.top - rootRect.top + root.scrollTop;
+            root.scrollTo({ top: containerAbsTop - headerH - 8, behavior: "smooth" });
+          }
         }
       }
       // Subsequent tokens: do NOT chase scrollHeight — keep start of response pinned.

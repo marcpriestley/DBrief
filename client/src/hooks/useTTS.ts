@@ -40,6 +40,10 @@ export function useTTS() {
   // Pre-fetched audio buffer for the queued continuation — eliminates inter-fetch gap
   const pendingBufferRef = useRef<Promise<ArrayBuffer | null> | null>(null);
   const isSpeakingRef = useRef(false);
+  // Speculative pre-fetch for the speaker button — started as soon as a
+  // response finishes streaming so the buffer is ready (or nearly ready)
+  // by the time the user taps the speaker icon.
+  const buttonCacheRef = useRef<{ text: string; buffer: Promise<ArrayBuffer | null> } | null>(null);
 
   const setSpeakingBoth = (val: boolean) => {
     isSpeakingRef.current = val;
@@ -160,10 +164,30 @@ export function useTTS() {
     return _doSpeak(text);
   }, [enabled, _doSpeak, cancel]);
 
+  // Speculatively pre-fetch audio for the speaker button. Call this when a
+  // response finishes streaming so the buffer is warm when the user taps play.
+  const preFetchForButton = useCallback((text: string) => {
+    if (!text.trim()) return;
+    buttonCacheRef.current = {
+      text,
+      buffer: fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ text, voice }),
+      }).then(r => r.ok ? r.arrayBuffer() : null).catch(() => null),
+    };
+  }, [voice]);
+
   const speakNow = useCallback((text: string) => {
     if (!text.trim()) return Promise.resolve();
     cancel();
-    return _doSpeak(text);
+    // Use the pre-fetched buffer if it matches the requested text — eliminates
+    // the API round-trip delay when the user taps the speaker button.
+    const cached = buttonCacheRef.current;
+    const preFetched = cached?.text === text ? cached.buffer : undefined;
+    buttonCacheRef.current = null;
+    return _doSpeak(text, preFetched);
   }, [_doSpeak, cancel]);
 
   // Pre-fetch audio for a future continuation while current speech is still playing.
@@ -203,5 +227,5 @@ export function useTTS() {
 
   useEffect(() => () => { cancel(); }, [cancel]);
 
-  return { enabled, speaking, isSupported: true, speak, speakNow, speakOrQueue, preFetchAudio, cancel, toggle };
+  return { enabled, speaking, isSupported: true, speak, speakNow, speakOrQueue, preFetchAudio, preFetchForButton, cancel, toggle };
 }
