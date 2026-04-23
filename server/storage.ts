@@ -955,6 +955,20 @@ export class DatabaseStorage implements IStorage {
       .set(updates)
       .where(and(eq(goalTemplates.id, id), eq(goalTemplates.userId, userId)))
       .returning();
+    // If the title changed, also update any daily goal rows for today/future
+    // so they reflect the new name immediately on refetch.
+    if (updated && updates.title) {
+      const { gte } = await import("drizzle-orm");
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      await db.update(dailyGoals)
+        .set({ title: updates.title })
+        .where(and(
+          eq(dailyGoals.goalTemplateId, id),
+          eq(dailyGoals.userId, userId),
+          gte(dailyGoals.date, todayStr),
+        ));
+    }
     return updated || undefined;
   }
 

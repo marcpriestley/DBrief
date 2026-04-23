@@ -181,14 +181,11 @@ function AppLayoutInner({ children }: AppLayoutProps) {
     const vv = window.visualViewport;
     if (!vv) return;
 
-    let sbTimer: ReturnType<typeof setTimeout> | null = null;
-
     const setVh = () => {
       document.documentElement.style.setProperty("--visual-height", `${vv.height}px`);
-      // Debounce StatusBar re-application to fire once after the keyboard
-      // animation finishes (~350 ms), not on every frame during animation.
-      if (sbTimer) clearTimeout(sbTimer);
-      sbTimer = setTimeout(reapplyStatusBar, 400);
+      // Re-assert StatusBar on EVERY frame of the keyboard animation — iOS
+      // resets the overlay mid-animation, so debouncing misses the window.
+      reapplyStatusBar();
     };
     setVh();
     vv.addEventListener("resize", setVh);
@@ -223,7 +220,6 @@ function AppLayoutInner({ children }: AppLayoutProps) {
     document.addEventListener("blur", onBlur, true);
 
     return () => {
-      if (sbTimer) clearTimeout(sbTimer);
       vv.removeEventListener("resize", setVh);
       vv.removeEventListener("scroll", lockScroll);
       document.removeEventListener("focus", onFocus, true);

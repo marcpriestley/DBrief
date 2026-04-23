@@ -194,6 +194,9 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
       queryClient.invalidateQueries({ queryKey: ["/api/daily-goals", selectedDate] });
       setEditingId(null);
     },
+    onError: () => {
+      setEditingId(null);
+    },
   });
 
   const handleEditKeyDown = (e: React.KeyboardEvent, templateId: number) => {
