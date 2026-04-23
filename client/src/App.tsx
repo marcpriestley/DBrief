@@ -29,13 +29,18 @@ import { Capacitor } from "@capacitor/core";
 // dark header fills the area; LIGHT style → white clock/battery icons visible
 // on our dark background. Silently no-ops on Android / web.
 if (Capacitor.isNativePlatform()) {
-  try {
-    const StatusBar = (Capacitor as any).Plugins?.StatusBar;
-    if (StatusBar) {
-      StatusBar.setOverlaysWebView({ overlay: true });
-      StatusBar.setStyle({ style: 'LIGHT' }); // LIGHT = white icons on dark bg
-    }
-  } catch (_) {}
+  const applyStatusBar = () => {
+    try {
+      const StatusBar = (Capacitor as any).Plugins?.StatusBar;
+      if (StatusBar) {
+        StatusBar.setOverlaysWebView({ overlay: true });
+        StatusBar.setStyle({ style: 'LIGHT' });
+      }
+    } catch (_) {}
+  };
+  // Apply immediately, then retry in case the bridge isn't ready yet.
+  applyStatusBar();
+  [100, 300, 800].forEach(ms => setTimeout(applyStatusBar, ms));
 }
 
 function AuthenticatedRouter() {

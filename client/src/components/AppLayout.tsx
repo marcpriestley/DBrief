@@ -14,17 +14,24 @@ import { isNativeHealth, getHealthAuthState, syncHealthData } from "@/lib/health
 import { Capacitor } from "@capacitor/core";
 import { useMoodOpen } from "@/contexts/MoodContext";
 
-// Re-applies status-bar overlay + icon style. Called both at boot (App.tsx)
-// and after every keyboard open/close because iOS WKWebView resets the
-// overlay state during its keyboard-avoidance scroll adjustment.
+// Re-applies status-bar overlay. iOS resets contentInsetAdjustmentBehavior
+// to .automatic during keyboard animation — calling this AFTER the animation
+// completes (via capacitorKeyboardDidShow/DidHide events) is reliable;
+// calling it mid-animation is overridden by iOS and does nothing.
 function reapplyStatusBar() {
   if (!Capacitor.isNativePlatform()) return;
   try {
     const StatusBar = (Capacitor as any).Plugins?.StatusBar;
     if (!StatusBar) return;
     StatusBar.setOverlaysWebView({ overlay: true });
-    StatusBar.setStyle({ style: 'LIGHT' }); // white icons on dark bg
+    StatusBar.setStyle({ style: 'LIGHT' });
   } catch (_) {}
+}
+
+// Staggered retry — fires at 50 ms, 200 ms, 500 ms, 1000 ms after keyboard
+// events so we catch any late iOS reset without hammering the bridge.
+function scheduleStatusBarRetries() {
+  [50, 200, 500, 1000].forEach(ms => setTimeout(reapplyStatusBar, ms));
 }
 
 
@@ -170,58 +177,57 @@ function AppLayoutInner({ children }: AppLayoutProps) {
     }).catch(() => {}); // fire-and-forget
   }, []);
 
-  // ── Visual-viewport keyboard tracking ──────────────────────────────────────
-  // Sets --visual-height CSS variable to the actual visible window height so that
-  // components using calc(var(--visual-height)) shrink when the iOS keyboard appears,
-  // even in WKWebView where 100dvh doesn't reflect the keyboard.
-  // Also scrolls focused text inputs / textareas into view after the keyboard opens.
-  // Re-applies StatusBar overlay after each keyboard open/close because iOS WKWebView
-  // resets the overlay state during its keyboard-avoidance scroll adjustment.
+  // ── Visual-viewport + StatusBar keyboard tracking ──────────────────────────
+  // --visual-height tracks the real visible area (keyboard shrinks it in WKWebView).
+  // StatusBar strategy: do NOT call reapplyStatusBar during the keyboard animation —
+  // iOS overrides it frame-by-frame. Instead use two reliable hooks:
+  //   1. capacitorKeyboardDidShow / capacitorKeyboardDidHide — Capacitor core
+  //      dispatches these on window after the animation fully completes.
+  //   2. Focus/blur with staggered retries — catches the resets at each phase.
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
 
+    // Only update the CSS variable here — no StatusBar call during animation.
     const setVh = () => {
       document.documentElement.style.setProperty("--visual-height", `${vv.height}px`);
-      // Re-assert StatusBar on EVERY frame of the keyboard animation — iOS
-      // resets the overlay mid-animation, so debouncing misses the window.
-      reapplyStatusBar();
     };
     setVh();
     vv.addEventListener("resize", setVh);
+    vv.addEventListener("scroll", setVh);
 
-    // Also update --visual-height when the viewport scrolls (e.g. keyboard open).
-    // Note: do NOT call window.scrollTo here — it triggers touchcancel on active
-    // touch gestures (sliders etc.) and freezes them.
-    const lockScroll = () => { setVh(); };
-    vv.addEventListener("scroll", lockScroll);
+    // Capacitor core dispatches these on window after animations fully complete.
+    // This is the authoritative point to reassert our overlay setting.
+    const onKbDidShow = () => scheduleStatusBarRetries();
+    const onKbDidHide = () => scheduleStatusBarRetries();
+    window.addEventListener("capacitorKeyboardDidShow", onKbDidShow);
+    window.addEventListener("capacitorKeyboardDidHide", onKbDidHide);
 
-    // Scroll focused input/textarea into the visible area after keyboard opens.
-    // Also re-assert StatusBar overlay immediately on focus — iOS resets it at
-    // the START of the keyboard animation, so we need to beat the animation.
+    // focus: schedule retries AFTER the keyboard animation (not during).
+    // Also scroll the field into view once keyboard is stable.
     const onFocus = (e: FocusEvent) => {
       const el = e.target as HTMLElement;
       if (el.tagName !== "INPUT" && el.tagName !== "TEXTAREA") return;
-      reapplyStatusBar(); // immediate — fires before keyboard animation begins
-      // Wait for keyboard animation to settle (~350 ms on iOS)
+      scheduleStatusBarRetries();
       setTimeout(() => {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
-      }, 350);
+      }, 400);
     };
     document.addEventListener("focus", onFocus, true);
 
-    // Re-apply on blur too — keyboard dismiss also triggers a reset.
+    // blur: keyboard is dismissing — schedule retries to catch the post-dismiss reset.
     const onBlur = (e: FocusEvent) => {
       const el = e.target as HTMLElement;
       if (el.tagName !== "INPUT" && el.tagName !== "TEXTAREA") return;
-      reapplyStatusBar(); // immediate
-      setTimeout(reapplyStatusBar, 450); // again after dismiss animation
+      scheduleStatusBarRetries();
     };
     document.addEventListener("blur", onBlur, true);
 
     return () => {
       vv.removeEventListener("resize", setVh);
-      vv.removeEventListener("scroll", lockScroll);
+      vv.removeEventListener("scroll", setVh);
+      window.removeEventListener("capacitorKeyboardDidShow", onKbDidShow);
+      window.removeEventListener("capacitorKeyboardDidHide", onKbDidHide);
       document.removeEventListener("focus", onFocus, true);
       document.removeEventListener("blur", onBlur, true);
     };
