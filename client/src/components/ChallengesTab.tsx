@@ -12,7 +12,7 @@ import { apiRequest } from "@/lib/queryClient";
 import type { ChallengeWithProgress, ChallengeLeaderboard, ChallengeParticipantStats } from "@shared/schema";
 import { haptic } from "@/lib/haptics";
 import { Input } from "@/components/ui/input";
-import { Slider } from "@/components/ui/slider";
+import NativeSlider from "@/components/ui/native-slider";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -422,12 +422,9 @@ function LogEntrySheet({
               </div>
             </div>
             <div className="flex items-center gap-4">
-              <Slider
-                value={[scoreValue]}
-                onValueChange={([v]) => setScoreValue(v)}
-                min={0} max={100} step={1}
-                className="flex-1"
-              />
+              <div className="flex-1">
+                <NativeSlider value={scoreValue} onChange={setScoreValue} min={0} max={100} step={1} />
+              </div>
               <span className="w-10 text-center font-bold text-lg tabular-nums text-foreground">{scoreValue}</span>
             </div>
             <button
@@ -1204,9 +1201,9 @@ function CreateChallengeSheet({
                   <label className="text-xs text-muted-foreground">Duration</label>
                   <span className="text-sm font-bold text-foreground tabular-nums">{durationDays} days</span>
                 </div>
-                <Slider
-                  value={[durationDays]}
-                  onValueChange={([v]) => setDurationDays(v)}
+                <NativeSlider
+                  value={durationDays}
+                  onChange={setDurationDays}
                   min={3} max={30} step={1}
                 />
                 <div className="flex justify-between mt-1">

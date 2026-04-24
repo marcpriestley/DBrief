@@ -5,7 +5,7 @@ import { Target, Plus, X, Trash2, Edit2, ChevronDown, ChevronUp, CheckCircle2, T
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Slider } from "@/components/ui/slider";
+import NativeSlider from "@/components/ui/native-slider";
 import { apiRequest } from "@/lib/queryClient";
 import { haptic, hapticSequence } from "@/lib/haptics";
 
@@ -396,26 +396,18 @@ export default function LongTermGoals() {
 
                       {/* Progress slider */}
                       <div className="flex items-center gap-2.5 px-0.5">
-                        <div className="flex-1 relative">
-                          <Slider
-                            value={[prog]}
+                        <div className="flex-1">
+                          <NativeSlider
+                            value={prog}
                             min={0}
                             max={100}
                             step={5}
-                            onValueChange={([v]) => { haptic("light"); setLocalProgress(prev => ({ ...prev, [goal.id]: v })); }}
-                            onValueCommit={([v]) => handleProgressCommit(goal, v)}
-                            className="w-full"
-                          />
-                          {/* Colour fill track */}
-                          <div
-                            className="absolute top-1/2 left-0 h-1.5 rounded-full pointer-events-none -translate-y-1/2 transition-all"
-                            style={{
-                              width: `${prog}%`,
-                              background: prog === 100
-                                ? "hsl(142, 71%, 45%)"
-                                : `hsl(${40 - (prog / 100) * 5}, ${80 + (prog / 100) * 15}%, ${48 + (prog / 100) * 4}%)`,
-                              opacity: 0.7,
-                            }}
+                            color={prog === 100
+                              ? "hsl(142, 71%, 45%)"
+                              : `hsl(${40 - (prog / 100) * 5}, ${80 + (prog / 100) * 15}%, ${48 + (prog / 100) * 4}%)`
+                            }
+                            onChange={(v) => setLocalProgress(prev => ({ ...prev, [goal.id]: v }))}
+                            onCommit={(v) => handleProgressCommit(goal, v)}
                           />
                         </div>
                         <button

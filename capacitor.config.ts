@@ -25,7 +25,10 @@ const config: CapacitorConfig = {
     StatusBar: {
       style: 'LIGHT',          // white clock/battery icons on dark background
       overlaysWebView: true,   // WKWebView extends behind the status bar
-      backgroundColor: '#00000000',
+      // Opaque dark background — prevents iOS painting a white slab behind the
+      // status bar during keyboard animations or contentInset resets.
+      // '#00000000' (transparent) caused white flashes on light-mode iOS devices.
+      backgroundColor: '#141414',
     },
     SplashScreen: {
       launchShowDuration: 2000,
