@@ -34,8 +34,9 @@ if (Capacitor.isNativePlatform()) {
       const StatusBar = (Capacitor as any).Plugins?.StatusBar;
       if (StatusBar) {
         StatusBar.setOverlaysWebView({ overlay: true });
-        StatusBar.setStyle({ style: 'LIGHT' });
-        StatusBar.setBackgroundColor({ color: '#00000000' });
+        const isLight = document.documentElement.classList.contains('light');
+        StatusBar.setBackgroundColor({ color: isLight ? '#f7f7f7' : '#141414' });
+        StatusBar.setStyle({ style: isLight ? 'DARK' : 'LIGHT' });
       }
     } catch (_) {}
   };

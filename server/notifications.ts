@@ -214,20 +214,6 @@ export async function sendDailyReminders(windowMinutes = DELIVERY_WINDOW_MINUTES
         if (alreadySentInDb) { lastReminderSentDate.set(memKey, userDateStr); continue; }
 
         const isMorning = reminderHour < 14;
-
-        // For the morning reminder, skip it entirely if the user has already logged
-        // their morning mood — the dedicated 8 AM mood-reminder handles that nudge,
-        // and sending a second "check in" message after they've already done it is
-        // confusing. Evening reminder always sends (it's about scores/streaks).
-        if (isMorning) {
-          const moodAlreadyLogged = await storage.hasUserLoggedMoodInPeriod(
-            user.id, userDateStr, 0, 12, user.timezone
-          );
-          if (moodAlreadyLogged) {
-            // Still send, but reframe away from mood since it's already done
-          }
-        }
-
         const payload: PushNotificationPayload = {
           title: isMorning ? '🏁 Morning Debrief' : '🔥 Evening Reminder',
           body:  isMorning

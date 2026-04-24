@@ -24,11 +24,13 @@ function reapplyStatusBar() {
     const StatusBar = (Capacitor as any).Plugins?.StatusBar;
     if (!StatusBar) return;
     StatusBar.setOverlaysWebView({ overlay: true });
-    StatusBar.setStyle({ style: 'LIGHT' });
-    // Setting backgroundColor to fully transparent lets WKWebView content show
-    // through; without this iOS can paint an opaque white slab behind the
-    // status bar after a keyboard animation or scroll-inset reset.
-    StatusBar.setBackgroundColor({ color: '#00000000' });
+    // Derive the correct background from whatever theme is active so the native
+    // status-bar layer always matches the app — prevents the white slab that iOS
+    // paints behind the status bar after keyboard animations.
+    const isLight = document.documentElement.classList.contains('light');
+    const bgColor = isLight ? '#f7f7f7' : '#141414';
+    StatusBar.setBackgroundColor({ color: bgColor });
+    StatusBar.setStyle({ style: isLight ? 'DARK' : 'LIGHT' });
   } catch (_) {}
 }
 
