@@ -213,7 +213,8 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
             onClick={onClose}
           />
           <motion.div
-            className="relative bg-background rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-xs mx-0 sm:mx-4 z-10 p-5"
+            className="relative bg-background rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-xs mx-0 sm:mx-4 z-10 pt-5 px-5"
+            style={{ paddingBottom: 'calc(20px + var(--sai-bottom, env(safe-area-inset-bottom, 0px)))' }}
             initial={{ opacity: 0, y: 40 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 40 }}

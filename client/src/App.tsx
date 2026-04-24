@@ -35,6 +35,7 @@ if (Capacitor.isNativePlatform()) {
       if (StatusBar) {
         StatusBar.setOverlaysWebView({ overlay: true });
         StatusBar.setStyle({ style: 'LIGHT' });
+        StatusBar.setBackgroundColor({ color: '#00000000' });
       }
     } catch (_) {}
   };

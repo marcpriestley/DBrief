@@ -25,6 +25,10 @@ function reapplyStatusBar() {
     if (!StatusBar) return;
     StatusBar.setOverlaysWebView({ overlay: true });
     StatusBar.setStyle({ style: 'LIGHT' });
+    // Setting backgroundColor to fully transparent lets WKWebView content show
+    // through; without this iOS can paint an opaque white slab behind the
+    // status bar after a keyboard animation or scroll-inset reset.
+    StatusBar.setBackgroundColor({ color: '#00000000' });
   } catch (_) {}
 }
 
@@ -334,18 +338,12 @@ function AppLayoutInner({ children }: AppLayoutProps) {
       />
 
       {/* ── Status-bar cap (top) ────────────────────────────────────────────── */}
+      {/* z-40: sits above page content but below modals/dialogs (z-50) so
+           modal buttons near the top of the screen remain tappable.       */}
       <div
         aria-hidden="true"
         className="fixed top-0 left-0 right-0 pointer-events-none"
-        style={{ height: 'var(--sai-top, env(safe-area-inset-top, 0px))', backgroundColor: 'var(--background)', zIndex: 9999 }}
-      />
-
-      {/* ── Home-indicator cap (bottom) — covers the zone during nav transitions
-           that happen when the keyboard opens/closes in WKWebView ────────── */}
-      <div
-        aria-hidden="true"
-        className="fixed bottom-0 left-0 right-0 pointer-events-none"
-        style={{ height: 'var(--sai-bottom, env(safe-area-inset-bottom, 0px))', backgroundColor: 'rgb(20,20,20)', zIndex: 9999 }}
+        style={{ height: 'var(--sai-top, env(safe-area-inset-top, 0px))', backgroundColor: 'var(--background)', zIndex: 40 }}
       />
 
       {/* ── Top header ─────────────────────────────────────────────────────── */}
