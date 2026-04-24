@@ -37,6 +37,11 @@
         document.documentElement.style.backgroundColor = bg;
         document.documentElement.style.colorScheme = cs;
         document.documentElement.style.setProperty('--pre-bg', bg);
+        // Dynamically update theme-color so Safari status bar / browser chrome
+        // matches the app background (not the amber default). Prevents a
+        // visually jarring mismatch between the status bar zone and the app.
+        var metaTheme = document.querySelector('meta[name="theme-color"]');
+        if (metaTheme) metaTheme.setAttribute('content', bg);
       } catch (e) {
         document.documentElement.classList.add('dark');
         document.documentElement.style.backgroundColor = '#141414';

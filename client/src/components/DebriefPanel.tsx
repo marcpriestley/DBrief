@@ -1265,56 +1265,71 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
 
   // No debriefs at all — show the start prompt
   if (!debrief && completedDebriefs.length === 0) {
+    const hour = new Date().getHours();
+    const greeting = hour < 12 ? "Morning debrief" : hour < 17 ? "Afternoon debrief" : "Evening debrief";
     return (
-      <Card className="border border-border/50 shadow-sm bg-card overflow-hidden">
-        <CardContent className="p-0">
-          <div className="p-6 text-center">
-            <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-primary/10 flex items-center justify-center">
-              <MessageCircle className="h-6 w-6 text-primary" />
+      <div
+        className="rounded-2xl overflow-hidden relative"
+        style={{
+          background: 'linear-gradient(145deg, hsl(0,0%,11%) 0%, hsl(0,0%,9%) 60%, hsl(38,92%,6%) 100%)',
+          border: '1px solid rgba(245,158,11,0.35)',
+          boxShadow: '0 0 0 1px rgba(245,158,11,0.08), 0 8px 32px rgba(245,158,11,0.10)',
+        }}
+      >
+        {/* Subtle top amber strip */}
+        <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ background: 'linear-gradient(90deg, transparent, rgba(245,158,11,0.7) 30%, rgba(245,158,11,0.9) 50%, rgba(245,158,11,0.7) 70%, transparent)' }} />
+
+        <div className="px-5 pt-5 pb-6 space-y-5">
+          {/* Header row */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+              <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-primary/90">
+                {isToday ? greeting : `Debrief · ${dateLabel}`}
+              </span>
             </div>
-            <h3 className="text-lg font-semibold text-foreground mb-1">
-              {isToday ? "Ready for your debrief?" : `Debrief for ${dateLabel}`}
-            </h3>
-            <p className="text-sm text-muted-foreground mb-5 max-w-xs mx-auto">
-              {isToday
-                ? "How do you want to open your debrief session?"
-                : "Reflect on this day — choose how you want to start."
-              }
-            </p>
-            <div className="flex items-center justify-center gap-2 flex-wrap">
-              <Button
-                onClick={() => { haptic("medium"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: false, userLed: true }); }}
-                disabled={startDebriefMutation.isPending}
-                variant="outline"
-                className="flex-1 min-w-[110px] max-w-[150px]"
-              >
-                {startDebriefMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <>
-                    <ArrowRight className="h-4 w-4 mr-2" />
-                    I'll start
-                  </>
-                )}
-              </Button>
-              <Button
-                onClick={() => { haptic("medium"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: false }); }}
-                disabled={startDebriefMutation.isPending}
-                className="flex-1 min-w-[110px] max-w-[150px]"
-              >
-                {startDebriefMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <>
-                    <MessageCircle className="h-4 w-4 mr-2" />
-                    Prompt me
-                  </>
-                )}
-              </Button>
-            </div>
+            <span className="text-[11px] text-muted-foreground/60 font-medium">Session ready</span>
           </div>
-        </CardContent>
-      </Card>
+
+          {/* Main prompt */}
+          <div>
+            <h2 className="text-[22px] font-black text-foreground leading-tight tracking-tight">
+              {isToday ? "Time to debrief." : "Reflect on this day."}
+            </h2>
+            <p className="text-sm text-muted-foreground/80 mt-1.5 leading-relaxed">
+              {isToday
+                ? "Your AI performance engineer is ready. Let's break down the day."
+                : "Log a reflection for this day with your AI engineer."}
+            </p>
+          </div>
+
+          {/* Primary CTA */}
+          <Button
+            onClick={() => { haptic("medium"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: false }); }}
+            disabled={startDebriefMutation.isPending}
+            className="w-full h-12 text-base font-bold rounded-xl"
+            style={{ background: 'hsl(38,92%,50%)', color: '#0a0a0a' }}
+          >
+            {startDebriefMutation.isPending ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <>
+                <MessageCircle className="h-5 w-5 mr-2.5" />
+                Begin Debrief
+              </>
+            )}
+          </Button>
+
+          {/* Secondary: self-led */}
+          <button
+            onClick={() => { haptic("light"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: false, userLed: true }); }}
+            disabled={startDebriefMutation.isPending}
+            className="w-full text-sm text-muted-foreground/70 hover:text-muted-foreground transition-colors text-center pt-0.5"
+          >
+            I'll open — free-form entry
+          </button>
+        </div>
+      </div>
     );
   }
 
@@ -1322,55 +1337,46 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   if (!debrief && completedDebriefs.length > 0) {
     return (
       <div className="space-y-3">
-        {/* New session card — always first, always visible */}
-        <Card className="border border-border/50 shadow-sm bg-card overflow-hidden">
-          <CardContent className="p-0">
-            <div className="p-6 text-center">
-              <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-primary/10 flex items-center justify-center">
-                <MessageCircle className="h-6 w-6 text-primary" />
+        {/* New session hero — compact version since a session already exists */}
+        <div
+          className="rounded-2xl overflow-hidden relative"
+          style={{
+            background: 'linear-gradient(145deg, hsl(0,0%,11%) 0%, hsl(0,0%,9%) 60%, hsl(38,92%,6%) 100%)',
+            border: '1px solid rgba(245,158,11,0.25)',
+            boxShadow: '0 0 0 1px rgba(245,158,11,0.06), 0 4px 20px rgba(245,158,11,0.07)',
+          }}
+        >
+          <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ background: 'linear-gradient(90deg, transparent, rgba(245,158,11,0.5) 30%, rgba(245,158,11,0.7) 50%, rgba(245,158,11,0.5) 70%, transparent)' }} />
+          <div className="px-5 pt-4 pb-5 flex items-center gap-4">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <CheckCircle className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-emerald-400/90">Session logged</span>
               </div>
-              <h3 className="text-lg font-semibold text-foreground mb-1">
-                {isToday ? "Another session?" : `Debrief for ${dateLabel}`}
-              </h3>
-              <p className="text-sm text-muted-foreground mb-5 max-w-xs mx-auto">
-                {isToday
-                  ? "Your previous session is saved below. How do you want to open this one?"
-                  : "Log another reflection for this day."}
+              <p className="text-sm text-muted-foreground/80">
+                {isToday ? "Another round?" : `Add another reflection for ${dateLabel}.`}
               </p>
-              <div className="flex items-center justify-center gap-2 flex-wrap">
-                <Button
-                  onClick={() => { haptic("medium"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: true, userLed: true }); }}
-                  disabled={startDebriefMutation.isPending}
-                  variant="outline"
-                  className="flex-1 min-w-[110px] max-w-[150px]"
-                >
-                  {startDebriefMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <>
-                      <ArrowRight className="h-4 w-4 mr-2" />
-                      I'll start
-                    </>
-                  )}
-                </Button>
-                <Button
-                  onClick={() => { haptic("medium"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: true }); }}
-                  disabled={startDebriefMutation.isPending}
-                  className="flex-1 min-w-[110px] max-w-[150px]"
-                >
-                  {startDebriefMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <>
-                      <MessageCircle className="h-4 w-4 mr-2" />
-                      Prompt me
-                    </>
-                  )}
-                </Button>
-              </div>
             </div>
-          </CardContent>
-        </Card>
+            <div className="flex flex-col items-end gap-1.5 shrink-0">
+              <Button
+                onClick={() => { haptic("medium"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: true }); }}
+                disabled={startDebriefMutation.isPending}
+                size="sm"
+                className="h-9 px-4 font-bold text-sm rounded-lg"
+                style={{ background: 'hsl(38,92%,50%)', color: '#0a0a0a' }}
+              >
+                {startDebriefMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "New session"}
+              </Button>
+              <button
+                onClick={() => { haptic("light"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: true, userLed: true }); }}
+                disabled={startDebriefMutation.isPending}
+                className="text-[11px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+              >
+                Free-form
+              </button>
+            </div>
+          </div>
+        </div>
 
         {/* Past sessions — collapsed below the CTA */}
         <Card className="border border-border/30 shadow-sm bg-card/70 overflow-hidden">
