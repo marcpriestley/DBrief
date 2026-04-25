@@ -1,4 +1,4 @@
-import { useRef, useEffect } from "react";
+import { useRef } from "react";
 import { haptic } from "@/lib/haptics";
 
 interface NativeSliderProps {
@@ -14,12 +14,17 @@ interface NativeSliderProps {
 }
 
 /**
- * Touch-event slider that works reliably on iOS WKWebView.
- * Radix UI's Slider uses pointer-capture which iOS WKWebView handles inconsistently
- * (drag doesn't fire — only tap/click works). This implementation attaches
- * touchstart directly to the track element and listens for touchmove/touchend on
- * the document with capture:true so it fires even inside scroll containers or
- * modals that call stopPropagation.
+ * Touch-event slider for iOS WKWebView.
+ *
+ * Implementation notes:
+ * - Uses React onTouchStart/onTouchMove/onTouchEnd props as the primary mechanism.
+ *   React's synthetic events work reliably in WKWebView because Capacitor is built
+ *   to integrate with React's event delegation model.
+ * - Adds document-level native listeners for touchmove/touchend so the drag continues
+ *   even when the finger leaves the slider bounds.
+ * - Avoids setPointerCapture (breaks in WKWebView) and native-only addEventListener
+ *   on the element (competes with Capacitor's gesture recognizers).
+ * - touch-action: none on the root div prevents native scroll/zoom on this element.
  */
 export default function NativeSlider({
   value,
@@ -38,14 +43,24 @@ export default function NativeSlider({
   onChangeRef.current = onChange;
   onCommitRef.current = onCommit;
   const lastHapticVal = useRef<number | null>(null);
-  const lastEmittedVal = useRef(value);
+  const lastVal = useRef(value);
+  lastVal.current = value;
 
   const range = max - min;
   const pct = range === 0 ? 0 : Math.max(0, Math.min(100, ((value - min) / range) * 100));
   const fillColor = color ?? "hsl(var(--primary))";
 
-  const emitWithHaptic = (newVal: number) => {
-    lastEmittedVal.current = newVal;
+  const calcVal = (clientX: number): number => {
+    const el = trackRef.current;
+    if (!el) return lastVal.current;
+    const rect = el.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const raw = min + ratio * range;
+    return Math.max(min, Math.min(max, Math.round(raw / step) * step));
+  };
+
+  const emit = (newVal: number) => {
+    lastVal.current = newVal;
     onChangeRef.current(newVal);
     if (lastHapticVal.current === null || Math.abs(newVal - lastHapticVal.current) >= step) {
       haptic("light");
@@ -53,74 +68,57 @@ export default function NativeSlider({
     }
   };
 
-  useEffect(() => {
-    const el = trackRef.current;
-    if (!el) return;
+  const commit = () => { onCommitRef.current?.(lastVal.current); };
 
-    const getVal = (clientX: number) => {
-      const rect = el.getBoundingClientRect();
-      const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-      const raw = min + ratio * range;
-      const stepped = Math.round(raw / step) * step;
-      return Math.max(min, Math.min(max, stepped));
-    };
+  // — React touch handlers (primary path) —
+  const handleTouchStart = (e: React.TouchEvent) => {
+    e.stopPropagation();
+    isDragging.current = true;
+    lastHapticVal.current = null;
+    if (e.touches[0]) emit(calcVal(e.touches[0].clientX));
 
-    const commit = () => { onCommitRef.current?.(lastEmittedVal.current); };
-
-    const onTouchMove = (e: TouchEvent) => {
+    // Add document-level listeners so drag continues outside the element bounds
+    const onMove = (ev: TouchEvent) => {
       if (!isDragging.current) return;
-      e.preventDefault();
-      if (e.touches[0]) emitWithHaptic(getVal(e.touches[0].clientX));
+      ev.preventDefault();
+      if (ev.touches[0]) emit(calcVal(ev.touches[0].clientX));
     };
-    const onTouchEnd = () => {
+    const onEnd = () => {
       isDragging.current = false;
       commit();
-      document.removeEventListener("touchmove", onTouchMove, { capture: true });
-      document.removeEventListener("touchend", onTouchEnd);
-      document.removeEventListener("touchcancel", onTouchEnd);
+      document.removeEventListener("touchmove", onMove, { capture: true });
+      document.removeEventListener("touchend", onEnd);
+      document.removeEventListener("touchcancel", onEnd);
     };
-    const onTouchStart = (e: TouchEvent) => {
-      e.preventDefault();
-      isDragging.current = true;
-      lastHapticVal.current = null;
-      if (e.touches[0]) emitWithHaptic(getVal(e.touches[0].clientX));
-      document.addEventListener("touchmove", onTouchMove, { passive: false, capture: true });
-      document.addEventListener("touchend", onTouchEnd);
-      document.addEventListener("touchcancel", onTouchEnd);
-    };
+    document.addEventListener("touchmove", onMove, { passive: false, capture: true });
+    document.addEventListener("touchend", onEnd);
+    document.addEventListener("touchcancel", onEnd);
+  };
 
-    const onMouseDown = (e: MouseEvent) => {
-      e.preventDefault();
-      isDragging.current = true;
-      lastHapticVal.current = null;
-      emitWithHaptic(getVal(e.clientX));
-      const onMouseMove = (e: MouseEvent) => { if (isDragging.current) emitWithHaptic(getVal(e.clientX)); };
-      const onMouseUp = () => {
-        isDragging.current = false;
-        commit();
-        document.removeEventListener("mousemove", onMouseMove);
-        document.removeEventListener("mouseup", onMouseUp);
-      };
-      document.addEventListener("mousemove", onMouseMove);
-      document.addEventListener("mouseup", onMouseUp);
+  // — Mouse handlers (desktop browser) —
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    isDragging.current = true;
+    lastHapticVal.current = null;
+    emit(calcVal(e.clientX));
+    const onMove = (ev: MouseEvent) => { if (isDragging.current) emit(calcVal(ev.clientX)); };
+    const onUp = () => {
+      isDragging.current = false;
+      commit();
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
     };
-
-    el.addEventListener("touchstart", onTouchStart, { passive: false });
-    el.addEventListener("mousedown", onMouseDown);
-    return () => {
-      el.removeEventListener("touchstart", onTouchStart);
-      el.removeEventListener("mousedown", onMouseDown);
-      document.removeEventListener("touchmove", onTouchMove, { capture: true });
-      document.removeEventListener("touchend", onTouchEnd);
-      document.removeEventListener("touchcancel", onTouchEnd);
-    };
-  }, [min, max, step, range]);
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
 
   return (
     <div
       ref={trackRef}
       className={`relative w-full flex items-center cursor-pointer select-none ${className}`}
       style={{ touchAction: "none", userSelect: "none", height: 44 } as React.CSSProperties}
+      onTouchStart={handleTouchStart}
+      onMouseDown={handleMouseDown}
     >
       <div className="absolute inset-x-0 h-2 rounded-full bg-muted" />
       <div

@@ -1562,7 +1562,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
           </div>
         </div>
 
-        <div ref={chatContainerRef} className="px-5 py-4 space-y-3 overflow-y-auto overscroll-y-contain" style={{ maxHeight: 'calc(var(--visual-height, 100dvh) * 0.24)', minHeight: '60px' }}>
+        <div ref={chatContainerRef} className="px-5 py-4 space-y-3 overflow-y-auto overscroll-y-contain" style={{ maxHeight: 'calc(var(--visual-height, 100dvh) * 0.42)', minHeight: '80px' }}>
           {debrief.messages.length === 0 && !isStreaming && (
             <p className="text-sm text-muted-foreground text-center py-4">
               Your session, your opening. What's on your mind?

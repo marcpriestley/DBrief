@@ -28,9 +28,6 @@ function NativeOverlay({ open, onClose, title, description, children, scrollable
         <div
           className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center"
           style={scrollable ? undefined : { touchAction: 'none' }}
-          onTouchStart={(e) => e.stopPropagation()}
-          onTouchMove={(e) => { if (!scrollable) e.preventDefault(); e.stopPropagation(); }}
-          onTouchEnd={(e) => e.stopPropagation()}
         >
           <motion.div
             className="fixed inset-0 bg-black/50"
@@ -72,13 +69,22 @@ function NativeSlider({ value, onChange, min = 0, max = 100, color = "hsl(40, 95
   const isDragging = useRef(false);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
-  const minRef = useRef(min); minRef.current = min;
-  const maxRef = useRef(max); maxRef.current = max;
   const lastHapticVal = useRef<number | null>(null);
+  const lastVal = useRef(value);
+  lastVal.current = value;
 
   const pct = Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100));
 
-  const emitWithHaptic = (newVal: number) => {
+  const calcVal = (clientX: number) => {
+    const el = trackRef.current;
+    if (!el) return lastVal.current;
+    const rect = el.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    return Math.round(min + ratio * (max - min));
+  };
+
+  const emit = (newVal: number) => {
+    lastVal.current = newVal;
     onChangeRef.current(newVal);
     if (lastHapticVal.current === null || Math.abs(newVal - lastHapticVal.current) >= 5) {
       haptic("light");
@@ -86,73 +92,49 @@ function NativeSlider({ value, onChange, min = 0, max = 100, color = "hsl(40, 95
     }
   };
 
-  useEffect(() => {
-    const el = trackRef.current;
-    if (!el) return;
-
-    const getVal = (clientX: number) => {
-      const rect = el.getBoundingClientRect();
-      const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-      return Math.round(minRef.current + ratio * (maxRef.current - minRef.current));
-    };
-
-    const onTouchMove = (e: TouchEvent) => {
+  const handleTouchStart = (e: React.TouchEvent) => {
+    e.stopPropagation();
+    isDragging.current = true;
+    lastHapticVal.current = null;
+    if (e.touches[0]) emit(calcVal(e.touches[0].clientX));
+    const onMove = (ev: TouchEvent) => {
       if (!isDragging.current) return;
-      e.preventDefault();
-      if (e.touches[0]) emitWithHaptic(getVal(e.touches[0].clientX));
+      ev.preventDefault();
+      if (ev.touches[0]) emit(calcVal(ev.touches[0].clientX));
     };
-    const onTouchEnd = () => {
+    const onEnd = () => {
       isDragging.current = false;
-      document.removeEventListener("touchmove", onTouchMove, { capture: true });
-      document.removeEventListener("touchend", onTouchEnd);
-      document.removeEventListener("touchcancel", onTouchEnd);
+      document.removeEventListener("touchmove", onMove, { capture: true });
+      document.removeEventListener("touchend", onEnd);
+      document.removeEventListener("touchcancel", onEnd);
     };
+    document.addEventListener("touchmove", onMove, { passive: false, capture: true });
+    document.addEventListener("touchend", onEnd);
+    document.addEventListener("touchcancel", onEnd);
+  };
 
-    const onTouchStart = (e: TouchEvent) => {
-      e.preventDefault();
-      isDragging.current = true;
-      lastHapticVal.current = null;
-      if (e.touches[0]) emitWithHaptic(getVal(e.touches[0].clientX));
-      // capture:true so the listener fires before any ancestor stopPropagation
-      document.addEventListener("touchmove", onTouchMove, { passive: false, capture: true });
-      document.addEventListener("touchend", onTouchEnd);
-      document.addEventListener("touchcancel", onTouchEnd);
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    isDragging.current = true;
+    lastHapticVal.current = null;
+    emit(calcVal(e.clientX));
+    const onMove = (ev: MouseEvent) => { if (isDragging.current) emit(calcVal(ev.clientX)); };
+    const onUp = () => {
+      isDragging.current = false;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
     };
-
-    const onMouseDown = (e: MouseEvent) => {
-      e.preventDefault();
-      isDragging.current = true;
-      lastHapticVal.current = null;
-      emitWithHaptic(getVal(e.clientX));
-      const onMouseMove = (e: MouseEvent) => {
-        if (isDragging.current) emitWithHaptic(getVal(e.clientX));
-      };
-      const onMouseUp = () => {
-        isDragging.current = false;
-        document.removeEventListener("mousemove", onMouseMove);
-        document.removeEventListener("mouseup", onMouseUp);
-      };
-      document.addEventListener("mousemove", onMouseMove);
-      document.addEventListener("mouseup", onMouseUp);
-    };
-
-    el.addEventListener("touchstart", onTouchStart, { passive: false });
-    el.addEventListener("mousedown", onMouseDown);
-
-    return () => {
-      el.removeEventListener("touchstart", onTouchStart);
-      el.removeEventListener("mousedown", onMouseDown);
-      document.removeEventListener("touchmove", onTouchMove, { capture: true });
-      document.removeEventListener("touchend", onTouchEnd);
-      document.removeEventListener("touchcancel", onTouchEnd);
-    };
-  }, []);
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
 
   return (
     <div
       ref={trackRef}
       className="relative w-full flex items-center cursor-pointer select-none"
       style={{ touchAction: "none", userSelect: "none", height: 48 } as React.CSSProperties}
+      onTouchStart={handleTouchStart}
+      onMouseDown={handleMouseDown}
     >
       <div className="absolute inset-x-0 h-2 rounded-full bg-border" />
       <div className="absolute h-2 rounded-full" style={{ width: `${pct}%`, backgroundColor: color }} />

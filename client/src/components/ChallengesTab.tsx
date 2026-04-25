@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Plus, Flame, Zap, Trophy, Calendar, Users, ChevronRight,
+  Plus, Flame, Zap, Trophy, Calendar, Users, ChevronRight, ChevronDown,
   Check, X, Trash2, Crown, Medal, Lock, Globe,
   Target, Activity, CheckCircle2, Clock, EyeOff, Eye, Pencil, Bell,
   Search, UserPlus,
@@ -1385,6 +1385,7 @@ export default function ChallengesTab({
   viewerUserId: number;
 }) {
   const [showCreate, setShowCreate] = useState(false);
+  const [showPast, setShowPast] = useState(false);
   const { data: challenges = [], isLoading } = useQuery<ChallengeWithProgress[]>({
     queryKey: ["/api/challenges"],
     queryFn: () =>
@@ -1454,15 +1455,34 @@ export default function ChallengesTab({
         </div>
       )}
 
-      {/* Past */}
+      {/* Past — collapsed by default */}
       {past.length > 0 && (
         <section>
-          <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider mb-2 font-medium">Completed</p>
-          <div className="space-y-3">
-            <AnimatePresence mode="popLayout">
-              {past.map(ch => <ChallengeCard key={ch.id} challenge={ch} viewerIsCreator={false} />)}
-            </AnimatePresence>
-          </div>
+          <button
+            onClick={() => { haptic("select"); setShowPast(p => !p); }}
+            className="flex items-center gap-2 w-full text-left"
+          >
+            <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider font-medium flex-1">
+              Completed ({past.length})
+            </p>
+            <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground/50 transition-transform ${showPast ? "rotate-180" : ""}`} />
+          </button>
+          <AnimatePresence>
+            {showPast && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="space-y-3 mt-2">
+                  <AnimatePresence mode="popLayout">
+                    {past.map(ch => <ChallengeCard key={ch.id} challenge={ch} viewerIsCreator={false} />)}
+                  </AnimatePresence>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </section>
       )}
 

@@ -138,8 +138,14 @@ function AppLayoutInner({ children }: AppLayoutProps) {
       fetch(`/api/challenges?date=${new Date().toLocaleDateString("en-CA")}`, { credentials: "include" }).then(r => r.json()),
     refetchInterval: 120000,
   });
+  const todayCh = new Date().toLocaleDateString("en-CA");
   const hasUnloggedChallenge = challenges.some(
-    (c: any) => c.myStats && !c.myStats.loggedToday
+    (c: any) =>
+      c.myStatus === "joined" &&
+      c.startDate <= todayCh &&
+      c.endDate >= todayCh &&
+      c.myStats &&
+      !c.myStats.loggedToday
   );
 
   const todayStr = new Date().toLocaleDateString("en-CA");
