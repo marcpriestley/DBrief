@@ -192,31 +192,37 @@ function AppLayoutInner({ children }: AppLayoutProps) {
   // ── Visual-viewport + StatusBar keyboard tracking ──────────────────────────
   // --visual-height tracks the real visible area (keyboard shrinks it in WKWebView).
   // StatusBar strategy: do NOT call reapplyStatusBar during the keyboard animation —
-  // iOS overrides it frame-by-frame. Instead use two reliable hooks:
-  //   1. capacitorKeyboardDidShow / capacitorKeyboardDidHide — Capacitor core
+  // iOS overrides it frame-by-frame. Instead use three reliable hooks:
+  //   1. Mount — apply on first render so the native bar is correct immediately.
+  //   2. capacitorKeyboardDidShow / capacitorKeyboardDidHide — Capacitor core
   //      dispatches these on window after the animation fully completes.
-  //   2. Focus/blur with staggered retries — catches the resets at each phase.
+  //   3. visibilitychange — catches foreground-return after lock/home-button which
+  //      is the other common path that iOS uses to reset contentInsetAdjustment.
   useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
+    // Apply on mount so we never rely solely on the static capacitor.config.ts
+    // value — this also sets the correct colour for light-mode users whose config
+    // still has the dark '#141414' default.
+    reapplyStatusBar();
+    scheduleStatusBarRetries();
 
-    // Only update the CSS variable here — no StatusBar call during animation.
+    const vv = window.visualViewport;
     const setVh = () => {
+      if (!vv) return;
       document.documentElement.style.setProperty("--visual-height", `${vv.height}px`);
     };
-    setVh();
-    vv.addEventListener("resize", setVh);
-    vv.addEventListener("scroll", setVh);
+    if (vv) {
+      setVh();
+      vv.addEventListener("resize", setVh);
+      vv.addEventListener("scroll", setVh);
+    }
 
     // Capacitor core dispatches these on window after animations fully complete.
-    // This is the authoritative point to reassert our overlay setting.
     const onKbDidShow = () => scheduleStatusBarRetries();
     const onKbDidHide = () => scheduleStatusBarRetries();
     window.addEventListener("capacitorKeyboardDidShow", onKbDidShow);
     window.addEventListener("capacitorKeyboardDidHide", onKbDidHide);
 
     // focus: schedule retries AFTER the keyboard animation (not during).
-    // Also scroll the field into view once keyboard is stable.
     const onFocus = (e: FocusEvent) => {
       const el = e.target as HTMLElement;
       if (el.tagName !== "INPUT" && el.tagName !== "TEXTAREA") return;
@@ -227,7 +233,7 @@ function AppLayoutInner({ children }: AppLayoutProps) {
     };
     document.addEventListener("focus", onFocus, true);
 
-    // blur: keyboard is dismissing — schedule retries to catch the post-dismiss reset.
+    // blur: keyboard is dismissing — schedule retries after the dismiss animation.
     const onBlur = (e: FocusEvent) => {
       const el = e.target as HTMLElement;
       if (el.tagName !== "INPUT" && el.tagName !== "TEXTAREA") return;
@@ -235,13 +241,26 @@ function AppLayoutInner({ children }: AppLayoutProps) {
     };
     document.addEventListener("blur", onBlur, true);
 
+    // visibilitychange: app returns from background / lock screen. iOS can reset
+    // the status bar style on foreground-return just as it does after a keyboard.
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        reapplyStatusBar();
+        scheduleStatusBarRetries();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
     return () => {
-      vv.removeEventListener("resize", setVh);
-      vv.removeEventListener("scroll", setVh);
+      if (vv) {
+        vv.removeEventListener("resize", setVh);
+        vv.removeEventListener("scroll", setVh);
+      }
       window.removeEventListener("capacitorKeyboardDidShow", onKbDidShow);
       window.removeEventListener("capacitorKeyboardDidHide", onKbDidHide);
       document.removeEventListener("focus", onFocus, true);
       document.removeEventListener("blur", onBlur, true);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, []);
 

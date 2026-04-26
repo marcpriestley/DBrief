@@ -49,30 +49,38 @@
         document.documentElement.style.setProperty('--pre-bg', '#141414');
       }
 
-      // ── Safe-area bottom detection ──────────────────────────────────────
-      // Capacitor's contentInset:'never' makes env(safe-area-inset-bottom)
-      // return 0 in CSS, so padding/height rules that use env() silently
-      // collapse to 0 — leaving the iOS home-indicator zone uncovered (white).
+      // ── Safe-area detection ─────────────────────────────────────────────
+      // Capacitor's contentInset:'never' makes env(safe-area-inset-*) return 0
+      // in CSS. We compensate with fallback px values — BUT ONLY when actually
+      // running inside a native WKWebView (Capacitor), not in any browser.
       //
-      // Fix: detect Face ID iPhones by CSS-pixel screen height (all models
-      // are >= 812 px) and force --sai-bottom to at least 34 px so every
-      // element that uses var(--sai-bottom) covers the home-indicator zone.
-      // env() is still preferred when it returns a real value (non-Capacitor
-      // browser, or future rebuild without contentInset:never).
+      // Detection: window.webkit.messageHandlers is injected by WKWebView
+      // into every native Capacitor page. It is absent in all desktop and
+      // mobile browsers. This is more reliable than window.screen.height
+      // (which is >= 812 on most desktop monitors, causing fake bands in
+      // browser previews and the Replit dev pane).
       try {
-        var isFaceId = window.screen.height >= 812;
-        var saibFallback = isFaceId ? '34px' : '0px';
-        // max(env(), fallback) — on Capacitor where env()=0 this resolves to
-        // the fallback; in a browser where env()=34px it resolves to 34px.
+        var isWKWebView = (
+          typeof window.webkit !== 'undefined' &&
+          window.webkit !== null &&
+          typeof window.webkit.messageHandlers !== 'undefined'
+        );
+        // Only Face ID iPhones have a home indicator (screen height >= 812 in
+        // device-independent pixels). Older iPhones with Touch ID have a home
+        // button so no home-indicator zone needs to be covered.
+        var isFaceIdNative = isWKWebView && window.screen.height >= 812;
+        var saibFallback   = isFaceIdNative ? '34px' : '0px';
+        var saibTopFallback = isFaceIdNative ? '47px' : '0px';
+        // max(env(), fallback): on native Capacitor where env()=0 this resolves
+        // to the fallback; in a browser where env() returns the real value it
+        // resolves to the real value (always >= fallback or both are 0).
         document.documentElement.style.setProperty(
           '--sai-bottom',
           'max(env(safe-area-inset-bottom, 0px), ' + saibFallback + ')'
         );
-        // Also set top safe area the same way (status bar ~47px on Face ID)
-        var saibTop = isFaceId ? '47px' : '20px';
         document.documentElement.style.setProperty(
           '--sai-top',
-          'max(env(safe-area-inset-top, 0px), ' + saibTop + ')'
+          'max(env(safe-area-inset-top, 0px), ' + saibTopFallback + ')'
         );
       } catch (e) {
         document.documentElement.style.setProperty('--sai-bottom', 'env(safe-area-inset-bottom, 0px)');

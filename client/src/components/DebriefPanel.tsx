@@ -1494,14 +1494,11 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
         >
           <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ background: 'linear-gradient(90deg, transparent, rgba(245,158,11,0.7) 30%, rgba(245,158,11,0.9) 50%, rgba(245,158,11,0.7) 70%, transparent)' }} />
           <div className="px-5 pt-5 pb-6 space-y-5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <CheckCircle className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-                <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-emerald-400/90">Session logged</span>
-              </div>
-              <span className="text-[11px] text-muted-foreground/60 font-medium">Ready for more</span>
+            <div className="flex items-center gap-1.5">
+              <CheckCircle className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+              <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-emerald-400/90">Session logged</span>
             </div>
-            <div>
+            <div className="text-center">
               <h2 className="text-[32px] font-black text-foreground leading-none tracking-tight">
                 Debrief Now
               </h2>
