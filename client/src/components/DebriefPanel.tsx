@@ -1502,13 +1502,13 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
               <span className="text-[11px] text-muted-foreground/60 font-medium">Ready for more</span>
             </div>
             <div>
-              <h2 className="text-[22px] font-black text-foreground leading-tight tracking-tight">
-                {isToday ? "Go again?" : `Another reflection for ${dateLabel}.`}
+              <h2 className="text-[32px] font-black text-foreground leading-none tracking-tight">
+                Debrief
               </h2>
-              <p className="text-sm text-muted-foreground/80 mt-1.5 leading-relaxed">
+              <p className="text-sm text-muted-foreground/80 mt-2 leading-relaxed">
                 {isToday
-                  ? "Start a new session with your AI engineer, or just log a quick moment."
-                  : "Add another reflection for this day."}
+                  ? "Start a new session with your AI engineer, or log a quick moment."
+                  : `Add another reflection for ${dateLabel}.`}
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
