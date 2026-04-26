@@ -17,7 +17,7 @@ import { apiRequest } from "@/lib/queryClient";
 import {
   Bell, BellOff, AlertCircle, CheckCircle2, Heart, Plus, Check, Info,
   User, Map, RefreshCw, KeyRound, ChevronDown, Sun, Moon, Trash2,
-  XCircle, Loader2,
+  XCircle, Loader2, Watch, Lock,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { haptic } from "@/lib/haptics";
@@ -44,6 +44,7 @@ const APPLE_HEALTH_METRICS: {
   color: string;
   maxValue: number;
   unit: string;
+  wearable?: boolean;
 }[] = [
   { name: "Steps",               category: "Activity",     color: "#10B981", maxValue: 20000, unit: "steps" },
   { name: "Active Energy",       category: "Activity",     color: "#F59E0B", maxValue: 800,   unit: "kcal" },
@@ -51,15 +52,15 @@ const APPLE_HEALTH_METRICS: {
   { name: "Flights Climbed",     category: "Activity",     color: "#84CC16", maxValue: 20,    unit: "" },
   { name: "Walking Distance",    category: "Activity",     color: "#0EA5E9", maxValue: 10,    unit: "km" },
   { name: "Sleep Duration",      category: "Sleep",        color: "#4F46E5", maxValue: 10,    unit: "hrs" },
-  { name: "Sleep Score",         category: "Sleep",        color: "#7C3AED", maxValue: 100,   unit: "" },
-  { name: "Heart Rate",          category: "Heart",        color: "#EF4444", maxValue: 200,   unit: "bpm" },
-  { name: "Resting Heart Rate",  category: "Heart",        color: "#E11D48", maxValue: 100,   unit: "bpm" },
-  { name: "HRV",                 category: "Heart",        color: "#8B5CF6", maxValue: 120,   unit: "ms" },
-  { name: "Blood Oxygen",        category: "Heart",        color: "#38BDF8", maxValue: 100,   unit: "%" },
+  { name: "Sleep Score",         category: "Sleep",        color: "#7C3AED", maxValue: 100,   unit: "",    wearable: true },
+  { name: "Heart Rate",          category: "Heart",        color: "#EF4444", maxValue: 200,   unit: "bpm", wearable: true },
+  { name: "Resting Heart Rate",  category: "Heart",        color: "#E11D48", maxValue: 100,   unit: "bpm", wearable: true },
+  { name: "HRV",                 category: "Heart",        color: "#8B5CF6", maxValue: 120,   unit: "ms",  wearable: true },
+  { name: "Blood Oxygen",        category: "Heart",        color: "#38BDF8", maxValue: 100,   unit: "%",   wearable: true },
   { name: "Body Weight",         category: "Body",         color: "#EC4899", maxValue: 200,   unit: "kg" },
   { name: "Body Fat %",          category: "Body",         color: "#F97316", maxValue: 50,    unit: "%" },
   { name: "Mindful Minutes",     category: "Mindfulness",  color: "#14B8A6", maxValue: 60,    unit: "min" },
-  { name: "Respiratory Rate",    category: "Respiratory",  color: "#64748B", maxValue: 30,    unit: "brpm" },
+  { name: "Respiratory Rate",    category: "Respiratory",  color: "#64748B", maxValue: 30,    unit: "brpm", wearable: true },
 ];
 
 const CATEGORY_ORDER = ["Activity", "Sleep", "Heart", "Body", "Mindfulness", "Respiratory"];
@@ -373,6 +374,13 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [healthSyncResult, setHealthSyncResult] = useState<string | null>(null);
   const [healthSetupNeeded, setHealthSetupNeeded] = useState(false);
   const [healthRawError, setHealthRawError] = useState<string | null>(null);
+  const [hasWearable, setHasWearable] = useState(() => {
+    try { return localStorage.getItem("dbrief_has_wearable") === "true"; } catch { return false; }
+  });
+  const handleToggleWearable = (v: boolean) => {
+    setHasWearable(v);
+    try { localStorage.setItem("dbrief_has_wearable", v ? "true" : "false"); } catch {}
+  };
 
   // Danger zone — account deletion
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -654,8 +662,13 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
   const groupedMetrics = CATEGORY_ORDER.map(category => ({
     category,
-    metrics: APPLE_HEALTH_METRICS.filter(m => m.category === category),
-  }));
+    metrics: APPLE_HEALTH_METRICS.filter(m => m.category === category && !m.wearable),
+  })).filter(g => g.metrics.length > 0);
+
+  const wearableGroupedMetrics = CATEGORY_ORDER.map(category => ({
+    category,
+    metrics: APPLE_HEALTH_METRICS.filter(m => m.category === category && m.wearable),
+  })).filter(g => g.metrics.length > 0);
 
   const activeMetricCount = userMetrics.filter(m => m.isActive !== false).length;
 
@@ -903,6 +916,8 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       ⚡ = auto-syncs from {isNativeAndroid() ? "Health Connect" : "Apple Health"} · others are entered manually
                     </p>
                   )}
+
+                  {/* ── Phone metrics ────────────────────────── */}
                   <div className="space-y-3">
                     {groupedMetrics.map(({ category, metrics }) => (
                       <div key={category}>
@@ -933,6 +948,61 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         </div>
                       </div>
                     ))}
+                  </div>
+
+                  {/* ── Wearable metrics ─────────────────────── */}
+                  <div className="mt-4 rounded-xl border border-border/50 overflow-hidden">
+                    <div className="flex items-center justify-between px-3 py-2.5 bg-muted/40">
+                      <div className="flex items-center gap-2">
+                        <Watch className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <div>
+                          <p className="text-xs font-semibold text-foreground">Wearable metrics</p>
+                          <p className="text-[10px] text-muted-foreground leading-tight">Apple Watch or equivalent required</p>
+                        </div>
+                      </div>
+                      <Switch checked={hasWearable} onCheckedChange={handleToggleWearable} />
+                    </div>
+
+                    {!hasWearable ? (
+                      <div className="px-3 py-3 flex items-start gap-2 bg-background/60">
+                        <Lock className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0 mt-0.5" />
+                        <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
+                          Toggle on if you use an Apple Watch, Garmin, Oura, or similar. This unlocks Heart Rate, HRV, Blood Oxygen, Sleep Score, and Respiratory Rate.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="px-3 pt-2 pb-3 space-y-3 bg-background/60">
+                        {wearableGroupedMetrics.map(({ category, metrics }) => (
+                          <div key={category}>
+                            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">{category}</p>
+                            <div className="space-y-1">
+                              {metrics.map((metric) => {
+                                const isAdded = existingMetricNames.has(metric.name.toLowerCase());
+                                const isPending = addMetricMutation.isPending || deleteMetricMutation.isPending;
+                                const canAutoSync = getHealthSyncableMetrics().includes(metric.name);
+                                return (
+                                  <button
+                                    key={metric.name}
+                                    onClick={() => !isPending && handleToggleHealthMetric(metric)}
+                                    className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-left transition-colors ${
+                                      isAdded ? "bg-primary/10 border border-primary/20" : "hover:bg-muted border border-transparent"
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: metric.color }} />
+                                      <span className="text-xs text-foreground">{metric.name}</span>
+                                      {metric.unit && <span className="text-[10px] text-muted-foreground">({metric.unit})</span>}
+                                      {isNativeHealth() && canAutoSync && <span className="text-[9px] text-primary font-semibold">⚡</span>}
+                                    </div>
+                                    {isAdded ? <Check className="h-3.5 w-3.5 text-primary shrink-0" /> : <Plus className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </SettingsSection>
