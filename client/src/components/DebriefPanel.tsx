@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { haptic } from "@/lib/haptics";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { MessageCircle, Send, CheckCircle, Flag, Loader2, RotateCcw, Mic, MicOff, ArrowRight, Volume2, VolumeX, Square, ChevronDown, Trash2, Keyboard, BookOpen, X, Paperclip, FileText } from "lucide-react";
+import { MessageCircle, Send, CheckCircle, Flag, Loader2, RotateCcw, Mic, MicOff, ArrowRight, Volume2, VolumeX, Square, ChevronDown, Trash2, Keyboard, BookOpen, X, Paperclip } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiRequest } from "@/lib/queryClient";
@@ -25,9 +25,7 @@ interface DebriefMessage {
 
 interface PendingAttachment {
   objectPath: string;
-  type: "image" | "document";
-  name: string;
-  previewUrl?: string;
+  previewUrl: string;
 }
 
 interface Debrief {
@@ -736,8 +734,8 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
       debriefId: debrief.id,
       role: "user",
       content: text.trim(),
-      attachmentUrl: attachment?.previewUrl ?? attachment?.objectPath ?? null,
-      attachmentType: attachment?.type ?? null,
+      attachmentUrl: attachment?.previewUrl ?? null,
+      attachmentType: attachment ? "image" : null,
       createdAt: new Date().toISOString(),
     };
 
@@ -758,7 +756,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
         credentials: "include",
         body: JSON.stringify({
           content: text.trim(),
-          ...(attachment ? { attachmentUrl: attachment.objectPath, attachmentType: attachment.type } : {}),
+          ...(attachment ? { attachmentUrl: attachment.objectPath, attachmentType: "image" } : {}),
         }),
       });
 
@@ -893,8 +891,6 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const isImage = file.type.startsWith("image/");
-    const type: "image" | "document" = isImage ? "image" : "document";
     setIsUploading(true);
     try {
       const urlRes = await apiRequest("POST", "/api/uploads/request-url", {
@@ -908,11 +904,9 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
         headers: { "Content-Type": file.type },
         body: file,
       });
-      let previewUrl: string | undefined;
-      if (isImage) previewUrl = URL.createObjectURL(file);
-      setPendingAttachment({ objectPath, type, name: file.name, previewUrl });
+      setPendingAttachment({ objectPath, previewUrl: URL.createObjectURL(file) });
     } catch {
-      toast({ title: "Upload failed", description: "Couldn't attach the file. Please try again.", variant: "destructive" });
+      toast({ title: "Upload failed", description: "Couldn't attach the photo. Please try again.", variant: "destructive" });
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -1835,21 +1829,13 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                         : "bg-muted text-foreground rounded-bl-md"
                     } ${isSelected ? "opacity-70" : ""} ${msg.attachmentUrl ? "p-0" : "px-4 py-2.5"}`}
                   >
-                    {msg.attachmentUrl && msg.attachmentType === "image" && (
+                    {msg.attachmentUrl && (
                       <img
-                        src={msg.attachmentUrl.startsWith("/objects/") ? msg.attachmentUrl : msg.attachmentUrl}
-                        alt="attachment"
+                        src={msg.attachmentUrl}
+                        alt="session photo"
                         className="w-full max-w-[240px] rounded-2xl object-cover"
                         style={{ maxHeight: 200 }}
                       />
-                    )}
-                    {msg.attachmentUrl && msg.attachmentType === "document" && (
-                      <div className={`flex items-center gap-2 px-3 py-2 ${msg.content ? "border-b border-white/10" : ""}`}>
-                        <FileText className="h-4 w-4 shrink-0 opacity-80" />
-                        <span className="text-xs truncate max-w-[180px] opacity-90">
-                          {msg.attachmentUrl.split("/").pop() || "Document"}
-                        </span>
-                      </div>
                     )}
                     {msg.content && (
                       <div className={msg.attachmentUrl ? "px-4 py-2.5" : ""}>
@@ -2179,56 +2165,46 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
               {/* Text input row — only shown in keyboard mode (or when voice unsupported) */}
               {(textMode || !voice.isSupported) && (
                 <div className="flex flex-col gap-1.5 bg-muted/50 rounded-xl border border-border/50 p-2">
-                  {/* Attachment preview */}
+                  {/* Pending photo preview */}
                   {pendingAttachment && (
                     <div className="flex items-center gap-2 px-1">
-                      {pendingAttachment.type === "image" && pendingAttachment.previewUrl ? (
-                        <div className="relative">
-                          <img
-                            src={pendingAttachment.previewUrl}
-                            alt="attachment preview"
-                            className="h-16 w-16 rounded-lg object-cover border border-border/50"
-                          />
-                          <button
-                            onClick={() => setPendingAttachment(null)}
-                            className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-background border border-border flex items-center justify-center"
-                          >
-                            <X className="h-2.5 w-2.5 text-muted-foreground" />
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="relative flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-background border border-border/60">
-                          <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          <span className="text-xs text-foreground truncate max-w-[160px]">{pendingAttachment.name}</span>
-                          <button
-                            onClick={() => setPendingAttachment(null)}
-                            className="ml-1 text-muted-foreground hover:text-foreground"
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </div>
-                      )}
+                      <div className="relative">
+                        <img
+                          src={pendingAttachment.previewUrl}
+                          alt="photo preview"
+                          className="h-16 w-16 rounded-lg object-cover border border-border/50"
+                        />
+                        <button
+                          onClick={() => setPendingAttachment(null)}
+                          className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-background border border-border flex items-center justify-center"
+                        >
+                          <X className="h-2.5 w-2.5 text-muted-foreground" />
+                        </button>
+                      </div>
                     </div>
                   )}
                   <div className="flex items-end gap-2">
-                    {/* Hidden file input */}
+                    {/* Hidden file input — images only */}
                     <input
                       ref={fileInputRef}
                       type="file"
-                      accept="image/*,application/pdf,.doc,.docx,.txt,.csv"
+                      accept="image/*"
                       className="hidden"
                       onChange={handleFileSelect}
                     />
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={isStreaming || isUploading}
-                      className="shrink-0 h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-40"
-                    >
-                      {isUploading
-                        ? <Loader2 className="h-4 w-4 animate-spin" />
-                        : <Paperclip className="h-4 w-4" />
-                      }
-                    </button>
+                    {/* Paperclip — hidden once a photo has been sent this session or one is pending */}
+                    {!pendingAttachment && !debrief?.messages?.some(m => m.attachmentUrl) && (
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isStreaming || isUploading}
+                        className="shrink-0 h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-40"
+                      >
+                        {isUploading
+                          ? <Loader2 className="h-4 w-4 animate-spin" />
+                          : <Paperclip className="h-4 w-4" />
+                        }
+                      </button>
+                    )}
                     <textarea
                       ref={inputRef}
                       rows={1}
