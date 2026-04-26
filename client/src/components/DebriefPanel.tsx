@@ -1701,7 +1701,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                 </Button>
               );
             })()}
-            {userMessageCount >= 1 && !showCheckpoint && (
+            {!showCheckpoint && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -1715,7 +1715,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                 ) : (
                   <Flag className="h-3 w-3" />
                 )}
-                Finish
+                Finish session
               </Button>
             )}
           </div>
