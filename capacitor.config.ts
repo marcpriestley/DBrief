@@ -10,14 +10,15 @@ const config: CapacitorConfig = {
   },
   ios: {
     preferredContentMode: 'mobile',
-    // Dark background so any WKWebView gap (safe-area or keyboard transition)
-    // shows the correct colour before web CSS loads or during contentInset resets.
+    // Dark background so any WKWebView gap shows the correct colour before
+    // web CSS loads or during brief native repaints.
     backgroundColor: '#141414',
-    // 'never' extends the WKWebView behind the home indicator (bottom) and the
-    // status bar (top), making env(safe-area-inset-*) return 0. The web layer
-    // compensates with the --sai-* CSS variables set in index.html which use
-    // max(env(...), 34px) / max(env(...), 47px) as fallbacks for Face ID phones.
-    contentInset: 'never',
+    // Do NOT set contentInset:'never'. The default (automatic) lets
+    // env(safe-area-inset-*) return real device values (34 px bottom on Face
+    // ID, 47–59 px top depending on model).  'never' made env() return 0,
+    // forcing fragile JS hacks that could never be 100 % reliable across all
+    // iPhone models.  With real env() values, a single CSS rule covers every
+    // device perfectly.
   },
   plugins: {
     // Native-layer StatusBar config — applied before any JS runs so keyboard

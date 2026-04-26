@@ -599,13 +599,17 @@ export default function TrendsEnhanced() {
         {displayMetrics.length > 0 && (
           <Card className="border-border/50 shadow-sm">
             <CardContent className="p-4">
-              <div className="text-xs font-medium text-muted-foreground mb-3">Goal Progress</div>
+              <div className="mb-3">
+                <div className="text-xs font-semibold text-foreground">Average Scores</div>
+                <div className="text-[11px] text-muted-foreground mt-0.5">
+                  Mean score per metric over the selected period (out of 100)
+                </div>
+              </div>
               <div className="space-y-3">
                 {displayMetrics.map((metric) => {
                   const stats = getMetricStats(metric.name);
-                  const goal = 80;
-                  const progress = (stats.avg / goal) * 100;
-                  
+                  const pct = Math.min(100, stats.avg);
+
                   return (
                     <div key={metric.name} className="space-y-1.5">
                       <div className="flex justify-between text-xs">
@@ -613,15 +617,15 @@ export default function TrendsEnhanced() {
                           <div className="w-2 h-2 rounded-full" style={{ backgroundColor: metric.color }} />
                           <span className="font-medium text-foreground">{metric.name}</span>
                         </div>
-                        <span className="text-muted-foreground">{stats.avg.toFixed(0)}/80</span>
+                        <span className="font-semibold text-foreground">
+                          {stats.avg.toFixed(0)}
+                          <span className="text-muted-foreground font-normal">/100</span>
+                        </span>
                       </div>
                       <div className="w-full bg-muted rounded-full h-1.5">
                         <div
                           className="h-1.5 rounded-full transition-all duration-500"
-                          style={{
-                            width: `${Math.min(100, progress)}%`,
-                            backgroundColor: metric.color
-                          }}
+                          style={{ width: `${pct}%`, backgroundColor: metric.color }}
                         />
                       </div>
                     </div>
