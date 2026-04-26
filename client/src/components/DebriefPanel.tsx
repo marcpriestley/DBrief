@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { haptic } from "@/lib/haptics";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { MessageCircle, Send, CheckCircle, Flag, Loader2, RotateCcw, Mic, MicOff, ArrowRight, Volume2, VolumeX, Square, ChevronDown, Trash2, Keyboard, BookOpen, X } from "lucide-react";
+import { MessageCircle, Send, CheckCircle, Flag, Loader2, RotateCcw, Mic, MicOff, ArrowRight, Volume2, VolumeX, Square, ChevronDown, Trash2, Keyboard, BookOpen, X, Paperclip, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiRequest } from "@/lib/queryClient";
@@ -18,7 +18,16 @@ interface DebriefMessage {
   debriefId: number;
   role: string;
   content: string;
+  attachmentUrl?: string | null;
+  attachmentType?: string | null;
   createdAt: string;
+}
+
+interface PendingAttachment {
+  objectPath: string;
+  type: "image" | "document";
+  name: string;
+  previewUrl?: string;
 }
 
 interface Debrief {
@@ -437,6 +446,9 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const [showQuickLog, setShowQuickLog] = useState(false);
   const [quickLogText, setQuickLogText] = useState("");
   const [quickLogMode, setQuickLogMode] = useState<'voice' | 'keyboard'>('voice');
+  const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const toggleSession = (id: number) => setExpandedSessions(prev => {
     const s = new Set(prev);
     s.has(id) ? s.delete(id) : s.add(id);
@@ -689,8 +701,9 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     },
   });
 
-  const sendMessage = async (text: string) => {
-    if (!text.trim() || !debrief || isStreaming) return;
+  const sendMessage = async (text: string, attachment?: PendingAttachment) => {
+    if (!text.trim() && !attachment) return;
+    if (!debrief || isStreaming) return;
 
     setUserInput("");
     // Dismiss keyboard, then scroll so the debrief card's top sits just below the sticky header.
@@ -723,6 +736,8 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
       debriefId: debrief.id,
       role: "user",
       content: text.trim(),
+      attachmentUrl: attachment?.previewUrl ?? attachment?.objectPath ?? null,
+      attachmentType: attachment?.type ?? null,
       createdAt: new Date().toISOString(),
     };
 
@@ -741,7 +756,10 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ content: text.trim() }),
+        body: JSON.stringify({
+          content: text.trim(),
+          ...(attachment ? { attachmentUrl: attachment.objectPath, attachmentType: attachment.type } : {}),
+        }),
       });
 
       if (!response.ok) throw new Error("Failed to send");
@@ -847,14 +865,16 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
 
   const handleSend = () => {
     const textToSend = userInput.trim();
-    if (!textToSend) return;
+    if (!textToSend && !pendingAttachment) return;
     // Auto-stop mic before sending so the recording never blocks the next state
     if (voice.isListening) voice.stop();
     haptic("medium");
     // Warm the AudioContext during this user gesture so auto-speak works after streaming
     warmAudioCtx();
     if (showCheckpoint) setContinuedPastCheckpoint(true);
-    sendMessage(textToSend);
+    const attachment = pendingAttachment;
+    setPendingAttachment(null);
+    sendMessage(textToSend, attachment ?? undefined);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -868,6 +888,35 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     const el = e.currentTarget;
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const isImage = file.type.startsWith("image/");
+    const type: "image" | "document" = isImage ? "image" : "document";
+    setIsUploading(true);
+    try {
+      const urlRes = await apiRequest("POST", "/api/uploads/request-url", {
+        name: file.name,
+        size: file.size,
+        contentType: file.type,
+      });
+      const { uploadURL, objectPath } = await urlRes.json();
+      await fetch(uploadURL, {
+        method: "PUT",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      let previewUrl: string | undefined;
+      if (isImage) previewUrl = URL.createObjectURL(file);
+      setPendingAttachment({ objectPath, type, name: file.name, previewUrl });
+    } catch {
+      toast({ title: "Upload failed", description: "Couldn't attach the file. Please try again.", variant: "destructive" });
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   };
 
   const micLastToggleRef = useRef(0);
@@ -1780,13 +1829,33 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                         longPressTimerRef.current = null;
                       }
                     }}
-                    className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed select-none transition-opacity cursor-default ${
+                    className={`max-w-[85%] rounded-2xl text-sm leading-relaxed select-none transition-opacity cursor-default overflow-hidden ${
                       isUser
                         ? "bg-primary text-primary-foreground rounded-br-md"
                         : "bg-muted text-foreground rounded-bl-md"
-                    } ${isSelected ? "opacity-70" : ""}`}
+                    } ${isSelected ? "opacity-70" : ""} ${msg.attachmentUrl ? "p-0" : "px-4 py-2.5"}`}
                   >
-                    {msg.content}
+                    {msg.attachmentUrl && msg.attachmentType === "image" && (
+                      <img
+                        src={msg.attachmentUrl.startsWith("/objects/") ? msg.attachmentUrl : msg.attachmentUrl}
+                        alt="attachment"
+                        className="w-full max-w-[240px] rounded-2xl object-cover"
+                        style={{ maxHeight: 200 }}
+                      />
+                    )}
+                    {msg.attachmentUrl && msg.attachmentType === "document" && (
+                      <div className={`flex items-center gap-2 px-3 py-2 ${msg.content ? "border-b border-white/10" : ""}`}>
+                        <FileText className="h-4 w-4 shrink-0 opacity-80" />
+                        <span className="text-xs truncate max-w-[180px] opacity-90">
+                          {msg.attachmentUrl.split("/").pop() || "Document"}
+                        </span>
+                      </div>
+                    )}
+                    {msg.content && (
+                      <div className={msg.attachmentUrl ? "px-4 py-2.5" : ""}>
+                        {msg.content}
+                      </div>
+                    )}
                   </div>
 
                   {/* Timestamp + delete controls */}
@@ -2109,27 +2178,78 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
 
               {/* Text input row — only shown in keyboard mode (or when voice unsupported) */}
               {(textMode || !voice.isSupported) && (
-                <div className="flex items-end gap-2 bg-muted/50 rounded-xl border border-border/50 p-2">
-                  <textarea
-                    ref={inputRef}
-                    rows={1}
-                    value={displayInput}
-                    onChange={(e) => setUserInput(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    onInput={handleTextareaInput}
-                    placeholder="Type your message…"
-                    className="flex-1 min-w-0 bg-transparent border-0 outline-none text-sm placeholder:text-muted-foreground/60 text-foreground p-1 resize-none overflow-hidden leading-5"
-                    style={{ height: "20px" }}
-                    disabled={isStreaming}
-                  />
-                  <Button
-                    size="icon"
-                    onClick={handleSend}
-                    disabled={!userInput.trim() || isStreaming}
-                    className="h-8 w-8 rounded-lg shrink-0"
-                  >
-                    <Send className="h-3.5 w-3.5" />
-                  </Button>
+                <div className="flex flex-col gap-1.5 bg-muted/50 rounded-xl border border-border/50 p-2">
+                  {/* Attachment preview */}
+                  {pendingAttachment && (
+                    <div className="flex items-center gap-2 px-1">
+                      {pendingAttachment.type === "image" && pendingAttachment.previewUrl ? (
+                        <div className="relative">
+                          <img
+                            src={pendingAttachment.previewUrl}
+                            alt="attachment preview"
+                            className="h-16 w-16 rounded-lg object-cover border border-border/50"
+                          />
+                          <button
+                            onClick={() => setPendingAttachment(null)}
+                            className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-background border border-border flex items-center justify-center"
+                          >
+                            <X className="h-2.5 w-2.5 text-muted-foreground" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="relative flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-background border border-border/60">
+                          <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          <span className="text-xs text-foreground truncate max-w-[160px]">{pendingAttachment.name}</span>
+                          <button
+                            onClick={() => setPendingAttachment(null)}
+                            className="ml-1 text-muted-foreground hover:text-foreground"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <div className="flex items-end gap-2">
+                    {/* Hidden file input */}
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*,application/pdf,.doc,.docx,.txt,.csv"
+                      className="hidden"
+                      onChange={handleFileSelect}
+                    />
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isStreaming || isUploading}
+                      className="shrink-0 h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-40"
+                    >
+                      {isUploading
+                        ? <Loader2 className="h-4 w-4 animate-spin" />
+                        : <Paperclip className="h-4 w-4" />
+                      }
+                    </button>
+                    <textarea
+                      ref={inputRef}
+                      rows={1}
+                      value={displayInput}
+                      onChange={(e) => setUserInput(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      onInput={handleTextareaInput}
+                      placeholder="Type your message…"
+                      className="flex-1 min-w-0 bg-transparent border-0 outline-none text-sm placeholder:text-muted-foreground/60 text-foreground p-1 resize-none overflow-hidden leading-5"
+                      style={{ height: "20px" }}
+                      disabled={isStreaming}
+                    />
+                    <Button
+                      size="icon"
+                      onClick={handleSend}
+                      disabled={(!userInput.trim() && !pendingAttachment) || isStreaming || isUploading}
+                      className="h-8 w-8 rounded-lg shrink-0"
+                    >
+                      <Send className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </div>
               )}
             </>

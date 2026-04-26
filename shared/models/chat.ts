@@ -31,6 +31,8 @@ export const debriefMessages = pgTable("debrief_messages", {
   debriefId: integer("debrief_id").notNull().references(() => debriefs.id, { onDelete: "cascade" }),
   role: text("role").notNull(),
   content: text("content").notNull(),
+  attachmentUrl: text("attachment_url"),
+  attachmentType: text("attachment_type"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 

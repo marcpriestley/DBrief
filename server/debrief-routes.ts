@@ -496,7 +496,7 @@ export function registerDebriefRoutes(app: Express): void {
 
     try {
       const debriefId = parseInt(req.params.debriefId);
-      const { content } = req.body;
+      const { content, attachmentUrl, attachmentType } = req.body;
 
       const [debrief] = await db.select().from(debriefs)
         .where(and(eq(debriefs.id, debriefId), eq(debriefs.userId, userId)));
@@ -511,7 +511,8 @@ export function registerDebriefRoutes(app: Express): void {
       await db.insert(debriefMessages).values({
         debriefId,
         role: "user",
-        content: encrypt(content),
+        content: encrypt(content || ""),
+        ...(attachmentUrl ? { attachmentUrl, attachmentType: attachmentType || "image" } : {}),
       });
 
       const allMessages = await db.select().from(debriefMessages)
