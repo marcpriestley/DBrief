@@ -445,16 +445,10 @@ export default function SquadPage() {
     <AppLayout>
       <div className="max-w-2xl mx-auto px-4 pb-24 pt-4 space-y-5">
 
-        {/* Header */}
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-xl font-black uppercase tracking-tight text-foreground">Team</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">Accountability partners</p>
-          </div>
-        </div>
-
-        {/* Tab bar */}
-        <div className="flex gap-1 p-1 bg-muted rounded-xl">
+        {/* Sticky tab bar — always visible at the top */}
+        <div className="sticky top-0 z-20 -mx-4 px-4 pb-2 pt-1 bg-background/95 backdrop-blur-sm">
+          <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-muted-foreground mb-2">Team</p>
+          <div className="flex gap-1 p-1 bg-muted rounded-xl">
           {[
             { key: "crew" as const, label: "Crew", icon: <Users className="h-3.5 w-3.5" /> },
             { key: "challenges" as const, label: "Challenges", icon: <Swords className="h-3.5 w-3.5" /> },
@@ -488,6 +482,7 @@ export default function SquadPage() {
               </button>
             );
           })}
+          </div>
         </div>
 
         {/* ── CREW TAB ──────────────────────────────────────────────────────── */}

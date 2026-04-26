@@ -92,9 +92,12 @@ function DashboardContent() {
             </div>
           ) : (
             <>
-              <AttentionRing active={needsDebrief}>
-                <DebriefPanel selectedDate={selectedDate} />
-              </AttentionRing>
+              <div>
+                <h2 className="text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground px-1 mb-2">Debrief</h2>
+                <AttentionRing active={needsDebrief}>
+                  <DebriefPanel selectedDate={selectedDate} />
+                </AttentionRing>
+              </div>
 
               <AttentionRing active={needsGoals}>
                 <div className="bg-card rounded-2xl border border-border/50 shadow-sm p-5">
