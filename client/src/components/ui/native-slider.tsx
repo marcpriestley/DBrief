@@ -14,17 +14,14 @@ interface NativeSliderProps {
 }
 
 /**
- * Touch-event slider for iOS WKWebView.
+ * PERMANENT FIX: uses a native <input type="range"> element.
  *
- * Implementation notes:
- * - Uses React onTouchStart/onTouchMove/onTouchEnd props as the primary mechanism.
- *   React's synthetic events work reliably in WKWebView because Capacitor is built
- *   to integrate with React's event delegation model.
- * - Adds document-level native listeners for touchmove/touchend so the drag continues
- *   even when the finger leaves the slider bounds.
- * - Avoids setPointerCapture (breaks in WKWebView) and native-only addEventListener
- *   on the element (competes with Capacitor's gesture recognizers).
- * - touch-action: none on the root div prevents native scroll/zoom on this element.
+ * iOS WKWebView handles range inputs at the OS/native layer, completely
+ * bypassing JavaScript touch event competition with Capacitor's gesture
+ * recognizers. This is more reliable than any custom touch handler approach.
+ *
+ * The track fill is implemented as a CSS linear-gradient on the element
+ * background, updated reactively with value changes.
  */
 export default function NativeSlider({
   value,
@@ -36,99 +33,40 @@ export default function NativeSlider({
   color,
   className = "",
 }: NativeSliderProps) {
-  const trackRef = useRef<HTMLDivElement>(null);
-  const isDragging = useRef(false);
-  const onChangeRef = useRef(onChange);
-  const onCommitRef = useRef(onCommit);
-  onChangeRef.current = onChange;
-  onCommitRef.current = onCommit;
   const lastHapticVal = useRef<number | null>(null);
-  const lastVal = useRef(value);
-  lastVal.current = value;
-
+  const fillColor = color ?? "hsl(var(--primary))";
   const range = max - min;
   const pct = range === 0 ? 0 : Math.max(0, Math.min(100, ((value - min) / range) * 100));
-  const fillColor = color ?? "hsl(var(--primary))";
 
-  const calcVal = (clientX: number): number => {
-    const el = trackRef.current;
-    if (!el) return lastVal.current;
-    const rect = el.getBoundingClientRect();
-    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    const raw = min + ratio * range;
-    return Math.max(min, Math.min(max, Math.round(raw / step) * step));
-  };
-
-  const emit = (newVal: number) => {
-    lastVal.current = newVal;
-    onChangeRef.current(newVal);
-    if (lastHapticVal.current === null || Math.abs(newVal - lastHapticVal.current) >= step) {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = Number(e.target.value);
+    onChange(v);
+    if (lastHapticVal.current === null || Math.abs(v - lastHapticVal.current) >= step * 5) {
       haptic("light");
-      lastHapticVal.current = newVal;
+      lastHapticVal.current = v;
     }
   };
 
-  const commit = () => { onCommitRef.current?.(lastVal.current); };
-
-  // — React touch handlers (primary path) —
-  const handleTouchStart = (e: React.TouchEvent) => {
-    e.stopPropagation();
-    isDragging.current = true;
+  const handleCommit = (e: React.SyntheticEvent<HTMLInputElement>) => {
     lastHapticVal.current = null;
-    if (e.touches[0]) emit(calcVal(e.touches[0].clientX));
-
-    // Add document-level listeners so drag continues outside the element bounds
-    const onMove = (ev: TouchEvent) => {
-      if (!isDragging.current) return;
-      ev.preventDefault();
-      if (ev.touches[0]) emit(calcVal(ev.touches[0].clientX));
-    };
-    const onEnd = () => {
-      isDragging.current = false;
-      commit();
-      document.removeEventListener("touchmove", onMove, { capture: true });
-      document.removeEventListener("touchend", onEnd);
-      document.removeEventListener("touchcancel", onEnd);
-    };
-    document.addEventListener("touchmove", onMove, { passive: false, capture: true });
-    document.addEventListener("touchend", onEnd);
-    document.addEventListener("touchcancel", onEnd);
-  };
-
-  // — Mouse handlers (desktop browser) —
-  const handleMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault();
-    isDragging.current = true;
-    lastHapticVal.current = null;
-    emit(calcVal(e.clientX));
-    const onMove = (ev: MouseEvent) => { if (isDragging.current) emit(calcVal(ev.clientX)); };
-    const onUp = () => {
-      isDragging.current = false;
-      commit();
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-    };
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
+    onCommit?.(Number((e.target as HTMLInputElement).value));
   };
 
   return (
-    <div
-      ref={trackRef}
-      className={`relative w-full flex items-center cursor-pointer select-none ${className}`}
-      style={{ touchAction: "none", userSelect: "none", height: 44 } as React.CSSProperties}
-      onTouchStart={handleTouchStart}
-      onMouseDown={handleMouseDown}
-    >
-      <div className="absolute inset-x-0 h-2 rounded-full bg-muted" />
-      <div
-        className="absolute h-2 rounded-full transition-none"
-        style={{ width: `${pct}%`, backgroundColor: fillColor }}
-      />
-      <div
-        className="absolute w-7 h-7 rounded-full shadow-md border-2 border-background"
-        style={{ left: `calc(${pct}% - 14px)`, backgroundColor: fillColor }}
-      />
-    </div>
+    <input
+      type="range"
+      min={min}
+      max={max}
+      step={step}
+      value={value}
+      onChange={handleChange}
+      onMouseUp={handleCommit}
+      onTouchEnd={handleCommit}
+      className={`native-range ${className}`}
+      style={{
+        background: `linear-gradient(to right, ${fillColor} ${pct}%, hsl(var(--muted)) ${pct}%)`,
+        "--thumb-color": fillColor,
+      } as React.CSSProperties}
+    />
   );
 }

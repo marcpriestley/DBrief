@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { haptic } from "@/lib/haptics";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { MessageCircle, Send, CheckCircle, Flag, Loader2, RotateCcw, Mic, MicOff, ArrowRight, Volume2, VolumeX, Square, ChevronDown, Trash2, Keyboard } from "lucide-react";
+import { MessageCircle, Send, CheckCircle, Flag, Loader2, RotateCcw, Mic, MicOff, ArrowRight, Volume2, VolumeX, Square, ChevronDown, Trash2, Keyboard, BookOpen, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiRequest } from "@/lib/queryClient";
@@ -434,6 +434,8 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const [actionNotifications, setActionNotifications] = useState<Array<{ type: string; message: string; success: boolean; id: number }>>([]);
   const [showAllMessages, setShowAllMessages] = useState(false);
   const [expandedSessions, setExpandedSessions] = useState<Set<number>>(new Set());
+  const [showQuickLog, setShowQuickLog] = useState(false);
+  const [quickLogText, setQuickLogText] = useState("");
   const toggleSession = (id: number) => setExpandedSessions(prev => {
     const s = new Set(prev);
     s.has(id) ? s.delete(id) : s.add(id);
@@ -455,6 +457,23 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     onError: () => {
       haptic("error");
       setSelectedMsgId(null);
+    },
+  });
+
+  const quickLogMutation = useMutation({
+    mutationFn: ({ content, date }: { content: string; date: string }) =>
+      apiRequest("POST", "/api/journal-entries", { content, date }).then(r => r.json()),
+    onSuccess: () => {
+      haptic("success");
+      setShowQuickLog(false);
+      setQuickLogText("");
+      queryClient.invalidateQueries({ queryKey: ["/api/journal-entries"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/journal-entries", selectedDate] });
+      toast({ title: "Moment logged", description: "Your entry has been saved." });
+    },
+    onError: () => {
+      haptic("error");
+      toast({ title: "Failed to save", description: "Please try again." });
     },
   });
 
@@ -1320,15 +1339,57 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
             )}
           </Button>
 
-          {/* Secondary: self-led */}
-          <button
-            onClick={() => { haptic("light"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: false, userLed: true }); }}
-            disabled={startDebriefMutation.isPending}
-            className="w-full text-sm text-muted-foreground/70 hover:text-muted-foreground transition-colors text-center pt-0.5"
-          >
-            I'll open — free-form entry
-          </button>
+          {/* Secondary options row */}
+          <div className="flex items-center gap-3 pt-0.5">
+            <button
+              onClick={() => { haptic("light"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: false, userLed: true }); }}
+              disabled={startDebriefMutation.isPending}
+              className="flex-1 text-sm text-muted-foreground/70 hover:text-muted-foreground transition-colors text-center"
+            >
+              Write it myself
+            </button>
+            <div className="w-px h-4 bg-border/50" />
+            <button
+              onClick={() => { haptic("light"); setShowQuickLog(true); }}
+              className="flex-1 flex items-center justify-center gap-1.5 text-sm text-muted-foreground/70 hover:text-muted-foreground transition-colors"
+            >
+              <BookOpen className="h-3.5 w-3.5" />
+              Log a moment
+            </button>
+          </div>
         </div>
+
+        {/* Quick-log overlay — fixed so DOM parent position doesn't matter */}
+        {showQuickLog && (
+          <div className="fixed inset-0 z-[300] flex items-end justify-center" style={{ touchAction: 'none' }}>
+            <div className="absolute inset-0 bg-black/60" onClick={() => { haptic("light"); setShowQuickLog(false); }} />
+            <div className="relative w-full max-w-lg rounded-t-2xl bg-background border-t border-border/50 p-5 space-y-4"
+              style={{ paddingBottom: 'calc(1.25rem + env(safe-area-inset-bottom))' }}>
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-foreground">Log a moment</h3>
+                <button onClick={() => { haptic("light"); setShowQuickLog(false); }} className="text-muted-foreground hover:text-foreground p-1">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <textarea
+                autoFocus
+                rows={5}
+                value={quickLogText}
+                onChange={e => setQuickLogText(e.target.value)}
+                placeholder="How's it going? What's on your mind right now…"
+                className="w-full bg-muted/50 border border-border/50 rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 outline-none resize-none leading-relaxed"
+              />
+              <Button
+                className="w-full h-11 font-semibold rounded-xl"
+                style={{ background: 'hsl(38,92%,50%)', color: '#0a0a0a' }}
+                disabled={!quickLogText.trim() || quickLogMutation.isPending}
+                onClick={() => { haptic("medium"); quickLogMutation.mutate({ content: quickLogText.trim(), date: selectedDate }); }}
+              >
+                {quickLogMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save entry"}
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -1337,45 +1398,99 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   if (!debrief && completedDebriefs.length > 0) {
     return (
       <div className="space-y-3">
-        {/* New session hero — compact version since a session already exists */}
+        {/* New session hero — full prominence even after a session exists */}
         <div
           className="rounded-2xl overflow-hidden relative"
           style={{
             background: 'linear-gradient(145deg, hsl(0,0%,11%) 0%, hsl(0,0%,9%) 60%, hsl(38,92%,6%) 100%)',
-            border: '1px solid rgba(245,158,11,0.25)',
-            boxShadow: '0 0 0 1px rgba(245,158,11,0.06), 0 4px 20px rgba(245,158,11,0.07)',
+            border: '1px solid rgba(245,158,11,0.35)',
+            boxShadow: '0 0 0 1px rgba(245,158,11,0.08), 0 8px 32px rgba(245,158,11,0.10)',
           }}
         >
-          <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ background: 'linear-gradient(90deg, transparent, rgba(245,158,11,0.5) 30%, rgba(245,158,11,0.7) 50%, rgba(245,158,11,0.5) 70%, transparent)' }} />
-          <div className="px-5 pt-4 pb-5 flex items-center gap-4">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5 mb-0.5">
+          <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ background: 'linear-gradient(90deg, transparent, rgba(245,158,11,0.7) 30%, rgba(245,158,11,0.9) 50%, rgba(245,158,11,0.7) 70%, transparent)' }} />
+          <div className="px-5 pt-5 pb-6 space-y-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
                 <CheckCircle className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-                <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-emerald-400/90">Session logged</span>
+                <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-emerald-400/90">Session logged</span>
               </div>
-              <p className="text-sm text-muted-foreground/80">
-                {isToday ? "Another round?" : `Add another reflection for ${dateLabel}.`}
+              <span className="text-[11px] text-muted-foreground/60 font-medium">Ready for more</span>
+            </div>
+            <div>
+              <h2 className="text-[22px] font-black text-foreground leading-tight tracking-tight">
+                {isToday ? "Go again?" : `Another reflection for ${dateLabel}.`}
+              </h2>
+              <p className="text-sm text-muted-foreground/80 mt-1.5 leading-relaxed">
+                {isToday
+                  ? "Start a new session with your AI engineer, or just log a quick moment."
+                  : "Add another reflection for this day."}
               </p>
             </div>
-            <div className="flex flex-col items-end gap-1.5 shrink-0">
-              <Button
-                onClick={() => { haptic("medium"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: true }); }}
-                disabled={startDebriefMutation.isPending}
-                size="sm"
-                className="h-9 px-4 font-bold text-sm rounded-lg"
-                style={{ background: 'hsl(38,92%,50%)', color: '#0a0a0a' }}
-              >
-                {startDebriefMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "New session"}
-              </Button>
+            <Button
+              onClick={() => { haptic("medium"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: true }); }}
+              disabled={startDebriefMutation.isPending}
+              className="w-full h-12 text-base font-bold rounded-xl"
+              style={{ background: 'hsl(38,92%,50%)', color: '#0a0a0a' }}
+            >
+              {startDebriefMutation.isPending ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <>
+                  <MessageCircle className="h-5 w-5 mr-2.5" />
+                  New Session
+                </>
+              )}
+            </Button>
+            <div className="flex items-center gap-3 pt-0.5">
               <button
                 onClick={() => { haptic("light"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: true, userLed: true }); }}
                 disabled={startDebriefMutation.isPending}
-                className="text-[11px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+                className="flex-1 text-sm text-muted-foreground/70 hover:text-muted-foreground transition-colors text-center"
               >
-                Free-form
+                Write it myself
+              </button>
+              <div className="w-px h-4 bg-border/50" />
+              <button
+                onClick={() => { haptic("light"); setShowQuickLog(true); }}
+                className="flex-1 flex items-center justify-center gap-1.5 text-sm text-muted-foreground/70 hover:text-muted-foreground transition-colors"
+              >
+                <BookOpen className="h-3.5 w-3.5" />
+                Log a moment
               </button>
             </div>
           </div>
+
+          {/* Quick-log overlay */}
+          {showQuickLog && (
+            <div className="fixed inset-0 z-[300] flex items-end justify-center" style={{ touchAction: 'none' }}>
+              <div className="absolute inset-0 bg-black/60" onClick={() => { haptic("light"); setShowQuickLog(false); }} />
+              <div className="relative w-full max-w-lg rounded-t-2xl bg-background border-t border-border/50 p-5 space-y-4"
+                style={{ paddingBottom: 'calc(1.25rem + env(safe-area-inset-bottom))' }}>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-foreground">Log a moment</h3>
+                  <button onClick={() => { haptic("light"); setShowQuickLog(false); }} className="text-muted-foreground hover:text-foreground p-1">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <textarea
+                  autoFocus
+                  rows={5}
+                  value={quickLogText}
+                  onChange={e => setQuickLogText(e.target.value)}
+                  placeholder="How's it going? What's on your mind right now…"
+                  className="w-full bg-muted/50 border border-border/50 rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 outline-none resize-none leading-relaxed"
+                />
+                <Button
+                  className="w-full h-11 font-semibold rounded-xl"
+                  style={{ background: 'hsl(38,92%,50%)', color: '#0a0a0a' }}
+                  disabled={!quickLogText.trim() || quickLogMutation.isPending}
+                  onClick={() => { haptic("medium"); quickLogMutation.mutate({ content: quickLogText.trim(), date: selectedDate }); }}
+                >
+                  {quickLogMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save entry"}
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Past sessions — collapsed below the CTA */}
@@ -1562,7 +1677,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
           </div>
         </div>
 
-        <div ref={chatContainerRef} className="px-5 py-4 space-y-3 overflow-y-auto overscroll-y-contain" style={{ maxHeight: 'calc(var(--visual-height, 100dvh) * 0.42)', minHeight: '80px' }}>
+        <div ref={chatContainerRef} className="flex-1 min-h-0 px-5 py-4 space-y-3 overflow-y-auto overscroll-y-contain">
           {debrief.messages.length === 0 && !isStreaming && (
             <p className="text-sm text-muted-foreground text-center py-4">
               Your session, your opening. What's on your mind?
