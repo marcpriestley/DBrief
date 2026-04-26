@@ -924,6 +924,38 @@ export function registerDebriefRoutes(app: Express): void {
     }
   });
 
+  // ── Log a moment — saves a one-way entry (no AI response) as a debrief session ───────────────────
+  app.post("/api/debriefs/log-moment", async (req: Request, res: Response) => {
+    const userId = requireAuth(req, res);
+    if (!userId) return;
+
+    try {
+      const { content, date, attachmentUrl, attachmentType } = req.body;
+      if (!content?.trim() && !attachmentUrl) {
+        return res.status(400).json({ error: "Content or attachment required" });
+      }
+      if (!date) return res.status(400).json({ error: "Date required" });
+
+      const [newDebrief] = await db.insert(debriefs).values({ userId, date }).returning();
+
+      await db.insert(debriefMessages).values({
+        debriefId: newDebrief.id,
+        role: "user",
+        content: encrypt(content?.trim() || ""),
+        ...(attachmentUrl ? { attachmentUrl, attachmentType: attachmentType || "image" } : {}),
+      });
+
+      const msgs = await db.select().from(debriefMessages)
+        .where(eq(debriefMessages.debriefId, newDebrief.id))
+        .orderBy(debriefMessages.createdAt);
+
+      res.json({ ...newDebrief, messages: msgs.map(m => ({ ...m, content: decrypt(m.content) })) });
+    } catch (error) {
+      console.error("Error logging moment:", error);
+      res.status(500).json({ error: "Failed to log moment" });
+    }
+  });
+
   app.post("/api/debriefs/:debriefId/complete", async (req: Request, res: Response) => {
     const userId = requireAuth(req, res);
     if (!userId) return;

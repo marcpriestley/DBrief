@@ -483,26 +483,21 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   });
 
   const quickLogMutation = useMutation({
-    mutationFn: async ({ content, date, photo }: { content: string; date: string; photo?: QuickLogPhoto | null }) => {
-      const entry = await apiRequest("POST", "/api/journal-entries", { content: content || " ", date }).then(r => r.json());
-      if (photo && entry?.id) {
-        await apiRequest("POST", "/api/journal-attachments", {
-          journalEntryId: entry.id,
-          objectPath: photo.objectPath,
-          filename: photo.filename,
-          contentType: photo.contentType,
-          size: photo.size,
-        });
-      }
-      return entry;
-    },
+    mutationFn: async ({ content, date, photo }: { content: string; date: string; photo?: QuickLogPhoto | null }) =>
+      apiRequest("POST", "/api/debriefs/log-moment", {
+        content: content || "",
+        date,
+        ...(photo ? { attachmentUrl: photo.objectPath, attachmentType: "image" } : {}),
+      }).then(r => r.json()),
     onSuccess: () => {
       haptic("success");
       setPendingQuickLogPhoto(null);
       setShowQuickLog(false);
       setQuickLogText("");
-      queryClient.invalidateQueries({ queryKey: ["/api/journal-entries"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/journal-entries", selectedDate] });
+      queryClient.invalidateQueries({ queryKey: ["/api/debriefs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/debriefs", selectedDate] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dates-with-data"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/streak"] });
       toast({ title: "Moment logged", description: "Your entry has been saved." });
     },
     onError: () => {
@@ -576,10 +571,10 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const safeDebriefs: Debrief[] = Array.isArray(allDebriefs)
     ? allDebriefs
     : allDebriefs ? [allDebriefs as unknown as Debrief] : [];
-  // Active = the one in-progress debrief for this day (if any)
-  const debrief = safeDebriefs.find(d => !d.isComplete) ?? null;
-  // All completed debriefs, oldest first
-  const completedDebriefs = safeDebriefs.filter(d => d.isComplete);
+  // Active = an in-progress debrief that has at least one AI response (moments never qualify)
+  const debrief = safeDebriefs.find(d => !d.isComplete && d.messages.some((m: any) => m.role === "assistant")) ?? null;
+  // Completed list = fully finished sessions OR moments (no AI response — they're always "done")
+  const completedDebriefs = safeDebriefs.filter(d => d.isComplete || !d.messages.some((m: any) => m.role === "assistant"));
 
   const userMessageCount = debrief?.messages?.filter(m => m.role === "user").length || 0;
   const assistantMessageCount = debrief?.messages?.filter(m => m.role === "assistant").length || 0;
@@ -1454,7 +1449,10 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                   haptic("light"); voice.stop();
                 } else {
                   haptic("medium");
-                  voice.start((text) => setQuickLogText(prev => prev + (prev ? ' ' : '') + text));
+                  voice.start(
+                    (text) => setQuickLogText(prev => prev + (prev ? ' ' : '') + text),
+                    { noSilenceStop: true },
+                  );
                 }
               }}
               className={`w-full h-12 rounded-xl flex items-center justify-center gap-2 text-sm font-medium transition-all border ${
@@ -1685,63 +1683,118 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
         <Card className="border border-border/30 shadow-sm bg-card/70 overflow-hidden">
           <CardContent className="p-0">
             <div className="divide-y divide-border/30">
-              {completedDebriefs.map((d, idx) => {
-                const isExpanded = expandedSessions.has(d.id);
-                const sessionText = d.messages.filter(m => m.role === "assistant").map(m => m.content).join(" ");
-                return (
-                  <div key={d.id} className="px-5 py-3">
-                    <button
-                      onClick={() => { haptic("select"); toggleSession(d.id); }}
-                      className="w-full flex items-center gap-2 text-left"
-                    >
-                      <CheckCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground shrink-0">
-                        Session {idx + 1}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground/60 shrink-0">{formatMsgTime(d.createdAt)}</span>
-                      {d.summary && !isExpanded && (
-                        <span className="text-xs text-muted-foreground italic truncate flex-1 ml-1">{d.summary}</span>
-                      )}
-                      <span className="ml-auto shrink-0 flex items-center gap-1 text-[10px] text-muted-foreground">
-                        {isExpanded ? "Hide" : "Show"}
-                        <ChevronDown className={`h-3 w-3 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
-                      </span>
-                    </button>
-                    {isExpanded && (
-                      <div className="mt-3 space-y-2">
-                        {d.summary && (
-                          <p className="text-xs text-muted-foreground italic leading-relaxed pb-2 border-b border-border/30">{d.summary}</p>
-                        )}
-                        <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                          {d.messages.map((msg) => (
-                            <div key={msg.id} className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
-                              <div className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${
-                                msg.role === "user"
-                                  ? "bg-primary text-primary-foreground rounded-br-md"
-                                  : "bg-muted text-foreground rounded-bl-md"
-                              }`}>
-                                {msg.content}
-                              </div>
-                              {msg.createdAt && (
-                                <span className="text-[10px] text-muted-foreground/60 mt-0.5 px-1">{formatMsgTime(msg.createdAt)}</span>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                        {tts.isSupported && sessionText && (
-                          <button
-                            onClick={() => tts.speaking ? tts.cancel() : tts.speakNow(sessionText)}
-                            className="flex items-center gap-1.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors pt-1"
-                          >
-                            {tts.speaking ? <Square className="h-3 w-3 fill-current" /> : <Volume2 className="h-3 w-3" />}
-                            {tts.speaking ? "Stop" : "Listen"}
-                          </button>
+              {(() => {
+                let sessionCount = 0;
+                return completedDebriefs.map((d) => {
+                  const isMoment = !d.messages.some((m: any) => m.role === "assistant");
+                  if (!isMoment) sessionCount++;
+                  const isExpanded = expandedSessions.has(d.id);
+                  const sessionText = d.messages.filter((m: any) => m.role === "assistant").map((m: any) => m.content).join(" ");
+                  const userMsg = d.messages.find((m: any) => m.role === "user");
+                  const momentText = userMsg?.content || "";
+                  const momentPhoto = userMsg?.attachmentUrl;
+
+                  if (isMoment) {
+                    return (
+                      <div key={d.id} className="px-5 py-3">
+                        <button
+                          onClick={() => { haptic("select"); toggleSession(d.id); }}
+                          className="w-full flex items-center gap-2 text-left"
+                        >
+                          <BookOpen className="h-3.5 w-3.5 text-primary/70 shrink-0" />
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-primary/70 shrink-0">Moment</span>
+                          <span className="text-[10px] text-muted-foreground/60 shrink-0">{formatMsgTime(d.createdAt)}</span>
+                          {momentText && !isExpanded && (
+                            <span className="text-xs text-muted-foreground truncate flex-1 ml-1">{momentText}</span>
+                          )}
+                          {momentPhoto && !isExpanded && (
+                            <Paperclip className="h-3 w-3 text-muted-foreground/50 shrink-0" />
+                          )}
+                          <span className="ml-auto shrink-0 flex items-center gap-1 text-[10px] text-muted-foreground">
+                            {isExpanded ? "Hide" : "Show"}
+                            <ChevronDown className={`h-3 w-3 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                          </span>
+                        </button>
+                        {isExpanded && (
+                          <div className="mt-3 space-y-3">
+                            {momentText && (
+                              <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{momentText}</p>
+                            )}
+                            {momentPhoto && (
+                              <img
+                                src={momentPhoto}
+                                alt="Attached photo"
+                                className="rounded-xl max-h-64 w-auto object-cover border border-border/30"
+                              />
+                            )}
+                          </div>
                         )}
                       </div>
-                    )}
-                  </div>
-                );
-              })}
+                    );
+                  }
+
+                  return (
+                    <div key={d.id} className="px-5 py-3">
+                      <button
+                        onClick={() => { haptic("select"); toggleSession(d.id); }}
+                        className="w-full flex items-center gap-2 text-left"
+                      >
+                        <CheckCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground shrink-0">
+                          Session {sessionCount}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground/60 shrink-0">{formatMsgTime(d.createdAt)}</span>
+                        {d.summary && !isExpanded && (
+                          <span className="text-xs text-muted-foreground italic truncate flex-1 ml-1">{d.summary}</span>
+                        )}
+                        <span className="ml-auto shrink-0 flex items-center gap-1 text-[10px] text-muted-foreground">
+                          {isExpanded ? "Hide" : "Show"}
+                          <ChevronDown className={`h-3 w-3 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                        </span>
+                      </button>
+                      {isExpanded && (
+                        <div className="mt-3 space-y-2">
+                          {d.summary && (
+                            <p className="text-xs text-muted-foreground italic leading-relaxed pb-2 border-b border-border/30">{d.summary}</p>
+                          )}
+                          <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                            {d.messages.map((msg: any) => (
+                              <div key={msg.id} className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
+                                <div className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${
+                                  msg.role === "user"
+                                    ? "bg-primary text-primary-foreground rounded-br-md"
+                                    : "bg-muted text-foreground rounded-bl-md"
+                                }`}>
+                                  {msg.content}
+                                </div>
+                                {msg.attachmentUrl && msg.attachmentType === "image" && (
+                                  <img
+                                    src={msg.attachmentUrl}
+                                    alt="Attached photo"
+                                    className="mt-1.5 rounded-xl max-h-48 w-auto object-cover border border-border/30"
+                                  />
+                                )}
+                                {msg.createdAt && (
+                                  <span className="text-[10px] text-muted-foreground/60 mt-0.5 px-1">{formatMsgTime(msg.createdAt)}</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                          {tts.isSupported && sessionText && (
+                            <button
+                              onClick={() => tts.speaking ? tts.cancel() : tts.speakNow(sessionText)}
+                              className="flex items-center gap-1.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors pt-1"
+                            >
+                              {tts.speaking ? <Square className="h-3 w-3 fill-current" /> : <Volume2 className="h-3 w-3" />}
+                              {tts.speaking ? "Stop" : "Listen"}
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
             </div>
           </CardContent>
         </Card>
@@ -2344,55 +2397,113 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
       </CardContent>
     </Card>
 
-      {/* Completed sessions from earlier — collapsible, below the active input */}
-      {completedDebriefs.map((d, idx) => {
-        const isExpanded = expandedSessions.has(d.id);
-        return (
-          <Card key={d.id} className="border border-border/30 shadow-sm bg-card/60 overflow-hidden">
-            <CardContent className="p-0">
-              <button
-                onClick={() => { haptic("select"); toggleSession(d.id); }}
-                className="w-full flex items-center gap-2 px-5 py-3 text-left"
-              >
-                <CheckCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-                <span className="text-xs font-medium text-muted-foreground shrink-0">
-                  Session {idx + 1} · {formatMsgTime(d.createdAt)}
-                </span>
-                {d.summary && !isExpanded && (
-                  <span className="text-xs text-muted-foreground italic truncate flex-1 ml-1">{d.summary}</span>
-                )}
-                <span className="ml-auto shrink-0 flex items-center gap-1 text-[10px] text-muted-foreground">
-                  {isExpanded ? "Hide" : "Show"}
-                  <ChevronDown className={`h-3 w-3 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
-                </span>
-              </button>
-              {isExpanded && (
-                <div className="px-5 pb-4 space-y-2 border-t border-border/30 pt-3">
-                  {d.summary && (
-                    <p className="text-xs text-muted-foreground italic leading-relaxed pb-2 border-b border-border/20">{d.summary}</p>
+      {/* Completed sessions / moments from earlier — collapsible, below the active input */}
+      {(() => {
+        let sessionCount = 0;
+        return completedDebriefs.map((d) => {
+          const isMoment = !d.messages.some((m: any) => m.role === "assistant");
+          if (!isMoment) sessionCount++;
+          const isExpanded = expandedSessions.has(d.id);
+          const userMsg = d.messages.find((m: any) => m.role === "user");
+          const momentText = userMsg?.content || "";
+          const momentPhoto = userMsg?.attachmentUrl;
+
+          if (isMoment) {
+            return (
+              <Card key={d.id} className="border border-border/30 shadow-sm bg-card/60 overflow-hidden">
+                <CardContent className="p-0">
+                  <button
+                    onClick={() => { haptic("select"); toggleSession(d.id); }}
+                    className="w-full flex items-center gap-2 px-5 py-3 text-left"
+                  >
+                    <BookOpen className="h-3.5 w-3.5 text-primary/70 shrink-0" />
+                    <span className="text-xs font-medium text-primary/70 shrink-0">
+                      Moment · {formatMsgTime(d.createdAt)}
+                    </span>
+                    {momentText && !isExpanded && (
+                      <span className="text-xs text-muted-foreground truncate flex-1 ml-1">{momentText}</span>
+                    )}
+                    {momentPhoto && !isExpanded && (
+                      <Paperclip className="h-3 w-3 text-muted-foreground/50 shrink-0" />
+                    )}
+                    <span className="ml-auto shrink-0 flex items-center gap-1 text-[10px] text-muted-foreground">
+                      {isExpanded ? "Hide" : "Show"}
+                      <ChevronDown className={`h-3 w-3 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                    </span>
+                  </button>
+                  {isExpanded && (
+                    <div className="px-5 pb-4 space-y-3 border-t border-border/30 pt-3">
+                      {momentText && (
+                        <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{momentText}</p>
+                      )}
+                      {momentPhoto && (
+                        <img
+                          src={momentPhoto}
+                          alt="Attached photo"
+                          className="rounded-xl max-h-64 w-auto object-cover border border-border/30"
+                        />
+                      )}
+                    </div>
                   )}
-                  <div className="space-y-2 max-h-[280px] overflow-y-auto">
-                    {d.messages.map((msg) => (
-                      <div key={msg.id} className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
-                        <div className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${
-                          msg.role === "user"
-                            ? "bg-primary text-primary-foreground rounded-br-md"
-                            : "bg-muted text-foreground rounded-bl-md"
-                        }`}>
-                          {msg.content}
+                </CardContent>
+              </Card>
+            );
+          }
+
+          return (
+            <Card key={d.id} className="border border-border/30 shadow-sm bg-card/60 overflow-hidden">
+              <CardContent className="p-0">
+                <button
+                  onClick={() => { haptic("select"); toggleSession(d.id); }}
+                  className="w-full flex items-center gap-2 px-5 py-3 text-left"
+                >
+                  <CheckCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                  <span className="text-xs font-medium text-muted-foreground shrink-0">
+                    Session {sessionCount} · {formatMsgTime(d.createdAt)}
+                  </span>
+                  {d.summary && !isExpanded && (
+                    <span className="text-xs text-muted-foreground italic truncate flex-1 ml-1">{d.summary}</span>
+                  )}
+                  <span className="ml-auto shrink-0 flex items-center gap-1 text-[10px] text-muted-foreground">
+                    {isExpanded ? "Hide" : "Show"}
+                    <ChevronDown className={`h-3 w-3 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                  </span>
+                </button>
+                {isExpanded && (
+                  <div className="px-5 pb-4 space-y-2 border-t border-border/30 pt-3">
+                    {d.summary && (
+                      <p className="text-xs text-muted-foreground italic leading-relaxed pb-2 border-b border-border/20">{d.summary}</p>
+                    )}
+                    <div className="space-y-2 max-h-[280px] overflow-y-auto">
+                      {d.messages.map((msg: any) => (
+                        <div key={msg.id} className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
+                          <div className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${
+                            msg.role === "user"
+                              ? "bg-primary text-primary-foreground rounded-br-md"
+                              : "bg-muted text-foreground rounded-bl-md"
+                          }`}>
+                            {msg.content}
+                          </div>
+                          {msg.attachmentUrl && msg.attachmentType === "image" && (
+                            <img
+                              src={msg.attachmentUrl}
+                              alt="Attached photo"
+                              className="mt-1.5 rounded-xl max-h-48 w-auto object-cover border border-border/30"
+                            />
+                          )}
+                          {msg.createdAt && (
+                            <span className="text-[10px] text-muted-foreground/60 mt-0.5 px-1">{formatMsgTime(msg.createdAt)}</span>
+                          )}
                         </div>
-                        {msg.createdAt && (
-                          <span className="text-[10px] text-muted-foreground/60 mt-0.5 px-1">{formatMsgTime(msg.createdAt)}</span>
-                        )}
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        );
-      })}
+                )}
+              </CardContent>
+            </Card>
+          );
+        });
+      })()}
     </div>
   );
 }

@@ -194,29 +194,31 @@ export default function JournalPanel({ selectedDate, onVoiceRecord }: JournalPan
             {attachments.length > 0 && (
               <div className="space-y-2">
                 <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Attachments</p>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-3">
                   {attachments.map((att) => {
-                    const Icon = getFileIcon(att.contentType);
                     const isImage = att.contentType.startsWith("image/");
                     return (
-                      <div key={att.id} className="group relative flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm">
+                      <div key={att.id} className="group relative">
                         {isImage ? (
-                          <a href={att.objectPath} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-gray-700 hover:text-primary">
-                            <Icon className="h-4 w-4 text-blue-500" />
-                            <span className="max-w-[120px] truncate">{att.filename}</span>
+                          <a href={att.objectPath} target="_blank" rel="noopener noreferrer">
+                            <img
+                              src={att.objectPath}
+                              alt={att.filename}
+                              className="h-24 w-24 rounded-lg object-cover border border-gray-200 hover:opacity-90 transition-opacity"
+                            />
                           </a>
                         ) : (
-                          <a href={att.objectPath} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-gray-700 hover:text-primary">
-                            <Icon className="h-4 w-4 text-gray-500" />
+                          <a href={att.objectPath} target="_blank" rel="noopener noreferrer"
+                            className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 hover:text-primary">
+                            <FileText className="h-4 w-4 text-gray-500 shrink-0" />
                             <span className="max-w-[120px] truncate">{att.filename}</span>
                           </a>
                         )}
-                        <span className="text-xs text-gray-400">{formatFileSize(att.size)}</span>
                         <button
                           onClick={() => deleteAttachmentMutation.mutate(att.id)}
-                          className="p-0.5 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-white border border-gray-200 flex items-center justify-center shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
                         >
-                          <X className="h-3 w-3" />
+                          <X className="h-3 w-3 text-gray-500 hover:text-red-500" />
                         </button>
                       </div>
                     );
