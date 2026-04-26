@@ -312,8 +312,12 @@ export default function SquadPage() {
   const [debouncedQ, setDebouncedQ] = useState("");
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Always open at the top so sticky tabs are visible immediately
-  useEffect(() => { window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior }); }, []);
+  // Always open at the top so sticky tabs are visible immediately.
+  // body has overflow:hidden — only #root actually scrolls.
+  useEffect(() => {
+    const root = document.getElementById("root");
+    if (root) root.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+  }, []);
 
   // Deep-link: honour ?tab= URL param (from notification taps) and
   // in-memory / sessionStorage pending nav set by handleNotificationUrl.

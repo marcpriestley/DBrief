@@ -14,28 +14,39 @@ import { isNativeHealth, getHealthAuthState, syncHealthData } from "@/lib/health
 import { Capacitor } from "@capacitor/core";
 import { useMoodOpen } from "@/contexts/MoodContext";
 
-// Re-applies status-bar overlay. iOS resets contentInsetAdjustmentBehavior
-// to .automatic during keyboard animation — calling this AFTER the animation
-// completes (via capacitorKeyboardDidShow/DidHide events) is reliable;
-// calling it mid-animation is overridden by iOS and does nothing.
-function reapplyStatusBar() {
+// One-time status-bar initialisation — called only on first mount.
+// Sets overlaysWebView + colour + style. Calling setOverlaysWebView repeatedly
+// triggers a native WKWebView relayout (brief white flash at the top) so we
+// deliberately keep it to a single call.
+function initStatusBar() {
   if (!Capacitor.isNativePlatform()) return;
   try {
     const StatusBar = (Capacitor as any).Plugins?.StatusBar;
     if (!StatusBar) return;
     StatusBar.setOverlaysWebView({ overlay: true });
-    // Derive the correct background from whatever theme is active so the native
-    // status-bar layer always matches the app — prevents the white slab that iOS
-    // paints behind the status bar after keyboard animations.
     const isLight = document.documentElement.classList.contains('light');
-    const bgColor = isLight ? '#f7f7f7' : '#141414';
-    StatusBar.setBackgroundColor({ color: bgColor });
+    StatusBar.setBackgroundColor({ color: isLight ? '#f7f7f7' : '#141414' });
     StatusBar.setStyle({ style: isLight ? 'DARK' : 'LIGHT' });
   } catch (_) {}
 }
 
-// Staggered retry — fires at 50 ms, 200 ms, 500 ms, 1000 ms after keyboard
-// events so we catch any late iOS reset without hammering the bridge.
+// Re-applies colour + style only — NOT setOverlaysWebView. iOS resets the
+// bar colour after keyboard animations and foreground-return, but does not
+// reset the overlay mode. Skipping setOverlaysWebView prevents the relayout
+// flash that was causing the "white top band appears later" symptom.
+function reapplyStatusBar() {
+  if (!Capacitor.isNativePlatform()) return;
+  try {
+    const StatusBar = (Capacitor as any).Plugins?.StatusBar;
+    if (!StatusBar) return;
+    const isLight = document.documentElement.classList.contains('light');
+    StatusBar.setBackgroundColor({ color: isLight ? '#f7f7f7' : '#141414' });
+    StatusBar.setStyle({ style: isLight ? 'DARK' : 'LIGHT' });
+  } catch (_) {}
+}
+
+// Staggered retry — fires at 50 ms, 200 ms, 500 ms, 1000 ms after events
+// so we catch any late iOS colour reset without hammering the bridge.
 function scheduleStatusBarRetries() {
   [50, 200, 500, 1000].forEach(ms => setTimeout(reapplyStatusBar, ms));
 }
@@ -199,11 +210,8 @@ function AppLayoutInner({ children }: AppLayoutProps) {
   //   3. visibilitychange — catches foreground-return after lock/home-button which
   //      is the other common path that iOS uses to reset contentInsetAdjustment.
   useEffect(() => {
-    // Apply on mount so we never rely solely on the static capacitor.config.ts
-    // value — this also sets the correct colour for light-mode users whose config
-    // still has the dark '#141414' default.
-    reapplyStatusBar();
-    scheduleStatusBarRetries();
+    // Full init on first mount (includes setOverlaysWebView — one call only).
+    initStatusBar();
 
     const vv = window.visualViewport;
     const setVh = () => {
@@ -448,6 +456,19 @@ function AppLayoutInner({ children }: AppLayoutProps) {
       >
         {children}
       </main>
+
+      {/* ── Home-indicator fill strip ────────────────────────────────────────
+           Standalone element that paints the home-indicator zone with the app
+           background, independent of the nav bar's padding calculation.  If
+           the nav's paddingBottom somehow fails to render (CSS variable timing,
+           WKWebView rendering quirk, etc.) this strip acts as a guaranteed
+           backstop.  z-49 puts it behind the nav (z-50) so nav buttons remain
+           fully tappable, while still being above page content (z-0..z-40). */}
+      <div
+        aria-hidden="true"
+        className="fixed bottom-0 left-0 right-0 pointer-events-none bg-background"
+        style={{ height: 'var(--sai-bottom, env(safe-area-inset-bottom, 0px))', zIndex: 49 }}
+      />
 
       {/* ── Bottom nav bar — fills the home-indicator zone like a native app ── */}
       <nav
