@@ -28,6 +28,14 @@ interface PendingAttachment {
   previewUrl: string;
 }
 
+interface QuickLogPhoto {
+  objectPath: string;
+  previewUrl: string;
+  filename: string;
+  contentType: string;
+  size: number;
+}
+
 interface Debrief {
   id: number;
   userId: number;
@@ -447,6 +455,9 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [pendingQuickLogPhoto, setPendingQuickLogPhoto] = useState<QuickLogPhoto | null>(null);
+  const [isQuickLogUploading, setIsQuickLogUploading] = useState(false);
+  const quickLogFileInputRef = useRef<HTMLInputElement>(null);
   const toggleSession = (id: number) => setExpandedSessions(prev => {
     const s = new Set(prev);
     s.has(id) ? s.delete(id) : s.add(id);
@@ -472,10 +483,22 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   });
 
   const quickLogMutation = useMutation({
-    mutationFn: ({ content, date }: { content: string; date: string }) =>
-      apiRequest("POST", "/api/journal-entries", { content, date }).then(r => r.json()),
+    mutationFn: async ({ content, date, photo }: { content: string; date: string; photo?: QuickLogPhoto | null }) => {
+      const entry = await apiRequest("POST", "/api/journal-entries", { content: content || " ", date }).then(r => r.json());
+      if (photo && entry?.id) {
+        await apiRequest("POST", "/api/journal-attachments", {
+          journalEntryId: entry.id,
+          objectPath: photo.objectPath,
+          filename: photo.filename,
+          contentType: photo.contentType,
+          size: photo.size,
+        });
+      }
+      return entry;
+    },
     onSuccess: () => {
       haptic("success");
+      setPendingQuickLogPhoto(null);
       setShowQuickLog(false);
       setQuickLogText("");
       queryClient.invalidateQueries({ queryKey: ["/api/journal-entries"] });
@@ -1331,6 +1354,38 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     if (voice.isListening) voice.stop();
     setShowQuickLog(false);
     setQuickLogText("");
+    setPendingQuickLogPhoto(null);
+  };
+
+  const handleQuickLogFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsQuickLogUploading(true);
+    try {
+      const urlRes = await apiRequest("POST", "/api/uploads/request-url", {
+        name: file.name,
+        size: file.size,
+        contentType: file.type,
+      });
+      const { uploadURL, objectPath } = await urlRes.json();
+      await fetch(uploadURL, {
+        method: "PUT",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      setPendingQuickLogPhoto({
+        objectPath,
+        previewUrl: URL.createObjectURL(file),
+        filename: file.name,
+        contentType: file.type,
+        size: file.size,
+      });
+    } catch {
+      toast({ title: "Upload failed", description: "Couldn't attach the photo. Please try again.", variant: "destructive" });
+    } finally {
+      setIsQuickLogUploading(false);
+      if (quickLogFileInputRef.current) quickLogFileInputRef.current.value = "";
+    }
   };
 
   const quickLogOverlay = showQuickLog ? (
@@ -1435,20 +1490,69 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
           />
         )}
 
-        <Button
-          className="w-full h-11 font-semibold rounded-xl"
-          style={{ background: 'hsl(38,92%,50%)', color: '#0a0a0a' }}
-          disabled={!(quickLogText.trim() || voice.interimText?.trim()) || quickLogMutation.isPending}
-          onClick={() => {
-            const finalText = [quickLogText, voice.interimText].filter(Boolean).join(' ').trim();
-            if (!finalText) return;
-            if (voice.isListening) voice.stop();
-            haptic("medium");
-            quickLogMutation.mutate({ content: finalText, date: selectedDate });
-          }}
-        >
-          {quickLogMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save entry"}
-        </Button>
+        {/* Photo preview */}
+        {pendingQuickLogPhoto && (
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <img
+                src={pendingQuickLogPhoto.previewUrl}
+                alt="photo preview"
+                className="h-16 w-16 rounded-lg object-cover border border-border/50"
+              />
+              <button
+                onClick={() => setPendingQuickLogPhoto(null)}
+                className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-background border border-border flex items-center justify-center"
+              >
+                <X className="h-2.5 w-2.5 text-muted-foreground" />
+              </button>
+            </div>
+            <button
+              onClick={() => quickLogFileInputRef.current?.click()}
+              className="text-xs text-primary underline underline-offset-2"
+            >
+              Change photo
+            </button>
+          </div>
+        )}
+
+        {/* Hidden file input */}
+        <input
+          ref={quickLogFileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleQuickLogFileSelect}
+        />
+
+        <div className="flex gap-2">
+          {/* Camera button — only shown if no photo attached yet */}
+          {!pendingQuickLogPhoto && (
+            <button
+              onClick={() => quickLogFileInputRef.current?.click()}
+              disabled={isQuickLogUploading || quickLogMutation.isPending}
+              className="h-11 w-11 shrink-0 rounded-xl border border-border/60 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-40"
+            >
+              {isQuickLogUploading
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <Paperclip className="h-4 w-4" />
+              }
+            </button>
+          )}
+          <Button
+            className="flex-1 h-11 font-semibold rounded-xl"
+            style={{ background: 'hsl(38,92%,50%)', color: '#0a0a0a' }}
+            disabled={!(quickLogText.trim() || voice.interimText?.trim() || pendingQuickLogPhoto) || quickLogMutation.isPending || isQuickLogUploading}
+            onClick={() => {
+              const finalText = [quickLogText, voice.interimText].filter(Boolean).join(' ').trim();
+              if (!finalText && !pendingQuickLogPhoto) return;
+              if (voice.isListening) voice.stop();
+              haptic("medium");
+              quickLogMutation.mutate({ content: finalText, date: selectedDate, photo: pendingQuickLogPhoto });
+            }}
+          >
+            {quickLogMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save entry"}
+          </Button>
+        </div>
       </div>
     </div>
   ) : null;
