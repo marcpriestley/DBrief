@@ -14,41 +14,25 @@ import { isNativeHealth, getHealthAuthState, syncHealthData } from "@/lib/health
 import { Capacitor } from "@capacitor/core";
 import { useMoodOpen } from "@/contexts/MoodContext";
 
-// One-time status-bar initialisation — called only on first mount.
-// Sets overlaysWebView + colour + style. Calling setOverlaysWebView repeatedly
-// triggers a native WKWebView relayout (brief white flash at the top) so we
-// deliberately keep it to a single call.
-function initStatusBar() {
-  if (!Capacitor.isNativePlatform()) return;
-  try {
-    const StatusBar = (Capacitor as any).Plugins?.StatusBar;
-    if (!StatusBar) return;
-    StatusBar.setOverlaysWebView({ overlay: true });
-    const isLight = document.documentElement.classList.contains('light');
-    StatusBar.setBackgroundColor({ color: isLight ? '#f7f7f7' : '#141414' });
-    StatusBar.setStyle({ style: isLight ? 'DARK' : 'LIGHT' });
-  } catch (_) {}
-}
-
-// Re-applies colour + style only — NOT setOverlaysWebView. iOS resets the
-// bar colour after keyboard animations and foreground-return, but does not
-// reset the overlay mode. Skipping setOverlaysWebView prevents the relayout
-// flash that was causing the "white top band appears later" symptom.
-function reapplyStatusBar() {
+function applyStatusBar(includeOverlay: boolean) {
   if (!Capacitor.isNativePlatform()) return;
   try {
     const StatusBar = (Capacitor as any).Plugins?.StatusBar;
     if (!StatusBar) return;
     const isLight = document.documentElement.classList.contains('light');
+    if (includeOverlay) StatusBar.setOverlaysWebView({ overlay: true });
     StatusBar.setBackgroundColor({ color: isLight ? '#f7f7f7' : '#141414' });
     StatusBar.setStyle({ style: isLight ? 'DARK' : 'LIGHT' });
   } catch (_) {}
 }
 
-// Staggered retry — fires at 50 ms, 200 ms, 500 ms, 1000 ms after events
-// so we catch any late iOS colour reset without hammering the bridge.
+// Staggered retries — include overlay reset because iOS resets the overlay
+// mode after keyboard close (not just the colour), which is what causes the
+// white top band to re-appear after typing.  Stagger gives the keyboard
+// dismiss animation time to finish before we call setOverlaysWebView so the
+// relayout happens after the animation (less visible).
 function scheduleStatusBarRetries() {
-  [50, 200, 500, 1000].forEach(ms => setTimeout(reapplyStatusBar, ms));
+  [100, 350, 700, 1200].forEach(ms => setTimeout(() => applyStatusBar(true), ms));
 }
 
 
@@ -202,16 +186,15 @@ function AppLayoutInner({ children }: AppLayoutProps) {
 
   // ── Visual-viewport + StatusBar keyboard tracking ──────────────────────────
   // --visual-height tracks the real visible area (keyboard shrinks it in WKWebView).
-  // StatusBar strategy: do NOT call reapplyStatusBar during the keyboard animation —
-  // iOS overrides it frame-by-frame. Instead use three reliable hooks:
-  //   1. Mount — apply on first render so the native bar is correct immediately.
-  //   2. capacitorKeyboardDidShow / capacitorKeyboardDidHide — Capacitor core
-  //      dispatches these on window after the animation fully completes.
-  //   3. visibilitychange — catches foreground-return after lock/home-button which
-  //      is the other common path that iOS uses to reset contentInsetAdjustment.
+  // StatusBar strategy — three hook points:
+  //   1. Mount — apply immediately so native bar is correct on first render.
+  //   2. capacitorKeyboardDidShow / capacitorKeyboardDidHide — Capacitor fires
+  //      these after the animation completes; we schedule staggered retries so
+  //      any late iOS overlay reset is caught.
+  //   3. visibilitychange — catches foreground-return after lock/home-button.
   useEffect(() => {
-    // Full init on first mount (includes setOverlaysWebView — one call only).
-    initStatusBar();
+    // Full init on first mount.
+    applyStatusBar(true);
 
     const vv = window.visualViewport;
     const setVh = () => {
@@ -253,7 +236,6 @@ function AppLayoutInner({ children }: AppLayoutProps) {
     // the status bar style on foreground-return just as it does after a keyboard.
     const onVisibility = () => {
       if (document.visibilityState === "visible") {
-        reapplyStatusBar();
         scheduleStatusBarRetries();
       }
     };

@@ -31,6 +31,15 @@ const config: CapacitorConfig = {
       // '#00000000' (transparent) caused white flashes on light-mode iOS devices.
       backgroundColor: '#141414',
     },
+    Keyboard: {
+      // 'none' stops Capacitor from resizing the WKWebView when the keyboard
+      // opens / closes.  The default 'body' resize shrinks then re-expands the
+      // WKWebView frame on every keyboard event; that resize animation briefly
+      // exposes the native background at the top and bottom of the screen.
+      // With 'none' the WKWebView stays full-screen; the keyboard just overlays
+      // content.  We use window.visualViewport to scroll inputs into view ourselves.
+      resize: 'none',
+    },
     SplashScreen: {
       launchShowDuration: 2000,
       backgroundColor: '#1a1a2e',
