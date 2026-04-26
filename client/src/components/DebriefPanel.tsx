@@ -436,6 +436,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const [expandedSessions, setExpandedSessions] = useState<Set<number>>(new Set());
   const [showQuickLog, setShowQuickLog] = useState(false);
   const [quickLogText, setQuickLogText] = useState("");
+  const [quickLogMode, setQuickLogMode] = useState<'voice' | 'keyboard'>('voice');
   const toggleSession = (id: number) => setExpandedSessions(prev => {
     const s = new Set(prev);
     s.has(id) ? s.delete(id) : s.add(id);
@@ -1282,6 +1283,133 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     );
   }
 
+  // ── Shared quick-log helpers (used by both hero states) ─────────────────────
+  const closeQuickLog = () => {
+    if (voice.isListening) voice.stop();
+    setShowQuickLog(false);
+    setQuickLogText("");
+  };
+
+  const quickLogOverlay = showQuickLog ? (
+    <div className="fixed inset-0 z-[300] flex items-end justify-center" style={{ touchAction: 'none' }}>
+      <div className="absolute inset-0 bg-black/60" onClick={closeQuickLog} />
+      <div
+        className="relative w-full max-w-lg rounded-t-2xl bg-background border-t border-border/50 p-5 space-y-4"
+        style={{ paddingBottom: 'calc(1.25rem + env(safe-area-inset-bottom))' }}
+      >
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-foreground">Log a moment</h3>
+          <button onClick={closeQuickLog} className="text-muted-foreground hover:text-foreground p-1">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Mode toggle — only shown when voice is supported */}
+        {voice.isSupported && (
+          <div className="flex items-center gap-1 p-1 bg-muted rounded-xl">
+            <button
+              onClick={() => { haptic("light"); setQuickLogMode('voice'); }}
+              className={`flex-1 h-8 rounded-lg flex items-center justify-center gap-1.5 text-xs font-medium transition-all ${
+                quickLogMode === 'voice'
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Mic className="h-3.5 w-3.5" />
+              Voice Note
+            </button>
+            <button
+              onClick={() => { haptic("light"); if (voice.isListening) voice.stop(); setQuickLogMode('keyboard'); }}
+              className={`flex-1 h-8 rounded-lg flex items-center justify-center gap-1.5 text-xs font-medium transition-all ${
+                quickLogMode === 'keyboard'
+                  ? "bg-background text-foreground shadow-sm border border-border/60"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Keyboard className="h-3.5 w-3.5" />
+              Keyboard
+            </button>
+          </div>
+        )}
+
+        {/* Voice mode */}
+        {(quickLogMode === 'voice' && voice.isSupported) && (
+          <div className="space-y-3">
+            <div className="min-h-[88px] bg-muted/50 rounded-xl px-4 py-3 text-sm text-foreground leading-relaxed">
+              {quickLogText || voice.interimText ? (
+                <p>
+                  {quickLogText}
+                  {voice.interimText && <span className="text-muted-foreground"> {voice.interimText}</span>}
+                </p>
+              ) : (
+                <p className="text-muted-foreground/60 italic text-[13px]">
+                  {voice.isListening ? "Listening…" : "Tap the mic and speak freely"}
+                </p>
+              )}
+            </div>
+            {voice.micError && (
+              <p className="text-xs text-destructive px-1">{voice.micError}</p>
+            )}
+            <button
+              onClick={() => {
+                if (voice.isListening) {
+                  haptic("light"); voice.stop();
+                } else {
+                  haptic("medium");
+                  voice.start((text) => setQuickLogText(prev => prev + (prev ? ' ' : '') + text));
+                }
+              }}
+              className={`w-full h-12 rounded-xl flex items-center justify-center gap-2 text-sm font-medium transition-all border ${
+                voice.isListening
+                  ? "bg-red-500/10 border-red-500/30 text-red-500"
+                  : "bg-muted border-border text-foreground"
+              }`}
+            >
+              {voice.isListening ? (
+                <><span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" /><MicOff className="h-4 w-4" /> Tap to stop</>
+              ) : (
+                <><Mic className="h-4 w-4" />{quickLogText ? "Continue recording" : "Start recording"}</>
+              )}
+            </button>
+            {quickLogText && (
+              <button onClick={() => { haptic("light"); setQuickLogText(""); }}
+                className="w-full text-[11px] text-muted-foreground/60 hover:text-muted-foreground transition-colors text-center">
+                Clear
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Keyboard mode */}
+        {(quickLogMode === 'keyboard' || !voice.isSupported) && (
+          <textarea
+            autoFocus
+            rows={5}
+            value={quickLogText}
+            onChange={e => setQuickLogText(e.target.value)}
+            placeholder="How's it going? What's on your mind right now…"
+            className="w-full bg-muted/50 border border-border/50 rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 outline-none resize-none leading-relaxed"
+          />
+        )}
+
+        <Button
+          className="w-full h-11 font-semibold rounded-xl"
+          style={{ background: 'hsl(38,92%,50%)', color: '#0a0a0a' }}
+          disabled={!(quickLogText.trim() || voice.interimText?.trim()) || quickLogMutation.isPending}
+          onClick={() => {
+            const finalText = [quickLogText, voice.interimText].filter(Boolean).join(' ').trim();
+            if (!finalText) return;
+            if (voice.isListening) voice.stop();
+            haptic("medium");
+            quickLogMutation.mutate({ content: finalText, date: selectedDate });
+          }}
+        >
+          {quickLogMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save entry"}
+        </Button>
+      </div>
+    </div>
+  ) : null;
+
   // No debriefs at all — show the start prompt
   if (!debrief && completedDebriefs.length === 0) {
     const hour = new Date().getHours();
@@ -1322,74 +1450,31 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
             </p>
           </div>
 
-          {/* Primary CTA */}
-          <Button
-            onClick={() => { haptic("medium"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: false }); }}
-            disabled={startDebriefMutation.isPending}
-            className="w-full h-12 text-base font-bold rounded-xl"
-            style={{ background: 'hsl(38,92%,50%)', color: '#0a0a0a' }}
-          >
-            {startDebriefMutation.isPending ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <>
-                <MessageCircle className="h-5 w-5 mr-2.5" />
-                Begin Debrief
-              </>
-            )}
-          </Button>
-
-          {/* Secondary options row */}
-          <div className="flex items-center gap-3 pt-0.5">
-            <button
-              onClick={() => { haptic("light"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: false, userLed: true }); }}
+          {/* Two options */}
+          <div className="grid grid-cols-2 gap-3">
+            <Button
+              onClick={() => { haptic("medium"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: false }); }}
               disabled={startDebriefMutation.isPending}
-              className="flex-1 text-sm text-muted-foreground/70 hover:text-muted-foreground transition-colors text-center"
+              className="h-12 text-sm font-bold rounded-xl"
+              style={{ background: 'hsl(38,92%,50%)', color: '#0a0a0a' }}
             >
-              Write it myself
-            </button>
-            <div className="w-px h-4 bg-border/50" />
-            <button
+              {startDebriefMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <><MessageCircle className="h-4 w-4 mr-1.5" />New session</>
+              )}
+            </Button>
+            <Button
               onClick={() => { haptic("light"); setShowQuickLog(true); }}
-              className="flex-1 flex items-center justify-center gap-1.5 text-sm text-muted-foreground/70 hover:text-muted-foreground transition-colors"
+              variant="outline"
+              className="h-12 text-sm font-medium rounded-xl border-white/10 text-foreground"
             >
-              <BookOpen className="h-3.5 w-3.5" />
-              Log a moment
-            </button>
+              <BookOpen className="h-4 w-4 mr-1.5" />Log a moment
+            </Button>
           </div>
         </div>
 
-        {/* Quick-log overlay — fixed so DOM parent position doesn't matter */}
-        {showQuickLog && (
-          <div className="fixed inset-0 z-[300] flex items-end justify-center" style={{ touchAction: 'none' }}>
-            <div className="absolute inset-0 bg-black/60" onClick={() => { haptic("light"); setShowQuickLog(false); }} />
-            <div className="relative w-full max-w-lg rounded-t-2xl bg-background border-t border-border/50 p-5 space-y-4"
-              style={{ paddingBottom: 'calc(1.25rem + env(safe-area-inset-bottom))' }}>
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-foreground">Log a moment</h3>
-                <button onClick={() => { haptic("light"); setShowQuickLog(false); }} className="text-muted-foreground hover:text-foreground p-1">
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-              <textarea
-                autoFocus
-                rows={5}
-                value={quickLogText}
-                onChange={e => setQuickLogText(e.target.value)}
-                placeholder="How's it going? What's on your mind right now…"
-                className="w-full bg-muted/50 border border-border/50 rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 outline-none resize-none leading-relaxed"
-              />
-              <Button
-                className="w-full h-11 font-semibold rounded-xl"
-                style={{ background: 'hsl(38,92%,50%)', color: '#0a0a0a' }}
-                disabled={!quickLogText.trim() || quickLogMutation.isPending}
-                onClick={() => { haptic("medium"); quickLogMutation.mutate({ content: quickLogText.trim(), date: selectedDate }); }}
-              >
-                {quickLogMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save entry"}
-              </Button>
-            </div>
-          </div>
-        )}
+        {quickLogOverlay}
       </div>
     );
   }
@@ -1426,71 +1511,30 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                   : "Add another reflection for this day."}
               </p>
             </div>
-            <Button
-              onClick={() => { haptic("medium"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: true }); }}
-              disabled={startDebriefMutation.isPending}
-              className="w-full h-12 text-base font-bold rounded-xl"
-              style={{ background: 'hsl(38,92%,50%)', color: '#0a0a0a' }}
-            >
-              {startDebriefMutation.isPending ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <>
-                  <MessageCircle className="h-5 w-5 mr-2.5" />
-                  New Session
-                </>
-              )}
-            </Button>
-            <div className="flex items-center gap-3 pt-0.5">
-              <button
-                onClick={() => { haptic("light"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: true, userLed: true }); }}
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                onClick={() => { haptic("medium"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: true }); }}
                 disabled={startDebriefMutation.isPending}
-                className="flex-1 text-sm text-muted-foreground/70 hover:text-muted-foreground transition-colors text-center"
+                className="h-12 text-sm font-bold rounded-xl"
+                style={{ background: 'hsl(38,92%,50%)', color: '#0a0a0a' }}
               >
-                Write it myself
-              </button>
-              <div className="w-px h-4 bg-border/50" />
-              <button
+                {startDebriefMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <><MessageCircle className="h-4 w-4 mr-1.5" />New session</>
+                )}
+              </Button>
+              <Button
                 onClick={() => { haptic("light"); setShowQuickLog(true); }}
-                className="flex-1 flex items-center justify-center gap-1.5 text-sm text-muted-foreground/70 hover:text-muted-foreground transition-colors"
+                variant="outline"
+                className="h-12 text-sm font-medium rounded-xl border-white/10 text-foreground"
               >
-                <BookOpen className="h-3.5 w-3.5" />
-                Log a moment
-              </button>
+                <BookOpen className="h-4 w-4 mr-1.5" />Log a moment
+              </Button>
             </div>
           </div>
 
-          {/* Quick-log overlay */}
-          {showQuickLog && (
-            <div className="fixed inset-0 z-[300] flex items-end justify-center" style={{ touchAction: 'none' }}>
-              <div className="absolute inset-0 bg-black/60" onClick={() => { haptic("light"); setShowQuickLog(false); }} />
-              <div className="relative w-full max-w-lg rounded-t-2xl bg-background border-t border-border/50 p-5 space-y-4"
-                style={{ paddingBottom: 'calc(1.25rem + env(safe-area-inset-bottom))' }}>
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-foreground">Log a moment</h3>
-                  <button onClick={() => { haptic("light"); setShowQuickLog(false); }} className="text-muted-foreground hover:text-foreground p-1">
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-                <textarea
-                  autoFocus
-                  rows={5}
-                  value={quickLogText}
-                  onChange={e => setQuickLogText(e.target.value)}
-                  placeholder="How's it going? What's on your mind right now…"
-                  className="w-full bg-muted/50 border border-border/50 rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 outline-none resize-none leading-relaxed"
-                />
-                <Button
-                  className="w-full h-11 font-semibold rounded-xl"
-                  style={{ background: 'hsl(38,92%,50%)', color: '#0a0a0a' }}
-                  disabled={!quickLogText.trim() || quickLogMutation.isPending}
-                  onClick={() => { haptic("medium"); quickLogMutation.mutate({ content: quickLogText.trim(), date: selectedDate }); }}
-                >
-                  {quickLogMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save entry"}
-                </Button>
-              </div>
-            </div>
-          )}
+          {quickLogOverlay}
         </div>
 
         {/* Past sessions — collapsed below the CTA */}
