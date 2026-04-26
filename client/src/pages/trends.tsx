@@ -602,13 +602,20 @@ export default function TrendsEnhanced() {
               <div className="mb-3">
                 <div className="text-xs font-semibold text-foreground">Average Scores</div>
                 <div className="text-[11px] text-muted-foreground mt-0.5">
-                  Mean score per metric over the selected period (out of 100)
+                  Mean value per metric over the selected period
                 </div>
               </div>
               <div className="space-y-3">
                 {displayMetrics.map((metric) => {
                   const stats = getMetricStats(metric.name);
-                  const pct = Math.min(100, stats.avg);
+                  const maxVal = metric.maxValue ?? 100;
+                  const pct = Math.min(100, (stats.avg / maxVal) * 100);
+                  const avgDisplay = maxVal > 999
+                    ? Math.round(stats.avg).toLocaleString()
+                    : stats.avg.toFixed(0);
+                  const maxDisplay = maxVal > 999
+                    ? maxVal.toLocaleString()
+                    : maxVal.toString();
 
                   return (
                     <div key={metric.name} className="space-y-1.5">
@@ -618,8 +625,8 @@ export default function TrendsEnhanced() {
                           <span className="font-medium text-foreground">{metric.name}</span>
                         </div>
                         <span className="font-semibold text-foreground">
-                          {stats.avg.toFixed(0)}
-                          <span className="text-muted-foreground font-normal">/100</span>
+                          {avgDisplay}
+                          <span className="text-muted-foreground font-normal">/{maxDisplay}</span>
                         </span>
                       </div>
                       <div className="w-full bg-muted rounded-full h-1.5">
