@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { haptic } from "@/lib/haptics";
-import { X, ChevronRight, Target, CircleDot, MessageSquare, CheckSquare, TrendingUp, Compass } from "lucide-react";
+import { X, ChevronRight, Target, CircleDot, MessageSquare, CheckSquare, TrendingUp, Compass, Flame, Users } from "lucide-react";
 import { TOUR_KEY } from "@/lib/tour";
 
 interface TourStep {
@@ -28,7 +28,7 @@ const STEPS: TourStep[] = [
     iconColor: "text-primary",
     title: "Your Infinite Goal",
     subtitle: "The mission that never ends",
-    description: "At the top of the dashboard sits your Infinite Goal — an overarching ambition you never fully reach, but always drive toward. Like F1's pursuit of perfection.",
+    description: "At the top of the dashboard sits your Infinite Goal — an overarching ambition you never fully reach, but always drive toward. Long-Term Targets sit beneath it, bridging your daily actions to that bigger mission.",
     tip: "Tap the banner to set or refine yours. The AI will help you articulate it.",
   },
   {
@@ -36,32 +36,48 @@ const STEPS: TourStep[] = [
     iconColor: "text-amber-500",
     title: "Telemetry Circles",
     subtitle: "Daily performance metrics",
-    description: "Each circle tracks a performance metric on a 0–100 scale. Tap any circle to log today's reading. Tap and hold to see your trend over time.",
-    tip: "Add or remove metrics in Settings — including Apple Health categories.",
+    description: "Each circle tracks a performance metric on a 0–100 scale. Tap any circle to log today's score and pull up your trend chart. You choose which metrics matter — add or remove them in Settings.",
+    tip: "Apple Health metrics like Steps and Sleep can be added from Settings too.",
   },
   {
     icon: MessageSquare,
     iconColor: "text-blue-500",
     title: "The Debrief",
     subtitle: "Your AI race engineer",
-    description: "After your session, sit down with your engineer. The AI reviews your telemetry and goals, asks the right questions, and helps you extract the real lessons from the day.",
-    tip: "You can speak or type. Voice readback is on by default — toggle the speaker in the header.",
+    description: "After each session, sit down with your engineer. The AI reviews your telemetry, goals, and habits — then asks the right questions to help you extract the real lessons from the day. Speak or type, your choice.",
+    tip: "Toggle the speaker icon in the debrief to turn AI voice readback on or off.",
   },
   {
     icon: CheckSquare,
     iconColor: "text-emerald-500",
     title: "Goals & Targets",
     subtitle: "What you're actually racing toward",
-    description: "Build your daily job list — the specific actions you commit to today — plus up to 3 Long-Term Targets between today's actions and your Infinite Goal. One tap to mark them done.",
-    tip: "Completed goals feed directly into your debrief context.",
+    description: "Build your daily job list — the specific actions you commit to today. Up to 3 Long-Term Targets sit above them, connecting your daily work to your Infinite Goal. One tap to mark them done.",
+    tip: "Completed goals feed directly into your debrief context so the AI knows what you achieved.",
+  },
+  {
+    icon: Flame,
+    iconColor: "text-orange-500",
+    title: "Habit Lab & Streaks",
+    subtitle: "The compound effect",
+    description: "Add the daily habits that build your edge over time. Every day you log earns a streak — hit milestones at 3, 7, 14, 30, 50, 100, and 365 days for celebrations and rewards. Complete every habit in a day and you lock in a perfect consistency point.",
+    tip: "Your streak resets if you miss a day — the chain is the motivation.",
+  },
+  {
+    icon: Users,
+    iconColor: "text-violet-500",
+    title: "Team",
+    subtitle: "Accountability at race speed",
+    description: "Connect with people by their callsign and see each other's streaks, consistency, and points on a live leaderboard. Set up habit or score challenges, compete without seeing each other's answers until everyone's submitted.",
+    tip: "You earn points for streaks, milestones, habits, and goals — the leaderboard updates daily.",
   },
   {
     icon: TrendingUp,
-    iconColor: "text-violet-500",
-    title: "Analytics & History",
+    iconColor: "text-cyan-500",
+    title: "Trends & History",
     subtitle: "The data doesn't lie",
-    description: "The Analytics tab shows your metric trends across 7 days, 30 days, 6 months, or all time. The History tab lets you review or edit any past session.",
-    tip: "AI-generated insights appear on the dashboard when patterns emerge across your data.",
+    description: "The Trends tab shows metric patterns across 7 days, 30 days, 6 months, or all time — including mood patterns, AI-generated weekly race reports, 30-day performance correlations, and 90-day goal trajectory analysis. The History tab lets you review or edit any past session.",
+    tip: "The weekly race report and performance patterns unlock after a few days of consistent logging.",
   },
 ];
 
@@ -209,4 +225,3 @@ export default function AppTour() {
     </AnimatePresence>
   );
 }
-
