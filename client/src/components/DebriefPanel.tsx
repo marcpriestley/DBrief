@@ -2167,7 +2167,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                 <div className="flex flex-col gap-1.5 bg-muted/50 rounded-xl border border-border/50 p-2">
                   {/* Pending photo preview */}
                   {pendingAttachment && (
-                    <div className="flex items-center gap-2 px-1">
+                    <div className="flex items-center gap-3 px-1">
                       <div className="relative">
                         <img
                           src={pendingAttachment.previewUrl}
@@ -2181,6 +2181,12 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                           <X className="h-2.5 w-2.5 text-muted-foreground" />
                         </button>
                       </div>
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        className="text-xs text-primary underline underline-offset-2"
+                      >
+                        Change photo
+                      </button>
                     </div>
                   )}
                   <div className="flex items-end gap-2">
