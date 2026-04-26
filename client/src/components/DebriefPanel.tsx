@@ -1441,7 +1441,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
           {/* Main prompt */}
           <div>
             <h2 className="text-[22px] font-black text-foreground leading-tight tracking-tight">
-              {isToday ? "Time to debrief." : "Reflect on this day."}
+              {isToday ? "Debrief Now." : "Reflect on this day."}
             </h2>
             <p className="text-sm text-muted-foreground/80 mt-1.5 leading-relaxed">
               {isToday
@@ -1503,7 +1503,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
             </div>
             <div>
               <h2 className="text-[32px] font-black text-foreground leading-none tracking-tight">
-                Debrief
+                Debrief Now
               </h2>
               <p className="text-sm text-muted-foreground/80 mt-2 leading-relaxed">
                 {isToday
