@@ -614,10 +614,12 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
 
   // Clear the user-led tracking ID once the debrief gets an AI reply or is completed —
   // at that point the normal filter takes over and we no longer need the override.
+  // IMPORTANT: only clear when we actually find the debrief in the loaded data.
+  // If it's not found yet (query still refetching), keep the ID so we don't lose it.
   useEffect(() => {
     if (!userLedDebriefId) return;
     const d = safeDebriefs.find(s => s.id === userLedDebriefId);
-    if (!d || d.isComplete || d.messages.some((m: any) => m.role === "assistant")) {
+    if (d && (d.isComplete || d.messages.some((m: any) => m.role === "assistant"))) {
       setUserLedDebriefId(null);
     }
   }, [safeDebriefs, userLedDebriefId]);
