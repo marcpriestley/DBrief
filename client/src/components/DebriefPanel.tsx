@@ -1598,7 +1598,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
           {/* Two options */}
           <div className="grid grid-cols-2 gap-3">
             <Button
-              onClick={() => { haptic("medium"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: false }); }}
+              onClick={() => { haptic("medium"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: false, userLed: true }); }}
               disabled={startDebriefMutation.isPending}
               className="h-12 text-sm font-bold rounded-xl"
               style={{ background: 'hsl(38,92%,50%)', color: '#0a0a0a' }}
@@ -1617,6 +1617,13 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
               <BookOpen className="h-4 w-4 mr-1.5" />Log a moment
             </Button>
           </div>
+          <button
+            onClick={() => { haptic("light"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: false, userLed: false }); }}
+            disabled={startDebriefMutation.isPending}
+            className="w-full text-center text-[11px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+          >
+            Let your engineer open the session →
+          </button>
         </div>
 
         {quickLogOverlay}
@@ -1655,7 +1662,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <Button
-                onClick={() => { haptic("medium"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: true }); }}
+                onClick={() => { haptic("medium"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: true, userLed: true }); }}
                 disabled={startDebriefMutation.isPending}
                 className="h-12 text-sm font-bold rounded-xl"
                 style={{ background: 'hsl(38,92%,50%)', color: '#0a0a0a' }}
@@ -1674,6 +1681,13 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                 <BookOpen className="h-4 w-4 mr-1.5" />Log a moment
               </Button>
             </div>
+            <button
+              onClick={() => { haptic("light"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: true, userLed: false }); }}
+              disabled={startDebriefMutation.isPending}
+              className="w-full text-center text-[11px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+            >
+              Let your engineer open the session →
+            </button>
           </div>
 
           {quickLogOverlay}
