@@ -193,8 +193,12 @@ function AppLayoutInner({ children }: AppLayoutProps) {
   //      any late iOS overlay reset is caught.
   //   3. visibilitychange — catches foreground-return after lock/home-button.
   useEffect(() => {
-    // Full init on first mount.
-    applyStatusBar(true);
+    // Full init on first mount — only set colour/style, NOT overlay.
+    // overlaysWebView is already declared in capacitor.config.ts so the native
+    // framework has it correct before any JS runs.  Calling setOverlaysWebView
+    // here causes an async WKWebView frame-resize that fires after the splash
+    // starts fading, creating a visible layout-shift jitter on launch.
+    applyStatusBar(false);
 
     const vv = window.visualViewport;
     const setVh = () => {
