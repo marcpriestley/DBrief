@@ -581,11 +581,19 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     (userLedDebriefId
       ? safeDebriefs.find(d => d.id === userLedDebriefId && !d.isComplete) ?? null
       : null);
-  // Completed list = fully finished sessions OR moments (no AI response), excluding the active user-led session
-  const completedDebriefs = safeDebriefs.filter(d =>
-    (d.isComplete || !d.messages.some((m: any) => m.role === "assistant")) &&
-    d.id !== (debrief?.id)
-  );
+  // Completed list = fully finished sessions OR moments (no AI response), excluding the active user-led session.
+  // Also exclude sessions with no visible content (0-message abandoned starters or all-blank messages).
+  const completedDebriefs = safeDebriefs.filter(d => {
+    if (d.id === debrief?.id) return false;
+    if (!d.isComplete && !d.messages.some((m: any) => m.role === "assistant")) {
+      // It's a "moment" — only show it if at least one message has real content or an attachment
+      const hasContent = d.messages.some(
+        (m: any) => (m.content && m.content.trim().length > 0) || m.attachmentUrl
+      );
+      if (!hasContent) return false;
+    }
+    return true;
+  });
 
   const userMessageCount = debrief?.messages?.filter(m => m.role === "user").length || 0;
   const assistantMessageCount = debrief?.messages?.filter(m => m.role === "assistant").length || 0;

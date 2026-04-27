@@ -356,15 +356,16 @@ export function registerDebriefRoutes(app: Express): void {
         };
       }));
 
-      // Never surface sessions with no visible content:
-      //   • 0 messages + not complete → abandoned user-led session
-      //   • messages exist but ALL have blank content and no attachment → empty moment
+      // Filter out sessions that have messages but ALL of them are blank after decryption.
+      // (0-message incomplete sessions are kept — they may be freshly-started user-led sessions;
+      //  the POST /start route cleans them up before creating a new one.)
       const filtered = result.filter(d => {
-        if (!d.isComplete && d.messages.length === 0) return false;
-        const hasVisibleContent = d.messages.some(
+        if (d.isComplete) return true;          // always keep completed sessions
+        if (d.messages.length === 0) return true; // keep fresh user-led sessions
+        // Incomplete with messages — only keep if at least one message has real content
+        return d.messages.some(
           (m: any) => (m.content && m.content.trim().length > 0) || m.attachmentUrl
         );
-        return hasVisibleContent || d.isComplete;
       });
 
       res.json(filtered);
