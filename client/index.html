@@ -117,13 +117,15 @@
       position: fixed;
       inset: 0;
       z-index: 99999;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
       background-color: hsl(0, 0%, 8%);
       transition: opacity 0.35s ease;
-      gap: 0;
+      /* GPU compositing layer — prevents CPU-side layout reflows from
+         affecting the rendered position of this element on iOS WKWebView.
+         Without this, a brief viewport-dimension flutter during WKWebView
+         init causes the splash contents to visibly jump. */
+      -webkit-transform: translateZ(0);
+      transform: translateZ(0);
+      will-change: opacity;
     }
     html:not(.dark) #dbrief-splash {
       background-color: hsl(0, 0%, 97%);
@@ -131,6 +133,20 @@
     #dbrief-splash.fade-out {
       opacity: 0;
       pointer-events: none;
+    }
+    /* Inner wrapper uses transform-based centering instead of flexbox so
+       the logo position is derived from the element's own size, not the
+       container's height.  When the container briefly changes height during
+       WKWebView init the logo stays pixel-locked to the viewport centre. */
+    #dbrief-splash-inner {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      -webkit-transform: translate(-50%, -50%);
+      transform: translate(-50%, -50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
     #dbrief-splash-logo {
       width: 110px;
@@ -174,11 +190,13 @@
   </head>
   <body>
     <div id="dbrief-splash">
-      <div id="dbrief-splash-logo">
-        <img src="/dbrief-logo.jpeg" alt="DBrief" />
+      <div id="dbrief-splash-inner">
+        <div id="dbrief-splash-logo">
+          <img src="/dbrief-logo.jpeg" alt="DBrief" />
+        </div>
+        <div id="dbrief-splash-name">DBrief</div>
+        <div id="dbrief-splash-sub">Your daily debrief</div>
       </div>
-      <div id="dbrief-splash-name">DBrief</div>
-      <div id="dbrief-splash-sub">Your daily debrief</div>
     </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>

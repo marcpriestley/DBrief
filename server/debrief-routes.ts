@@ -356,7 +356,11 @@ export function registerDebriefRoutes(app: Express): void {
         };
       }));
 
-      res.json(result);
+      // Never surface empty abandoned sessions (0 messages, not complete) —
+      // they accumulate when users tap "New session" then navigate away without typing.
+      const filtered = result.filter(d => d.isComplete || d.messages.length > 0);
+
+      res.json(filtered);
     } catch (error) {
       console.error("Error fetching debrief:", error);
       res.status(500).json({ error: "Failed to fetch debrief" });
@@ -384,7 +388,18 @@ export function registerDebriefRoutes(app: Express): void {
           return res.json({ ...active, messages: decryptedMsgs });
         }
       }
-      // fresh=true OR no active debrief found — always create a new one, never delete old ones
+      // fresh=true OR no active debrief found — create a new session.
+      // First, purge any abandoned empty (0-message) sessions for this date
+      // so they don't accumulate in the database over time.
+      const incompleteSessions = await db.select({ id: debriefs.id }).from(debriefs)
+        .where(and(eq(debriefs.userId, userId), eq(debriefs.date, date), eq(debriefs.isComplete, false)));
+      for (const row of incompleteSessions) {
+        const msgs = await db.select({ id: debriefMessages.id }).from(debriefMessages)
+          .where(eq(debriefMessages.debriefId, row.id));
+        if (msgs.length === 0) {
+          await db.delete(debriefs).where(eq(debriefs.id, row.id));
+        }
+      }
 
       const [debrief] = await db.insert(debriefs).values({
         userId,
