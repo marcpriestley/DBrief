@@ -172,9 +172,20 @@ function AuthenticatedRouter() {
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [user]);
 
-  // Dismiss the HTML-level splash screen once auth is resolved
+  // Dismiss both the HTML splash and the native Capacitor splash together
+  // so their fade animations are in sync.  The native splash has a 2000ms
+  // auto-hide timer that fires independently of auth — calling hide() here
+  // overrides that timer and makes both layers fade at the exact same moment,
+  // eliminating the double-fade glitch the user sees on startup.
   useEffect(() => {
     if (isLoading) return;
+    // 1. Native splash — override the 2000ms auto-hide timer so the native
+    //    layer and the HTML overlay fade together at exactly the same moment.
+    try {
+      const NativeSplash = (Capacitor as any).Plugins?.SplashScreen;
+      if (NativeSplash) NativeSplash.hide({ fadeOutDuration: 350 });
+    } catch (_) {}
+    // 2. CSS fade on the HTML overlay (350ms transition defined in index.html).
     const splash = document.getElementById("dbrief-splash");
     if (!splash) return;
     splash.classList.add("fade-out");
