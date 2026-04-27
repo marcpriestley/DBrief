@@ -97,7 +97,9 @@ function AuthenticatedRouter() {
     checkMoodParam();
 
     // consumePendingMoodOpen was already called in the useState initializer;
-    // check again here to handle any race where it arrived after first render.
+    // check again here to handle any race where the notification callback fired
+    // asynchronously (after the initializer ran but before this effect).
+    if (consumePendingMoodOpen()) setIsMoodOpen(true);
 
     // Squad deep-link from notification tap (fires before React mounted)
     const pendingSquadTab = consumePendingSquadNav();

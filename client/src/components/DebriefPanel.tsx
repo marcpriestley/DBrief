@@ -1622,7 +1622,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
             disabled={startDebriefMutation.isPending}
             className="w-full text-center text-[11px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
           >
-            Let your engineer open the session →
+            Let your engineer start you off with a prompt →
           </button>
         </div>
 
@@ -1686,7 +1686,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
               disabled={startDebriefMutation.isPending}
               className="w-full text-center text-[11px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
             >
-              Let your engineer open the session →
+              Let your engineer start you off with a prompt →
             </button>
           </div>
 

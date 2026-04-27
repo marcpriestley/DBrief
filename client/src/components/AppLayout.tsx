@@ -167,7 +167,7 @@ function AppLayoutInner({ children }: AppLayoutProps) {
     const key = `mood_auto_${todayStr}_${currentPeriod}`;
     if (sessionStorage.getItem(key)) return;
     sessionStorage.setItem(key, "1");
-    const t = setTimeout(() => openMood(), 5000);
+    const t = setTimeout(() => openMood(), 1000);
     return () => clearTimeout(t);
   }, [moodsLoading, hasMoodForPeriod, currentPeriod]);
 
