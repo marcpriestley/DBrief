@@ -571,10 +571,19 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const safeDebriefs: Debrief[] = Array.isArray(allDebriefs)
     ? allDebriefs
     : allDebriefs ? [allDebriefs as unknown as Debrief] : [];
-  // Active = an in-progress debrief that has at least one AI response (moments never qualify)
-  const debrief = safeDebriefs.find(d => !d.isComplete && d.messages.some((m: any) => m.role === "assistant")) ?? null;
-  // Completed list = fully finished sessions OR moments (no AI response — they're always "done")
-  const completedDebriefs = safeDebriefs.filter(d => d.isComplete || !d.messages.some((m: any) => m.role === "assistant"));
+  // Active = an in-progress debrief that either has AI messages (ongoing session)
+  // or has zero messages at all (user-led session awaiting first input).
+  // Moments (incomplete but with a user message and no AI reply) are NOT active.
+  const debrief = safeDebriefs.find(d =>
+    !d.isComplete && (
+      d.messages.some((m: any) => m.role === "assistant") ||
+      d.messages.length === 0
+    )
+  ) ?? null;
+  // Completed list = fully finished sessions OR moments (user message(s) but no AI reply)
+  const completedDebriefs = safeDebriefs.filter(d =>
+    d.isComplete || (d.messages.length > 0 && !d.messages.some((m: any) => m.role === "assistant"))
+  );
 
   const userMessageCount = debrief?.messages?.filter(m => m.role === "user").length || 0;
   const assistantMessageCount = debrief?.messages?.filter(m => m.role === "assistant").length || 0;
