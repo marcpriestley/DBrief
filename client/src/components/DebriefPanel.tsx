@@ -449,6 +449,9 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const [actionNotifications, setActionNotifications] = useState<Array<{ type: string; message: string; success: boolean; id: number }>>([]);
   const [showAllMessages, setShowAllMessages] = useState(false);
   const [expandedSessions, setExpandedSessions] = useState<Set<number>>(new Set());
+  // Tracks the ID of a freshly-started user-led session (0 messages, no AI reply yet).
+  // Cleared automatically once the debrief gets an AI reply or is completed.
+  const [userLedDebriefId, setUserLedDebriefId] = useState<number | null>(null);
   const [showQuickLog, setShowQuickLog] = useState(false);
   const [quickLogText, setQuickLogText] = useState("");
   const [quickLogMode, setQuickLogMode] = useState<'voice' | 'keyboard'>('voice');
@@ -571,18 +574,17 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const safeDebriefs: Debrief[] = Array.isArray(allDebriefs)
     ? allDebriefs
     : allDebriefs ? [allDebriefs as unknown as Debrief] : [];
-  // Active = an in-progress debrief that either has AI messages (ongoing session)
-  // or has zero messages at all (user-led session awaiting first input).
-  // Moments (incomplete but with a user message and no AI reply) are NOT active.
-  const debrief = safeDebriefs.find(d =>
-    !d.isComplete && (
-      d.messages.some((m: any) => m.role === "assistant") ||
-      d.messages.length === 0
-    )
-  ) ?? null;
-  // Completed list = fully finished sessions OR moments (user message(s) but no AI reply)
+  // Active = an in-progress debrief that has at least one AI response (moments never qualify).
+  // OR it's the specific user-led session we just started this session (tracked by ID).
+  const debrief =
+    safeDebriefs.find(d => !d.isComplete && d.messages.some((m: any) => m.role === "assistant")) ??
+    (userLedDebriefId
+      ? safeDebriefs.find(d => d.id === userLedDebriefId && !d.isComplete) ?? null
+      : null);
+  // Completed list = fully finished sessions OR moments (no AI response), excluding the active user-led session
   const completedDebriefs = safeDebriefs.filter(d =>
-    d.isComplete || (d.messages.length > 0 && !d.messages.some((m: any) => m.role === "assistant"))
+    (d.isComplete || !d.messages.some((m: any) => m.role === "assistant")) &&
+    d.id !== (debrief?.id)
   );
 
   const userMessageCount = debrief?.messages?.filter(m => m.role === "user").length || 0;
@@ -609,6 +611,16 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   useEffect(() => {
     if (debrief?.id && debrief.id !== activeDebriefId) setActiveDebriefId(debrief.id);
   }, [debrief?.id]);
+
+  // Clear the user-led tracking ID once the debrief gets an AI reply or is completed —
+  // at that point the normal filter takes over and we no longer need the override.
+  useEffect(() => {
+    if (!userLedDebriefId) return;
+    const d = safeDebriefs.find(s => s.id === userLedDebriefId);
+    if (!d || d.isComplete || d.messages.some((m: any) => m.role === "assistant")) {
+      setUserLedDebriefId(null);
+    }
+  }, [safeDebriefs, userLedDebriefId]);
 
   const toggleRealtimeVoice = async () => {
     haptic("medium");
@@ -694,13 +706,16 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
 
       return null;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       // Always re-fetch from server so all sessions (including previous ones) are in the list
       queryClient.invalidateQueries({ queryKey: ["/api/debriefs", selectedDate] });
       queryClient.invalidateQueries({ queryKey: ["/api/dates-with-data"] });
       setContinuedPastCheckpoint(false);
       setIsOpeningStreaming(false);
       setOpeningStreamContent("");
+      // User-led path returns the debrief JSON directly — track its ID so the panel
+      // can show it as "active" even though it has no AI messages yet.
+      if (data && (data as any).id) setUserLedDebriefId((data as any).id);
     },
     onError: () => {
       setIsOpeningStreaming(false);
