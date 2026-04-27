@@ -356,9 +356,16 @@ export function registerDebriefRoutes(app: Express): void {
         };
       }));
 
-      // Never surface empty abandoned sessions (0 messages, not complete) —
-      // they accumulate when users tap "New session" then navigate away without typing.
-      const filtered = result.filter(d => d.isComplete || d.messages.length > 0);
+      // Never surface sessions with no visible content:
+      //   • 0 messages + not complete → abandoned user-led session
+      //   • messages exist but ALL have blank content and no attachment → empty moment
+      const filtered = result.filter(d => {
+        if (!d.isComplete && d.messages.length === 0) return false;
+        const hasVisibleContent = d.messages.some(
+          (m: any) => (m.content && m.content.trim().length > 0) || m.attachmentUrl
+        );
+        return hasVisibleContent || d.isComplete;
+      });
 
       res.json(filtered);
     } catch (error) {
@@ -394,9 +401,16 @@ export function registerDebriefRoutes(app: Express): void {
       const incompleteSessions = await db.select({ id: debriefs.id }).from(debriefs)
         .where(and(eq(debriefs.userId, userId), eq(debriefs.date, date), eq(debriefs.isComplete, false)));
       for (const row of incompleteSessions) {
-        const msgs = await db.select({ id: debriefMessages.id }).from(debriefMessages)
+        const msgs = await db.select().from(debriefMessages)
           .where(eq(debriefMessages.debriefId, row.id));
-        if (msgs.length === 0) {
+        // Delete if: no messages at all, OR every message has blank content and no attachment.
+        // Content is encrypted — decrypt before checking so empty strings are detected correctly.
+        const hasVisibleContent = msgs.some(m => {
+          const plain = decrypt(m.content);
+          return (plain && plain.trim().length > 0) || m.attachmentUrl;
+        });
+        if (msgs.length === 0 || !hasVisibleContent) {
+          await db.delete(debriefMessages).where(eq(debriefMessages.debriefId, row.id));
           await db.delete(debriefs).where(eq(debriefs.id, row.id));
         }
       }
