@@ -1165,13 +1165,17 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
         lockScrollAfterStreamRef.current = true;
         const el = streamingMsgRef.current;
         if (el) {
-          // 1. Scroll the internal chat container to pin the response top.
-          const containerRect = container.getBoundingClientRect();
-          const elRect = el.getBoundingClientRect();
-          container.scrollTop += elRect.top - containerRect.top - 8;
+          // 1. Scroll the internal chat container so the streaming bubble is
+          //    at the top of the visible area.  Using offsetTop (relative to
+          //    the scroll container) is reliable no matter how far down the
+          //    container was previously scrolled — the old approach of
+          //    elRect.top - containerRect.top would produce a large delta
+          //    that exceeded scrollHeight after the first exchange.
+          container.scrollTop = el.offsetTop - 8;
           // 2. Also scroll the PAGE so the chat container itself is in view —
           //    the card-top scroll from sendMessage may have put the user at
           //    the top of a tall card while the active chat is near the bottom.
+          const containerRect = container.getBoundingClientRect();
           const root = document.getElementById("root");
           const header = document.querySelector("header");
           if (root) {
