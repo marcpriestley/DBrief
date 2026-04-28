@@ -41,110 +41,40 @@ function getTimeOfDayLabel(): string {
   return "evening";
 }
 
-// Native touch-event slider — uses the same pattern as ScoreDashboard's
-// NativeSlider to guarantee reliable drag behaviour on iOS WKWebView.
-// Radix's pointer-capture approach breaks on older WKWebView builds.
+// Uses a native <input type="range"> so iOS WKWebView handles touch at the OS
+// layer — bypasses JavaScript touch-event competition on cold starts.
 function MoodSlider({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  const trackRef = useRef<HTMLDivElement>(null);
-  const isDragging = useRef(false);
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
   const lastHapticVal = useRef<number | null>(null);
-
+  const color = getMoodColor(value);
   const pct = Math.max(0, Math.min(100, value));
 
-  const color = getMoodColor(value);
-
-  const emitWithHaptic = (newVal: number) => {
-    onChangeRef.current(newVal);
-    if (lastHapticVal.current === null || Math.abs(newVal - lastHapticVal.current) >= 5) {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = Number(e.target.value);
+    onChange(v);
+    if (lastHapticVal.current === null || Math.abs(v - lastHapticVal.current) >= 5) {
       haptic("light");
-      lastHapticVal.current = newVal;
+      lastHapticVal.current = v;
     }
   };
 
-  useEffect(() => {
-    const el = trackRef.current;
-    if (!el) return;
-
-    const getVal = (clientX: number) => {
-      const rect = el.getBoundingClientRect();
-      const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-      return Math.round(ratio * 100);
-    };
-
-    const onTouchMove = (e: TouchEvent) => {
-      if (!isDragging.current) return;
-      e.preventDefault();
-      if (e.touches[0]) emitWithHaptic(getVal(e.touches[0].clientX));
-    };
-    const onTouchEnd = () => {
-      isDragging.current = false;
-      // Must use capture:true to match the listener added in onTouchStart
-      document.removeEventListener("touchmove", onTouchMove, { capture: true });
-      document.removeEventListener("touchend", onTouchEnd);
-      document.removeEventListener("touchcancel", onTouchEnd);
-    };
-
-    const onTouchStart = (e: TouchEvent) => {
-      e.preventDefault();
-      isDragging.current = true;
-      lastHapticVal.current = null;
-      if (e.touches[0]) emitWithHaptic(getVal(e.touches[0].clientX));
-      // Use capture:true so the listener fires before any element's stopPropagation
-      // call (the modal wrapper calls e.stopPropagation on touchmove, which would
-      // otherwise prevent the event from reaching a bubble-phase document listener).
-      document.addEventListener("touchmove", onTouchMove, { passive: false, capture: true });
-      document.addEventListener("touchend", onTouchEnd);
-      document.addEventListener("touchcancel", onTouchEnd);
-    };
-
-    const onMouseDown = (e: MouseEvent) => {
-      e.preventDefault();
-      isDragging.current = true;
-      lastHapticVal.current = null;
-      emitWithHaptic(getVal(e.clientX));
-      const onMouseMove = (e: MouseEvent) => {
-        if (isDragging.current) emitWithHaptic(getVal(e.clientX));
-      };
-      const onMouseUp = () => {
-        isDragging.current = false;
-        document.removeEventListener("mousemove", onMouseMove);
-        document.removeEventListener("mouseup", onMouseUp);
-      };
-      document.addEventListener("mousemove", onMouseMove);
-      document.addEventListener("mouseup", onMouseUp);
-    };
-
-    el.addEventListener("touchstart", onTouchStart, { passive: false });
-    el.addEventListener("mousedown", onMouseDown);
-
-    return () => {
-      el.removeEventListener("touchstart", onTouchStart);
-      el.removeEventListener("mousedown", onMouseDown);
-      // Clean up any lingering document listeners — capture flag must match add
-      document.removeEventListener("touchmove", onTouchMove, { capture: true });
-      document.removeEventListener("touchend", onTouchEnd);
-      document.removeEventListener("touchcancel", onTouchEnd);
-    };
-  }, []);
+  const handleCommit = () => { lastHapticVal.current = null; };
 
   return (
-    <div
-      ref={trackRef}
-      className="relative w-full flex items-center cursor-pointer select-none"
-      style={{ touchAction: "none", userSelect: "none", height: 48 } as React.CSSProperties}
-    >
-      <div className="absolute inset-x-0 h-3 rounded-full bg-border" />
-      <div
-        className="absolute h-3 rounded-full transition-none"
-        style={{ width: `${pct}%`, backgroundColor: color }}
-      />
-      <div
-        className="absolute w-8 h-8 rounded-full shadow-md border-2 border-white"
-        style={{ left: `calc(${pct}% - 16px)`, backgroundColor: color }}
-      />
-    </div>
+    <input
+      type="range"
+      min={0}
+      max={100}
+      step={1}
+      value={value}
+      onChange={handleChange}
+      onMouseUp={handleCommit}
+      onTouchEnd={handleCommit}
+      className="native-range w-full"
+      style={{
+        background: `linear-gradient(to right, ${color} ${pct}%, hsl(var(--muted)) ${pct}%)`,
+        "--thumb-color": color,
+      } as React.CSSProperties}
+    />
   );
 }
 
