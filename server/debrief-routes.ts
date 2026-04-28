@@ -2,8 +2,8 @@ import type { Express, Request, Response } from "express";
 import OpenAI from "openai";
 import { aiLimiter } from "./rate-limit";
 import { db } from "./db";
-import { debriefs, debriefMessages, dailyScores, journalEntries, moodCheckins, dailyGoals, userMetrics, users, infiniteGoals, longTermGoals, goalTemplates, habits, habitLogs } from "@shared/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { debriefs, debriefMessages, dailyScores, journalEntries, moodCheckins, dailyGoals, userMetrics, users, infiniteGoals, longTermGoals, goalTemplates, habits, habitLogs, challenges, challengeParticipants } from "@shared/schema";
+import { eq, and, desc, gte, lt } from "drizzle-orm";
 import { encrypt, decrypt } from "./encryption";
 
 const openai = new OpenAI({
@@ -25,7 +25,16 @@ function requireAuth(req: Request, res: Response): number | null {
 }
 
 export async function gatherDayContext(userId: number, date: string) {
-  const [scores, metrics, goals, moods, entries, infiniteGoalRows, ltGoals, userHabits, todayHabitLogs] = await Promise.all([
+  // 30-day window ending the day before the debrief date (for averages / history)
+  const windowStart = new Date(date + "T12:00:00");
+  windowStart.setDate(windowStart.getDate() - 30);
+  const windowStartStr = windowStart.toISOString().split("T")[0];
+
+  const [
+    scores, metrics, goals, moods, entries,
+    infiniteGoalRows, ltGoals, userHabits, todayHabitLogs,
+    historicalScores, recentDebriefs, activeParticipations,
+  ] = await Promise.all([
     db.select().from(dailyScores).where(and(eq(dailyScores.userId, userId), eq(dailyScores.date, date))),
     db.select().from(userMetrics).where(and(eq(userMetrics.userId, userId), eq(userMetrics.isActive, true))),
     db.select().from(dailyGoals).where(and(eq(dailyGoals.userId, userId), eq(dailyGoals.date, date))),
@@ -35,6 +44,27 @@ export async function gatherDayContext(userId: number, date: string) {
     db.select().from(longTermGoals).where(and(eq(longTermGoals.userId, userId), eq(longTermGoals.isActive, true))),
     db.select().from(habits).where(and(eq(habits.userId, userId), eq(habits.isArchived, false))),
     db.select().from(habitLogs).where(and(eq(habitLogs.userId, userId), eq(habitLogs.date, date))),
+    // 30-day historical scores (excluding today) for per-metric averages
+    db.select().from(dailyScores).where(and(
+      eq(dailyScores.userId, userId),
+      gte(dailyScores.date, windowStartStr),
+      lt(dailyScores.date, date),
+    )),
+    // Last 4 completed debriefs before today (for continuity context)
+    db.select().from(debriefs).where(and(
+      eq(debriefs.userId, userId),
+      eq(debriefs.isComplete, true),
+      lt(debriefs.date, date),
+    )).orderBy(desc(debriefs.date)).limit(4),
+    // Active challenges the user is participating in
+    db.select({ challenge: challenges, participation: challengeParticipants })
+      .from(challengeParticipants)
+      .innerJoin(challenges, eq(challenges.id, challengeParticipants.challengeId))
+      .where(and(
+        eq(challengeParticipants.userId, userId),
+        eq(challengeParticipants.status, "joined"),
+        gte(challenges.endDate, date),
+      )),
   ]);
 
   // Exclude zero scores — a value of 0 almost always means the user didn't log that
@@ -63,22 +93,38 @@ export async function gatherDayContext(userId: number, date: string) {
   // Build a map of metricName → maxValue from the user's configured metrics
   const metricMaxValues = new Map(metrics.map(m => [m.name, m.maxValue ?? 100]));
 
+  // Compute 30-day average per metric from historical data
+  const metricTotals: Record<string, { sum: number; count: number }> = {};
+  for (const s of historicalScores) {
+    if (s.value > 0) {
+      if (!metricTotals[s.metricName]) metricTotals[s.metricName] = { sum: 0, count: 0 };
+      metricTotals[s.metricName].sum += s.value;
+      metricTotals[s.metricName].count += 1;
+    }
+  }
+  const metricAverages: Record<string, number> = {};
+  for (const [name, { sum, count }] of Object.entries(metricTotals)) {
+    metricAverages[name] = Math.round(sum / count);
+  }
+
   const scoreMap = loggedScores.length > 0
     ? loggedScores.map(s => {
         const maxVal = metricMaxValues.get(s.metricName) ?? 100;
         const unit = METRIC_UNITS[s.metricName];
+        const avg = metricAverages[s.metricName];
+        const avgNote = avg !== undefined ? ` (30-day avg: ${avg}${unit && maxVal !== 100 ? ` ${unit}` : ""})` : "";
         if (unit && maxVal !== 100) {
-          // Raw measurement — show with unit so the AI understands the scale
-          return `${s.metricName}: ${s.value} ${unit}`;
+          return `${s.metricName}: ${s.value} ${unit}${avgNote}`;
         }
-        return `${s.metricName}: ${s.value}/100`;
-      }).join(", ")
+        return `${s.metricName}: ${s.value}/100${avgNote}`;
+      }).join("\n  ")
     : "";
+
   const goalSummary = goals.length > 0
-    ? `Daily goals: ${goals.filter(g => g.completed).length}/${goals.length} completed (${goals.map(g => `${g.title}: ${g.completed ? "done" : "not done"}`).join(", ")})`
-    : "No daily goals set today";
+    ? `Job list (today's goals): ${goals.filter(g => g.completed).length}/${goals.length} completed\n  ${goals.map(g => `• ${g.title}: ${g.completed ? "✓ done" : "open"}`).join("\n  ")}`
+    : "No job list items set today";
   const moodAvg = moods.length > 0
-    ? `Mood: ${Math.round(moods.reduce((a, m) => a + m.value, 0) / moods.length)}/100 (${moods.length} check-in${moods.length > 1 ? "s" : ""})`
+    ? `Mood check-ins: ${moods.map(m => `${m.value}/100 (${m.label || "check-in"})`).join(", ")} — daily avg ${Math.round(moods.reduce((a, m) => a + m.value, 0) / moods.length)}/100`
     : "No mood check-ins yet";
   const journalContent = entries.length > 0 ? decrypt(entries[0].content) : "";
   const infiniteGoalContent = infiniteGoalRows.length > 0 ? decrypt(infiniteGoalRows[0].content) : null;
@@ -86,6 +132,8 @@ export async function gatherDayContext(userId: number, date: string) {
 
   const debriefDate = new Date(date + "T12:00:00");
   const dayOfWeek = debriefDate.getDay();
+  const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const dayName = DAY_NAMES[dayOfWeek];
   const isWeeklyAlignmentDay = dayOfWeek === 0;
 
   // Habit context
@@ -96,13 +144,40 @@ export async function gatherDayContext(userId: number, date: string) {
     return `${h.emoji} ${h.name} (${done ? "done today" : "not yet today"}, ${streak}-day streak)`;
   });
   const habitSummary = habitSummaryParts.length > 0
-    ? `Habits in progress: ${habitSummaryParts.join("; ")}`
+    ? `Habits in progress:\n  ${habitSummaryParts.join("\n  ")}`
     : "";
+
+  // Recent debrief history — load summaries or fall back to first AI message
+  const recentDebriefContext: string[] = [];
+  for (const d of recentDebriefs) {
+    const debriefLabel = new Date(d.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+    if (d.summary) {
+      recentDebriefContext.push(`${debriefLabel}: ${decrypt(d.summary)}`);
+    } else {
+      // Fall back to loading messages for context
+      const msgs = await db.select().from(debriefMessages)
+        .where(eq(debriefMessages.debriefId, d.id))
+        .orderBy(debriefMessages.createdAt)
+        .limit(6);
+      const decrypted = msgs.map(m => ({ role: m.role, content: decrypt(m.content) }));
+      const userMsgs = decrypted.filter(m => m.role === "user").map(m => m.content).join(" / ").slice(0, 300);
+      if (userMsgs) recentDebriefContext.push(`${debriefLabel}: ${userMsgs}`);
+    }
+  }
+
+  // Active challenges
+  const challengeContextParts = activeParticipations.map(({ challenge: c, participation: p }) => {
+    const typeNote = c.type === "habit"
+      ? `habit challenge — "${c.habitEmoji || ""} ${c.habitName || ""}"${p.commitment ? `, your commitment: "${p.commitment}"` : ""}`
+      : `score challenge — tracking "${c.metricName}"`;
+    return `"${c.title}" (${typeNote}, ends ${c.endDate})`;
+  });
 
   return {
     scoreMap, goalSummary, moodAvg, journalContent,
     hasScores: loggedScores.length > 0, hasGoals: goals.length > 0, hasMoods: moods.length > 0,
     infiniteGoalContent, longTermGoalsList, isWeeklyAlignmentDay, habitSummary,
+    dayName, recentDebriefContext, challengeContextParts,
   };
 }
 
@@ -216,21 +291,25 @@ export function buildSystemPrompt(context: Awaited<ReturnType<typeof gatherDayCo
 
   const phase = userMessageCount < 3 ? "core" : "extended";
 
+  const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const debriefDayName = context.dayName ?? DAY_NAMES[debriefDate.getDay()];
+  const timeOfDay = currentHour < 12 ? "morning" : currentHour < 17 ? "afternoon" : "evening";
+  const timeLabel = `${debriefDayName}, ${currentHour}:${String(now.getMinutes()).padStart(2, "0")} (${timeOfDay})`;
+
   // Determine timing context from the ACTUAL date being debriefed, not from journalPreference.
   // journalPreference only affects smart default tab — not whether the AI says "today" or "yesterday".
   let timingContext: string;
   if (isToday) {
-    const timeOfDay = currentHour < 12 ? "morning" : currentHour < 17 ? "afternoon" : "evening";
     const dayStillOpen = currentHour < 20;
     const morningCaveat = currentHour < 11
       ? `\nMORNING DEBRIEF CAVEAT: It is early in the day (${currentHour}:xx). Activity metrics like Steps, Active Energy, Exercise Minutes, Flights Climbed, and Walking Distance reflect what has accumulated SO FAR — they will grow throughout the day. Do NOT question, flag, or comment on low values for these metrics. They are expected to be low at this hour. Sleep and recovery metrics (Sleep Score, HRV, Resting Heart Rate) are valid because they reflect the night just completed.`
       : "";
-    timingContext = `This is TODAY's debrief — current time is ${timeOfDay} (hour ${currentHour}).${morningCaveat}
+    timingContext = `This is TODAY's debrief — ${timeLabel}.${morningCaveat}
 ${dayStillOpen
   ? `IMPORTANT: The day is still in progress. For any daily goals not yet marked complete, treat them as still achievable — do NOT ask why they weren't done or imply failure. Note what's been done and encourage completing the remaining goals before end of day. Phrase open goals as in-progress, not missed.`
   : `It is late in the day — remaining open goals are unlikely to be completed today. You can analyse them as session outcomes.`}`;
   } else if (isYesterday) {
-    timingContext = `This is a debrief for YESTERDAY — a completed session. Frame it as a post-race review. Treat all uncompleted goals as session outcomes to reflect on and learn from.`;
+    timingContext = `This is a debrief for YESTERDAY (${debriefDayName}) — a completed session. Frame it as a post-race review. Treat all uncompleted goals as session outcomes to reflect on and learn from.`;
   } else {
     timingContext = `This is a retrospective debrief for ${debriefDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} — a historical session. Frame it as reviewing archived telemetry from a past race.`;
   }
@@ -246,6 +325,14 @@ ${context.isWeeklyAlignmentDay ? `TODAY IS THE WEEKLY ALIGNMENT CHECK. At some p
 
   const habitsSection = context.habitSummary
     ? `\nHABIT LAB — habits the driver is actively building:\n${context.habitSummary}\nIf relevant in the conversation, acknowledge habit completion as a win or gently nudge them on incomplete habits — but only if it flows naturally, never force it.`
+    : "";
+
+  const challengesSection = context.challengeContextParts && context.challengeContextParts.length > 0
+    ? `\nACTIVE CHALLENGES (team accountability):\n  ${context.challengeContextParts.join("\n  ")}\nReference these when relevant — challenge progress can reveal consistency patterns or social commitment dynamics.`
+    : "";
+
+  const recentHistorySection = context.recentDebriefContext && context.recentDebriefContext.length > 0
+    ? `\nRECENT SESSION HISTORY (last ${context.recentDebriefContext.length} completed debriefs — use for pattern recognition, continuity, and follow-up on anything left unresolved):\n  ${context.recentDebriefContext.join("\n  ")}`
     : "";
 
   const { summary: profileSection, isBirthday } = buildUserProfileSummary(userProfile, date);
@@ -268,17 +355,19 @@ ENGINEERING MINDSET — THIS IS THE CORE OF YOUR PERSONA:
 TIMING:
 ${timingContext}
 
-TELEMETRY (only shown if the user explicitly logged it — missing metric = no data, NOT a zero. Never reference or penalise a metric that isn't listed):
-${context.hasScores ? `Performance scores: ${context.scoreMap}` : "No scores logged — don't mention scores."}
+TELEMETRY — use this data as your starting point. Each score is shown with the driver's own 30-day average so you can identify outliers relative to THEIR baseline, not against arbitrary benchmarks or other metrics. Never compare metrics against each other. A score below average is only worth exploring if it's meaningful in context.
+(Only reference a metric if it appears below — missing = not logged, NOT a zero.)
+${context.hasScores ? `Performance scores:\n  ${context.scoreMap}` : "No scores logged — don't mention scores."}
+
 ${context.goalSummary}
 ${context.moodAvg}
-${context.journalContent ? `Session notes: "${context.journalContent}"` : ""}${infiniteGoalSection}${ltGoalsSection}${habitsSection}
+${context.journalContent ? `Session notes: "${context.journalContent}"` : ""}${infiniteGoalSection}${ltGoalsSection}${habitsSection}${challengesSection}${recentHistorySection}
 
 CONVERSATION STRUCTURE:
 Exchange ${userMessageCount + 1} of the session. User has replied ${userMessageCount} time(s).
 ${phase === "core" ? `
 - CORE phase (exchanges 1-3). One question per response — no exceptions.
-- Exchange 1: Read the telemetry. If there are anomalies or patterns in the numbers, name them. Don't just ask how it felt — you already have data. Start with what the data shows, then ask what's behind the number that stands out most.
+- Exchange 1: Read the telemetry. Compare each score to the driver's own 30-day average — flag anything that's meaningfully above or below their personal baseline. If there's recent session history, reference any threads that carry over from previous sessions (unresolved issues, stated intentions, stated goals). Don't just ask how it felt — you already have data. Start with what stands out relative to their baseline, then ask what's behind it.
 - Exchange 2: Dig into the answer they gave. Don't accept the first explanation. Ask the follow-up that gets one layer deeper. Push back if something doesn't add up.
 - Exchange 3: Synthesise. Connect what they've told you with what the telemetry shows. Surface the insight they probably haven't articulated yet — the real cause, the hidden pattern, or the assumption that's worth questioning. After their answer, the app offers the option to go deeper.
 ` : `
