@@ -55,6 +55,28 @@ function AuthenticatedRouter() {
     staleTime: 5 * 60 * 1000,
   });
 
+  // Handle Stripe Checkout return — Stripe redirects to /?subscription=success or ?subscription=cancelled
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sub = params.get("subscription");
+    if (!sub) return;
+    window.history.replaceState({}, "", window.location.pathname);
+    if (sub === "success") {
+      // Refresh auth/me so isPremium flips immediately
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
+      toast({
+        title: "Welcome to DBrief Premium",
+        description: "Your features are now unlocked. Full throttle.",
+      });
+    } else if (sub === "cancelled") {
+      toast({
+        title: "No changes made",
+        description: "You can upgrade any time from the premium features.",
+      });
+    }
+  }, []);
+
   // Handle Google OAuth redirect callback — Google returns to the app with
   // #id_token=... in the URL fragment after the user signs in.
   useEffect(() => {

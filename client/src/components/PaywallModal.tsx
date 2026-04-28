@@ -15,7 +15,7 @@ interface PaywallModalProps {
 
 const PREMIUM_FEATURES = [
   { icon: Mic,      label: "Voice Notes",                 desc: "Record unlimited audio debriefs" },
-  { icon: Users,    label: "Team — Squad & Challenges",   desc: "Accountability, leaderboards, group challenges" },
+  { icon: Users,    label: "Team — Squad & Challenges",   desc: "Connect with friends for accountability, leaderboards & group challenges" },
   { icon: Flag,     label: "Weekly Race Report",          desc: "AI-generated 7-day narrative debrief" },
   { icon: BarChart2,label: "Data Pattern Analysis",       desc: "30-day correlation insights across all metrics" },
   { icon: Target,   label: "Mission Intelligence",        desc: "90-day goal trajectory alignment with your Infinite Goal" },
@@ -36,16 +36,11 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
         toast({ title: message ?? "Checkout unavailable", description: "Please try again shortly.", variant: "destructive" });
         return;
       }
-      // Open Stripe Checkout — on iOS this opens in Safari, returns to app after payment
-      window.open(url, "_blank");
-
-      // After they return, refetch subscription status via /api/auth/me
-      setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-        queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
-      }, 2000);
-
       onClose();
+      // Navigate current window to Stripe Checkout.
+      // window.open() is blocked by iOS Safari after async calls — location.href is always allowed.
+      // Stripe redirects back to /?subscription=success on completion.
+      window.location.href = url;
     } catch (err: any) {
       toast({ title: "Checkout failed", description: err.message ?? "Please try again.", variant: "destructive" });
     } finally {
