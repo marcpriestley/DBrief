@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { Flag, ChevronDown, ChevronUp, RefreshCw, Calendar } from "lucide-react";
+import { Flag, ChevronDown, ChevronUp, RefreshCw, Calendar, Lock } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { haptic } from "@/lib/haptics";
 import { useToast } from "@/hooks/use-toast";
+import { useSubscription } from "@/hooks/useSubscription";
+import { usePaywall } from "@/contexts/PaywallContext";
 
 interface WeeklyReport {
   id: number;
@@ -34,6 +36,8 @@ export default function WeeklyRaceReport() {
   const [expanded, setExpanded] = useState(false);
   const [skippedMsg, setSkippedMsg] = useState<string | null>(null);
   const { toast } = useToast();
+  const { isPremium, isLoading: subLoading } = useSubscription();
+  const { openPaywall } = usePaywall();
 
   const { data: report, isLoading } = useQuery<WeeklyReport | null>({
     queryKey: ["/api/weekly-report/latest"],
@@ -61,7 +65,39 @@ export default function WeeklyRaceReport() {
   // Show generate button whenever there's no report for this week
   const showGenerate = !report || !isCurrentWeek;
 
-  if (isLoading) return null;
+  if (isLoading || subLoading) return null;
+
+  if (!isPremium) {
+    return (
+      <div className="bg-card rounded-xl border border-border/50 shadow-sm overflow-hidden">
+        <button
+          className="w-full px-5 py-4 flex items-center justify-between text-left"
+          onClick={() => { haptic("medium"); openPaywall("Weekly Race Report"); }}
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+              <Flag className="h-4 w-4 text-primary" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-foreground">Weekly Race Report</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Your engineer's weekly debrief</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Lock className="h-4 w-4 text-primary/60" />
+          </div>
+        </button>
+        <div className="px-5 pb-4 border-t border-border/30">
+          <button
+            onClick={() => { haptic("medium"); openPaywall("Weekly Race Report"); }}
+            className="mt-3 text-xs text-primary font-medium hover:underline"
+          >
+            Unlock with Premium — £5.99/month →
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (!report && !showGenerate) return null;
 

@@ -12,6 +12,8 @@ import { openAppSettings } from "@/hooks/useNativeNotifications";
 import { useTTS, warmAudioCtx } from "@/hooks/useTTS";
 import { useRealtimeVoice, type RealtimeTranscript } from "@/hooks/useRealtimeVoice";
 import { useVoiceNoteRecorder } from "@/hooks/useVoiceNoteRecorder";
+import { useSubscription } from "@/hooks/useSubscription";
+import { usePaywall } from "@/contexts/PaywallContext";
 
 interface DebriefMessage {
   id: number;
@@ -431,6 +433,8 @@ function useInlineVoice() {
 }
 
 export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
+  const { isPremium } = useSubscription();
+  const { openPaywall } = usePaywall();
   const [userInput, setUserInput] = useState("");
   const [textMode, setTextMode] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
@@ -2321,6 +2325,10 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                         haptic("light");
                         setTextMode(false);
                       } else {
+                        if (!isPremium) {
+                          openPaywall("Voice Notes");
+                          return;
+                        }
                         haptic("medium");
                         warmAudioCtx();
                         startVoiceNote();

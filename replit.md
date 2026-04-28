@@ -57,6 +57,20 @@ The application uses a **React with TypeScript** frontend, styled with **Shadcn/
 - **Activity Points analytics**: `/api/me/daily-points?days=N` returns per-day habit+goal+consistency points. A bar chart card titled "Activity Points" appears in the Trends page above Mood Patterns.
 - **Habit all-done celebration**: When the last remaining habit for the day is completed, a toast slides up ("All habits locked in!") with haptic feedback, distinct from the milestone overlay.
 
+## Monetization (Stripe)
+- **Stripe integration** connected via Replit. Packages: `stripe@20`, `stripe-replit-sync@1`.
+- **Product**: "DBrief Premium" — £5.99/month (introductory), created via `scripts/seed-products.ts`.
+- **Free tier**: Debriefs (text), daily scores, goals, habits, mood, history, trends (basic), streaks, journal.
+- **Premium tier** (`subscriptionStatus = 'premium'`): Voice Notes in Debriefs, Team section (Squad/Leaderboard/Challenges), Weekly Race Report, Data Pattern Analysis, Mission Intelligence.
+- **Beta tier** (`subscriptionStatus = 'beta'`): Full premium access without payment — granted manually via `POST /api/admin/grant-beta` with `{ username, grant: true, adminCode }`. Admin code stored in `ADMIN_CODE` env var (value: `dbrief-beta-2025`).
+- **Webhook**: `POST /api/stripe/webhook` — registered BEFORE `express.json()` in `server/index.ts`. Handles `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted` to update `users.subscriptionStatus`.
+- **Schema columns added**: `stripe_customer_id`, `subscription_status` (default 'free'), `subscription_current_period_end` on `users` table.
+- **Frontend gate**: `useSubscription` hook reads `isPremium` from `/api/auth/me`. `PaywallContext` provides `openPaywall(featureName?)` to any component. `PaywallModal` slides up from bottom with amber F1 design, feature list, and Stripe Checkout link. Team nav tab shows paywall instead of navigating when not premium.
+- **Checkout flow**: `POST /api/subscription/checkout` → creates Stripe Checkout session → returns URL → `window.open(url)` → user pays in Safari → webhook fires → `subscriptionStatus` updated → React Query refetches on window focus.
+- **Customer portal**: `POST /api/subscription/portal` → returns Stripe billing portal URL for subscription management.
+- **Stripe init**: Non-blocking at server startup: `runMigrations` → `getStripeSync` → `findOrCreateManagedWebhook` → `syncBackfill`.
+- **Seed script**: `npx tsx scripts/seed-products.ts` — idempotent, creates DBrief Premium product + £5.99/month price.
+
 ## External Dependencies
 - **PostgreSQL**: Primary database.
 - **Apple Health (HealthKit)**: For syncing health metrics on iOS devices via Capacitor.

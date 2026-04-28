@@ -19,6 +19,9 @@ export const users = pgTable("users", {
   journalPreference: text("journal_preference").default("evening"),
   goalPreference: text("goal_preference").default("morning"),
   userProfile: jsonb("user_profile").$type<Record<string, string>>(),
+  stripeCustomerId: text("stripe_customer_id"),
+  subscriptionStatus: text("subscription_status").default("free"),
+  subscriptionCurrentPeriodEnd: timestamp("subscription_current_period_end"),
 });
 
 export const journalEntries = pgTable("journal_entries", {

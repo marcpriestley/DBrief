@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { BarChart2, TrendingUp, RefreshCw, X } from "lucide-react";
+import { BarChart2, TrendingUp, RefreshCw, X, Lock } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { haptic } from "@/lib/haptics";
+import { useSubscription } from "@/hooks/useSubscription";
+import { usePaywall } from "@/contexts/PaywallContext";
 
 interface PerformancePattern {
   id: number;
@@ -47,6 +49,8 @@ function ConfidencePip({ level }: { level: string | null }) {
 export default function PerformancePatterns() {
   const queryClient = useQueryClient();
   const [dismissed, setDismissed] = useState<Set<number>>(new Set());
+  const { isPremium } = useSubscription();
+  const { openPaywall } = usePaywall();
 
   const { data: patterns = [], isLoading: patternsLoading } = useQuery<PerformancePattern[]>({
     queryKey: ["/api/performance-patterns"],
@@ -72,6 +76,37 @@ export default function PerformancePatterns() {
   const hasPatterns = visiblePatterns.length > 0;
 
   if (patternsLoading) return null;
+
+  // ── Premium gate ──────────────────────────────────────────────────────────
+  if (!isPremium) {
+    return (
+      <div className="bg-card rounded-xl border border-border/50 shadow-sm overflow-hidden">
+        <button
+          className="w-full px-4 py-4 flex items-center justify-between text-left"
+          onClick={() => { haptic("medium"); openPaywall("Data Pattern Analysis"); }}
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
+              <BarChart2 className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-foreground">Data Pattern Analysis</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Score correlations from your daily numbers</p>
+            </div>
+          </div>
+          <Lock className="h-4 w-4 text-primary/60 flex-shrink-0" />
+        </button>
+        <div className="px-4 pb-4 border-t border-border/30">
+          <button
+            onClick={() => { haptic("medium"); openPaywall("Data Pattern Analysis"); }}
+            className="mt-3 text-xs text-primary font-medium hover:underline"
+          >
+            Unlock with Premium — £5.99/month →
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // ── Pre-unlock: not enough data yet ────────────────────────────────────────
   if (dataDays < 5) {

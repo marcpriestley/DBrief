@@ -7,6 +7,8 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { AIInsight } from "@shared/schema";
 import { useTTS } from "@/hooks/useTTS";
+import { useSubscription } from "@/hooks/useSubscription";
+import { usePaywall } from "@/contexts/PaywallContext";
 
 type StreakResponse = {
   currentStreak: number;
@@ -32,6 +34,8 @@ export default function AIInsights() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const tts = useTTS();
+  const { isPremium } = useSubscription();
+  const { openPaywall } = usePaywall();
 
   const { data: insights = [] } = useQuery<AIInsight[]>({
     queryKey: ["/api/ai-insights"],
@@ -73,6 +77,37 @@ export default function AIInsights() {
 
   const latestInsight = insights[0];
   if (streakLoading) return null;
+
+  // ── Premium gate ──────────────────────────────────────────────────────────
+  if (!isPremium) {
+    return (
+      <div className="bg-card rounded-xl border border-border/50 shadow-sm overflow-hidden">
+        <button
+          className="w-full px-4 py-4 flex items-center justify-between text-left"
+          onClick={() => { openPaywall("Mission Intelligence"); }}
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+              <Target className="h-4 w-4 text-primary" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-foreground">Mission Intelligence</p>
+              <p className="text-xs text-muted-foreground mt-0.5">90-day goal trajectory analysis</p>
+            </div>
+          </div>
+          <Lock className="h-4 w-4 text-primary/60 flex-shrink-0" />
+        </button>
+        <div className="px-4 pb-4 border-t border-border/30">
+          <button
+            onClick={() => { openPaywall("Mission Intelligence"); }}
+            className="mt-3 text-xs text-primary font-medium hover:underline"
+          >
+            Unlock with Premium — £5.99/month →
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const currentStreak    = streak?.currentStreak    ?? 0;
   const longestStreak    = streak?.longestStreak    ?? 0;

@@ -22,6 +22,7 @@ import { registerObjectStorageRoutes } from "./replit_integrations/object_storag
 import { registerChatRoutes } from "./replit_integrations/chat/routes";
 import { registerDebriefRoutes } from "./debrief-routes";
 import { registerRealtimeVoiceWS } from "./realtime-voice";
+import { registerSubscriptionRoutes } from "./subscription-routes";
 import { generateWeeklyReport, generatePerformancePatterns } from "./weekly-report";
 import { db } from "./db";
 import { eq, and, desc, gte } from "drizzle-orm";
@@ -274,6 +275,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         hasCompletedOnboarding: user.hasCompletedOnboarding ?? false,
         journalPreference: user.journalPreference ?? "evening",
         userProfile: user.userProfile ?? null,
+        subscriptionStatus: user.subscriptionStatus ?? 'free',
+        isPremium: user.subscriptionStatus === 'premium' || user.subscriptionStatus === 'beta',
       });
     } catch (error) {
       res.status(500).json({ message: "Failed to get user" });
@@ -2448,6 +2451,7 @@ Convert the habit to a natural English verb phrase. Return ONLY the sentence, no
 
   registerChatRoutes(app);
   registerDebriefRoutes(app);
+  registerSubscriptionRoutes(app);
   registerRealtimeVoiceWS(httpServer);
 
   return httpServer;

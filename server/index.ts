@@ -5,11 +5,33 @@ import { startNotificationScheduler } from "./notifications";
 import { clearApnsCache } from "./apns";
 import { storage } from "./storage";
 import { sessionMiddleware } from "./session";
+import { WebhookHandlers } from "./webhookHandlers";
 
 const app = express();
 // Trust the first reverse-proxy hop (Replit's load balancer) so express-rate-limit
 // can read the real client IP from X-Forwarded-For without validation warnings.
 app.set("trust proxy", 1);
+
+// ── Stripe webhook — MUST be registered BEFORE express.json() ─────────────
+// Stripe webhooks require the raw Buffer body for signature verification.
+// Registering after express.json() would parse the body as JSON, breaking verification.
+app.post(
+  '/api/stripe/webhook',
+  express.raw({ type: 'application/json' }),
+  async (req, res) => {
+    const signature = req.headers['stripe-signature'];
+    if (!signature) return res.status(400).json({ error: 'Missing stripe-signature' });
+    try {
+      const sig = Array.isArray(signature) ? signature[0] : signature;
+      await WebhookHandlers.processWebhook(req.body as Buffer, sig);
+      res.status(200).json({ received: true });
+    } catch (err: any) {
+      console.error('[Stripe] Webhook error:', err.message);
+      res.status(400).json({ error: 'Webhook processing error' });
+    }
+  }
+);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
@@ -108,6 +130,25 @@ app.use((req, res, next) => {
     
     // Start notification scheduler after server is running
     startNotificationScheduler();
+
+    // Initialize Stripe schema and sync — non-blocking so startup isn't delayed
+    // if Stripe is temporarily unreachable.
+    (async () => {
+      try {
+        const { runMigrations } = await import('stripe-replit-sync');
+        const databaseUrl = process.env.DATABASE_URL;
+        if (!databaseUrl) throw new Error('DATABASE_URL required');
+        await runMigrations({ databaseUrl });
+        const { getStripeSync } = await import('./stripeClient');
+        const stripeSync = await getStripeSync();
+        const webhookBase = `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
+        await stripeSync.findOrCreateManagedWebhook(`${webhookBase}/api/stripe/webhook`);
+        stripeSync.syncBackfill().catch((e: any) => log(`[Stripe] Backfill error: ${e.message}`));
+        log('[Stripe] Initialized');
+      } catch (e: any) {
+        log(`[Stripe] Init error (non-fatal): ${e.message}`);
+      }
+    })();
 
     // Seed APNs credentials into server_config from env vars on startup
     // This ensures production DB always has the correct values even if env var APNS_TEAM_ID is broken

@@ -13,6 +13,9 @@ import logoSrc from "@assets/IMG_1282_1776582526490.jpeg";
 import { isNativeHealth, getHealthAuthState, syncHealthData } from "@/lib/healthKit";
 import { Capacitor } from "@capacitor/core";
 import { useMoodOpen } from "@/contexts/MoodContext";
+import { PaywallProvider } from "@/contexts/PaywallContext";
+import PaywallModal from "@/components/PaywallModal";
+import { useSubscription } from "@/hooks/useSubscription";
 
 function applyStatusBar(includeOverlay: boolean) {
   if (!Capacitor.isNativePlatform()) return;
@@ -123,7 +126,16 @@ function getCurrentPeriod() {
 function AppLayoutInner({ children }: AppLayoutProps) {
   const [location] = useLocation();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [paywallOpen, setPaywallOpen] = useState(false);
+  const [paywallFeature, setPaywallFeature] = useState<string | undefined>();
+  const { isPremium } = useSubscription();
   const { openMood } = useMoodOpen();
+
+  function openPaywall(featureName?: string) {
+    setPaywallFeature(featureName);
+    setPaywallOpen(true);
+    haptic("medium");
+  }
 
   const { data: streak } = useQuery<any>({ queryKey: ["/api/streak"] });
 
@@ -346,6 +358,7 @@ function AppLayoutInner({ children }: AppLayoutProps) {
   };
 
   return (
+    <PaywallProvider value={{ openPaywall }}>
     <div className="bg-background" style={{ minHeight: '100dvh' }}>
       <div
         className="fixed inset-0 z-0 pointer-events-none"
@@ -464,28 +477,45 @@ function AppLayoutInner({ children }: AppLayoutProps) {
         <div className="flex max-w-2xl mx-auto">
           {allTabs.map(({ href, label, Icon }) => {
             const active = isActive(href);
-            const showChallengePulse = href === "/squad" && hasUnloggedChallenge && !active;
+            const isTeamTab = href === "/squad";
+            const isLocked = isTeamTab && !isPremium;
+            const showChallengePulse = href === "/squad" && hasUnloggedChallenge && !active && isPremium;
+
+            const btn = (
+              <button
+                onClick={() => {
+                  if (isLocked) {
+                    openPaywall("Team — Squad & Challenges");
+                    return;
+                  }
+                  haptic("select");
+                }}
+                className={`relative w-full flex flex-col items-center justify-center py-2.5 gap-0.5 transition-all ${
+                  active ? "text-primary" : "text-muted-foreground"
+                }`}
+              >
+                {showChallengePulse && (
+                  <span className="absolute top-1.5 right-[20%] flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-70" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
+                  </span>
+                )}
+                <Icon className={`h-[22px] w-[22px] transition-transform ${active ? "scale-110" : ""}`} />
+                {active && (
+                  <span className="text-[10px] font-bold uppercase tracking-wider leading-none">
+                    {label}
+                  </span>
+                )}
+              </button>
+            );
+
+            if (isLocked) {
+              return <div key={href} className="flex-1">{btn}</div>;
+            }
+
             return (
               <Link key={href} href={href} className="flex-1">
-                <button
-                  onClick={() => haptic("select")}
-                  className={`relative w-full flex flex-col items-center justify-center py-2.5 gap-0.5 transition-all ${
-                    active ? "text-primary" : "text-muted-foreground"
-                  }`}
-                >
-                  {showChallengePulse && (
-                    <span className="absolute top-1.5 right-[20%] flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-70" />
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
-                    </span>
-                  )}
-                  <Icon className={`h-[22px] w-[22px] transition-transform ${active ? "scale-110" : ""}`} />
-                  {active && (
-                    <span className="text-[10px] font-bold uppercase tracking-wider leading-none">
-                      {label}
-                    </span>
-                  )}
-                </button>
+                {btn}
               </Link>
             );
           })}
@@ -493,14 +523,17 @@ function AppLayoutInner({ children }: AppLayoutProps) {
       </nav>
 
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+      <PaywallModal isOpen={paywallOpen} onClose={() => setPaywallOpen(false)} featureName={paywallFeature} />
       <AppTour />
     </div>
+    </PaywallProvider>
   );
 }
 
 export default function AppLayout({ children }: AppLayoutProps) {
   const { data: user } = useQuery<any>({ queryKey: ["/api/auth/me"] });
-
+  // PaywallProvider is satisfied by AppLayoutInner's openPaywall function.
+  // We use a temporary no-op here; AppLayoutInner patches it via the inner Provider.
   return (
     <DateProvider
       journalPreference={user?.journalPreference}
