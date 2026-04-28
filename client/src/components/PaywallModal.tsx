@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Mic, Users, BarChart2, Flag, Target, Zap, CheckCircle2, Crown } from "lucide-react";
+import { X, Mic, Users, BarChart2, Flag, Target, Zap, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -14,12 +14,12 @@ interface PaywallModalProps {
 }
 
 const PREMIUM_FEATURES = [
-  { icon: Mic,      label: "Voice Notes",                 desc: "Record unlimited audio debriefs" },
-  { icon: Users,    label: "Team — Squad & Challenges",   desc: "Connect with friends for accountability, leaderboards & group challenges" },
-  { icon: Flag,     label: "Weekly Race Report",          desc: "AI-generated 7-day narrative debrief" },
-  { icon: BarChart2,label: "Data Pattern Analysis",       desc: "30-day correlation insights across all metrics" },
-  { icon: Target,   label: "Mission Intelligence",        desc: "90-day goal trajectory alignment with your Infinite Goal" },
-  { icon: Zap,      label: "Live Voice Debrief",          desc: "Real-time AI conversation — coming soon" },
+  { icon: Mic,       label: "Voice Notes",               desc: "Record unlimited audio debriefs" },
+  { icon: Users,     label: "Team — Squad & Challenges", desc: "Connect with friends for accountability, leaderboards & group challenges" },
+  { icon: Flag,      label: "Weekly Race Report",        desc: "AI-generated 7-day narrative debrief" },
+  { icon: BarChart2, label: "Data Pattern Analysis",     desc: "30-day correlation insights across all metrics" },
+  { icon: Target,    label: "Mission Intelligence",      desc: "90-day goal trajectory alignment with your Infinite Goal" },
+  { icon: Zap,       label: "Live Voice Debrief",        desc: "Real-time AI conversation — coming soon" },
 ];
 
 export default function PaywallModal({ isOpen, onClose, featureName }: PaywallModalProps) {
@@ -88,9 +88,13 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
                   <X className="h-5 w-5" />
                 </button>
 
-                {/* Crown badge */}
-                <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-white/15 backdrop-blur mb-3">
-                  <Crown className="h-7 w-7 text-amber-100" />
+                {/* DBrief logo */}
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-white/15 backdrop-blur mb-3 overflow-hidden">
+                  <img
+                    src="/app-icon.png"
+                    alt="DBrief"
+                    className="w-14 h-14 object-contain rounded-xl"
+                  />
                 </div>
 
                 <h2 className="text-2xl font-black text-white tracking-tight">DBrief Premium</h2>
@@ -113,6 +117,11 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
                   <span className="text-4xl font-black text-white leading-none">£5.99</span>
                   <span className="text-sm text-amber-200 mb-1">/ month</span>
                 </div>
+
+                {/* Cancel anytime */}
+                <p className="mt-1.5 text-xs text-amber-200/70">
+                  Cancel anytime · No minimum term
+                </p>
               </div>
 
               {/* Features list — scrollable */}
@@ -148,9 +157,12 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
                 >
                   {loading ? "Opening checkout…" : "Unlock Premium — £5.99 / month"}
                 </Button>
+                <p className="text-center text-[11px] text-muted-foreground/60 mt-2">
+                  Have a promo code? Enter it on the next screen.
+                </p>
                 <button
                   onClick={onClose}
-                  className="w-full mt-3 text-sm text-muted-foreground hover:text-foreground transition-colors py-1"
+                  className="w-full mt-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-1"
                 >
                   Maybe later
                 </button>
