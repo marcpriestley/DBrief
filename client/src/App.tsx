@@ -182,16 +182,16 @@ function AuthenticatedRouter() {
 
   // Sync subscription status from Stripe on every app load — self-heals any
   // missed webhooks (e.g. when dev server deleted the prod webhook endpoint).
+  // Only bother for users who appear to have/had a subscription (skip free & beta).
   useEffect(() => {
-    if (!user || !user.stripeCustomerId) return;
+    if (!user) return;
+    const status = user.subscriptionStatus as string | undefined;
+    if (status === 'beta' || status === 'free' || !status) return;
     fetch("/api/subscription/sync", { method: "POST" })
       .then(r => r.json())
-      .then(({ synced, status }) => {
-        if (synced) {
-          // If Stripe returned a different status, refresh auth/me so the UI updates
-          if (status !== user.subscriptionStatus) {
-            queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-          }
+      .then(({ synced, status: newStatus }) => {
+        if (synced && newStatus !== user.subscriptionStatus) {
+          queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
         }
       })
       .catch(() => {}); // non-fatal — app still works on cached status
