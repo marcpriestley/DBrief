@@ -2,6 +2,15 @@ import Stripe from 'stripe';
 import { StripeSync } from 'stripe-replit-sync';
 
 async function getCredentials(): Promise<{ secretKey: string; publishableKey: string }> {
+  // 1. Prefer direct env var — works in both dev and production deployment
+  if (process.env.STRIPE_SECRET_KEY) {
+    return {
+      secretKey: process.env.STRIPE_SECRET_KEY,
+      publishableKey: process.env.STRIPE_PUBLISHABLE_KEY ?? '',
+    };
+  }
+
+  // 2. Fall back to Replit connector API (development convenience)
   const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
   const xReplitToken = process.env.REPL_IDENTITY
     ? 'repl ' + process.env.REPL_IDENTITY
@@ -11,8 +20,8 @@ async function getCredentials(): Promise<{ secretKey: string; publishableKey: st
 
   if (!hostname || !xReplitToken) {
     throw new Error(
-      'Missing Replit environment variables. ' +
-      'Ensure the Stripe integration is connected via the Integrations tab.'
+      'Stripe integration not connected or missing secret key. ' +
+      'Connect Stripe via the Integrations tab first.'
     );
   }
 
