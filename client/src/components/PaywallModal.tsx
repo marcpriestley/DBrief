@@ -6,6 +6,8 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { haptic } from "@/lib/haptics";
 import { queryClient } from "@/lib/queryClient";
+import { Capacitor } from "@capacitor/core";
+import { Browser } from "@capacitor/browser";
 
 interface PaywallModalProps {
   isOpen: boolean;
@@ -37,10 +39,33 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
         return;
       }
       onClose();
-      // Navigate current window to Stripe Checkout.
-      // window.open() is blocked by iOS Safari after async calls — location.href is always allowed.
-      // Stripe redirects back to /?subscription=success on completion.
-      window.location.href = url;
+
+      if (Capacitor.isNativePlatform()) {
+        // On iOS: open Stripe in SFSafariViewController so the main WebView is
+        // never navigated away — localStorage, session, and native background all stay intact.
+        await Browser.open({ url, presentationStyle: "popover" });
+
+        // When the in-app browser closes, poll subscription status to detect success.
+        const listener = await Browser.addListener("browserFinished", async () => {
+          listener.remove();
+          // Small delay to let webhook processing complete
+          await new Promise(r => setTimeout(r, 1500));
+          const statusRes = await fetch("/api/subscription/status");
+          const { isPremium } = await statusRes.json();
+          queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
+          if (isPremium) {
+            toast({
+              title: "Welcome to DBrief Premium",
+              description: "Your features are now unlocked. Full throttle.",
+            });
+          }
+        });
+      } else {
+        // On web: navigate current window to Stripe.
+        // Stripe redirects back to /?subscription=success which App.tsx handles.
+        window.location.href = url;
+      }
     } catch (err: any) {
       toast({ title: "Checkout failed", description: err.message ?? "Please try again.", variant: "destructive" });
     } finally {
