@@ -1451,7 +1451,10 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
         {voice.isSupported && (
           <div className="flex items-center gap-1 p-1 bg-muted rounded-xl">
             <button
-              onClick={() => { haptic("light"); setQuickLogMode('voice'); }}
+              onClick={() => {
+                if (!isPremium) { openPaywall("Voice Notes"); return; }
+                haptic("light"); setQuickLogMode('voice');
+              }}
               className={`flex-1 h-8 rounded-lg flex items-center justify-center gap-1.5 text-xs font-medium transition-all ${
                 quickLogMode === 'voice'
                   ? "bg-background text-foreground shadow-sm"
@@ -1476,7 +1479,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
         )}
 
         {/* Voice mode */}
-        {(quickLogMode === 'voice' && voice.isSupported) && (
+        {(quickLogMode === 'voice' && voice.isSupported && isPremium) && (
           <div className="space-y-3">
             <div className="min-h-[88px] bg-muted/50 rounded-xl px-4 py-3 text-sm text-foreground leading-relaxed">
               {quickLogText || voice.interimText ? (
@@ -1527,7 +1530,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
         )}
 
         {/* Keyboard mode */}
-        {(quickLogMode === 'keyboard' || !voice.isSupported) && (
+        {(quickLogMode === 'keyboard' || !voice.isSupported || !isPremium) && (
           <textarea
             autoFocus
             rows={5}
