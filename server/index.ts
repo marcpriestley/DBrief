@@ -141,9 +141,16 @@ app.use((req, res, next) => {
         await runMigrations({ databaseUrl });
         const { getStripeSync } = await import('./stripeClient');
         const stripeSync = await getStripeSync();
-        const webhookBase = `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
-        await stripeSync.findOrCreateManagedWebhook(`${webhookBase}/api/stripe/webhook`);
-        stripeSync.syncBackfill().catch((e: any) => log(`[Stripe] Backfill error: ${e.message}`));
+
+        // Only register/manage webhooks in production — the dev server running
+        // findOrCreateManagedWebhook would treat the prod webhook as "orphaned"
+        // and delete it, causing all production webhook events to be lost.
+        if (process.env.REPLIT_DEPLOYMENT === '1') {
+          const webhookBase = `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
+          await stripeSync.findOrCreateManagedWebhook(`${webhookBase}/api/stripe/webhook`);
+          stripeSync.syncBackfill().catch((e: any) => log(`[Stripe] Backfill error: ${e.message}`));
+        }
+
         log('[Stripe] Initialized');
       } catch (e: any) {
         log(`[Stripe] Init error (non-fatal): ${e.message}`);

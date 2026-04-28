@@ -180,6 +180,23 @@ function AuthenticatedRouter() {
     };
   }, []);
 
+  // Sync subscription status from Stripe on every app load — self-heals any
+  // missed webhooks (e.g. when dev server deleted the prod webhook endpoint).
+  useEffect(() => {
+    if (!user || !user.stripeCustomerId) return;
+    fetch("/api/subscription/sync", { method: "POST" })
+      .then(r => r.json())
+      .then(({ synced, status }) => {
+        if (synced) {
+          // If Stripe returned a different status, refresh auth/me so the UI updates
+          if (status !== user.subscriptionStatus) {
+            queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+          }
+        }
+      })
+      .catch(() => {}); // non-fatal — app still works on cached status
+  }, [user?.id]);
+
   useEffect(() => {
     if (!user || !isNativePlatform()) return;
     if (user.notificationsEnabled !== false) {

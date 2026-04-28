@@ -101,6 +101,60 @@ export function registerSubscriptionRoutes(app: Express) {
     }
   });
 
+  // ── POST /api/subscription/sync ──────────────────────────────────────────
+  // Reads the live subscription state from Stripe and updates the DB.
+  // Called on app load so missed webhooks never leave users in wrong state.
+  app.post("/api/subscription/sync", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      if (!user?.stripeCustomerId) {
+        // No Stripe customer yet — definitely free
+        return res.json({ status: 'free', isPremium: false, synced: false });
+      }
+
+      const stripe = await getUncachableStripeClient();
+      const subscriptions = await stripe.subscriptions.list({
+        customer: user.stripeCustomerId,
+        status: 'all',
+        limit: 5,
+      });
+
+      // Find the most relevant subscription
+      const active = subscriptions.data.find(s => s.status === 'active' || s.status === 'trialing');
+      const latest = subscriptions.data[0]; // most recent regardless of status
+
+      let newStatus: string;
+      let periodEnd: Date | null = null;
+
+      if (active) {
+        newStatus = 'premium';
+        periodEnd = active.current_period_end ? new Date(active.current_period_end * 1000) : null;
+      } else if (latest && (latest.status === 'canceled' || latest.status === 'unpaid' || latest.status === 'incomplete_expired')) {
+        newStatus = 'free';
+      } else if (!latest) {
+        newStatus = 'free';
+      } else {
+        // Past due or other — keep current status
+        newStatus = user.subscriptionStatus ?? 'free';
+      }
+
+      // Only update if status has actually changed (don't touch beta users)
+      if (user.subscriptionStatus !== 'beta' && user.subscriptionStatus !== newStatus) {
+        await db.update(users)
+          .set({ subscriptionStatus: newStatus, ...(periodEnd ? { subscriptionCurrentPeriodEnd: periodEnd } : {}) })
+          .where(eq(users.id, userId));
+        console.log(`[Stripe] Sync — user ${userId}: ${user.subscriptionStatus} -> ${newStatus}`);
+      }
+
+      const finalStatus = user.subscriptionStatus === 'beta' ? 'beta' : newStatus;
+      res.json({ status: finalStatus, isPremium: isPremiumStatus(finalStatus), synced: true });
+    } catch (err: any) {
+      console.error('[Stripe] Sync error:', err.message);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // ── POST /api/subscription/portal ────────────────────────────────────────
   app.post("/api/subscription/portal", async (req, res) => {
     try {
