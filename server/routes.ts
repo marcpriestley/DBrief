@@ -277,6 +277,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userProfile: user.userProfile ?? null,
         subscriptionStatus: user.subscriptionStatus ?? 'free',
         isPremium: user.subscriptionStatus === 'premium' || user.subscriptionStatus === 'beta',
+        subscriptionCurrentPeriodEnd: user.subscriptionCurrentPeriodEnd ?? null,
       });
     } catch (error) {
       res.status(500).json({ message: "Failed to get user" });

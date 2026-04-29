@@ -180,13 +180,24 @@ function AuthenticatedRouter() {
     };
   }, []);
 
-  // Sync subscription status from Stripe on every app load — self-heals any
-  // missed webhooks (e.g. when dev server deleted the prod webhook endpoint).
-  // Only bother for users who appear to have/had a subscription (skip free & beta).
+  // Selectively sync subscription status from Stripe — only when there's a
+  // concrete reason to believe the DB value might be stale:
+  //   • No period-end date recorded (legacy / webhook-missed user)
+  //   • Period-end date is in the past (renewal or cancellation may have fired)
+  // This is event-driven at scale: active subscribers with a future period end
+  // never incur an extra Stripe API call — webhooks handle them.
   useEffect(() => {
     if (!user) return;
     const status = user.subscriptionStatus as string | undefined;
-    if (status === 'beta' || status === 'free' || !status) return;
+    // Skip: free, beta, already-cancelled, or no status — nothing to verify
+    if (!status || status === 'beta' || status === 'free' || status === 'cancelled') return;
+
+    const periodEnd = user.subscriptionCurrentPeriodEnd
+      ? new Date(user.subscriptionCurrentPeriodEnd)
+      : null;
+    const periodExpired = !periodEnd || periodEnd <= new Date();
+    if (!periodExpired) return; // Webhook will handle renewal — no need to poll
+
     fetch("/api/subscription/sync", { method: "POST" })
       .then(r => r.json())
       .then(({ synced, status: newStatus }) => {

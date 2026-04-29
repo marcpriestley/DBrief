@@ -47,17 +47,26 @@ export class WebhookHandlers {
         const customerId = obj.customer;
         const status = obj.status;
         if (!customerId) break;
-        let appStatus: string;
-        if (status === 'active' || status === 'trialing') {
-          appStatus = 'premium';
-        } else if (status === 'canceled' || status === 'unpaid' || status === 'incomplete_expired') {
-          appStatus = 'cancelled';
-        } else {
-          break;
-        }
+
         const periodEnd = obj.current_period_end
           ? new Date(obj.current_period_end * 1000)
           : null;
+
+        let appStatus: string;
+        if ((status === 'active' || status === 'trialing') && !obj.cancel_at_period_end) {
+          // Fully active renewal — user keeps premium
+          appStatus = 'premium';
+        } else if ((status === 'active' || status === 'trialing') && obj.cancel_at_period_end) {
+          // User cancelled but is still within the paid period — keep premium until it expires.
+          // customer.subscription.deleted will fire when the period actually ends.
+          appStatus = 'premium';
+          console.log(`[Stripe] Subscription cancel_at_period_end — customer ${customerId} keeps premium until ${periodEnd}`);
+        } else if (status === 'canceled' || status === 'unpaid' || status === 'incomplete_expired') {
+          appStatus = 'free';
+        } else {
+          break;
+        }
+
         await db.update(users)
           .set({ subscriptionStatus: appStatus, ...(periodEnd ? { subscriptionCurrentPeriodEnd: periodEnd } : {}) })
           .where(eq(users.stripeCustomerId, customerId));
@@ -66,12 +75,13 @@ export class WebhookHandlers {
       }
 
       case 'customer.subscription.deleted': {
+        // Subscription fully expired or was cancelled immediately.
         const customerId = obj.customer;
         if (!customerId) break;
         await db.update(users)
-          .set({ subscriptionStatus: 'cancelled' })
+          .set({ subscriptionStatus: 'free', subscriptionCurrentPeriodEnd: null })
           .where(eq(users.stripeCustomerId, customerId));
-        console.log(`[Stripe] Subscription deleted — customer ${customerId} -> cancelled`);
+        console.log(`[Stripe] Subscription deleted — customer ${customerId} -> free`);
         break;
       }
     }
