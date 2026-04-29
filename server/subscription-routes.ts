@@ -11,6 +11,26 @@ function getUserId(req: any): number {
   return id;
 }
 
+// Resolves the DBrief Premium Stripe price.
+// 1. Uses STRIPE_PRICE_ID env var when set (fastest, most reliable).
+// 2. Falls back to listing all active products and finding by name.
+async function resolveStripePremiumPrice(stripe: import('stripe').default) {
+  const directPriceId = process.env.STRIPE_PRICE_ID;
+  if (directPriceId) {
+    try {
+      const price = await stripe.prices.retrieve(directPriceId);
+      if (price.active) return price;
+    } catch (e) {
+      console.warn('[Stripe] STRIPE_PRICE_ID lookup failed, falling back to product list:', e);
+    }
+  }
+  const allProducts = await stripe.products.list({ active: true, limit: 100 });
+  const product = allProducts.data.find(p => p.name === 'DBrief Premium');
+  if (!product) { console.error('[Stripe] DBrief Premium product not found. Products:', allProducts.data.map(p => p.name)); return null; }
+  const prices = await stripe.prices.list({ product: product.id, active: true, limit: 1 });
+  return prices.data[0] ?? null;
+}
+
 export function isPremiumStatus(status: string | null | undefined): boolean {
   return status === 'premium' || status === 'beta';
 }
@@ -137,11 +157,7 @@ export function registerSubscriptionRoutes(app: Express) {
         await db.update(users).set({ stripeCustomerId: customerId }).where(eq(users.id, userId));
       }
 
-      const allProducts = await stripe.products.list({ active: true, limit: 100 });
-      const product = allProducts.data.find(p => p.name === 'DBrief Premium');
-      if (!product) return res.status(503).json({ message: "Premium plan not available yet." });
-      const prices = await stripe.prices.list({ product: product.id, active: true, limit: 1 });
-      const price = prices.data[0];
+      const price = await resolveStripePremiumPrice(stripe);
       if (!price) return res.status(503).json({ message: "Premium plan not available yet." });
 
       const host = req.headers.host ?? process.env.REPLIT_DOMAINS?.split(',')[0] ?? 'localhost:5000';
@@ -160,7 +176,7 @@ export function registerSubscriptionRoutes(app: Express) {
 
       res.json({ clientSecret: session.client_secret });
     } catch (err: any) {
-      console.error('[Stripe] Embedded checkout error:', err);
+      console.error('[Stripe] Embedded checkout error:', err.message, err.status);
       res.status(err.status || 500).json({ message: err.message });
     }
   });
@@ -186,14 +202,7 @@ export function registerSubscriptionRoutes(app: Express) {
         await db.update(users).set({ stripeCustomerId: customerId }).where(eq(users.id, userId));
       }
 
-      // Find DBrief Premium price — list is always consistent; search API has indexing delays
-      const allProducts = await stripe.products.list({ active: true, limit: 100 });
-      const product = allProducts.data.find(p => p.name === 'DBrief Premium');
-      if (!product) {
-        return res.status(503).json({ message: "Premium plan not available yet — please try again shortly." });
-      }
-      const prices = await stripe.prices.list({ product: product.id, active: true, limit: 1 });
-      const price = prices.data[0];
+      const price = await resolveStripePremiumPrice(stripe);
       if (!price) {
         return res.status(503).json({ message: "Premium plan not available yet — please try again shortly." });
       }

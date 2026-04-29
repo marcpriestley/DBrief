@@ -49,5 +49,6 @@ ENCRYPTION_KEY = "8f0e0f658bcfce71709d91af0603a01354f3c70136cec12e7117d6b202702f
 APNS_PRODUCTION = "true"
 VITE_GOOGLE_IOS_CLIENT_ID = "866760999351-ot0m67ptebm03r7ob42qdc5h2q8qste7.apps.googleusercontent.com"
 GOOGLE_IOS_CLIENT_ID = "866760999351-ot0m67ptebm03r7ob42qdc5h2q8qste7.apps.googleusercontent.com"
+STRIPE_PRICE_ID = "price_1TR829DizlMJ6cXTu4OBanPb"
 
 [userenv.production]
