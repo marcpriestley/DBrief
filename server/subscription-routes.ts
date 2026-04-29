@@ -115,6 +115,56 @@ export function registerSubscriptionRoutes(app: Express) {
     }
   });
 
+  // ── POST /api/subscription/checkout-embedded ─────────────────────────────
+  // Returns a Stripe Checkout clientSecret for Embedded Checkout (ui_mode='embedded').
+  // The checkout form renders inside the native app — no external browser needed.
+  app.post("/api/subscription/checkout-embedded", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      const stripe = await getUncachableStripeClient();
+
+      let customerId = user.stripeCustomerId;
+      if (!customerId) {
+        const customer = await stripe.customers.create({
+          email: user.username,
+          name: user.displayName ?? user.username,
+          metadata: { userId: String(user.id) },
+        });
+        customerId = customer.id;
+        await db.update(users).set({ stripeCustomerId: customerId }).where(eq(users.id, userId));
+      }
+
+      const products = await stripe.products.search({ query: "name:'DBrief Premium' AND active:'true'" });
+      const product = products.data[0];
+      if (!product) return res.status(503).json({ message: "Premium plan not available yet." });
+      const prices = await stripe.prices.list({ product: product.id, active: true, limit: 1 });
+      const price = prices.data[0];
+      if (!price) return res.status(503).json({ message: "Premium plan not available yet." });
+
+      const host = req.headers.host ?? process.env.REPLIT_DOMAINS?.split(',')[0] ?? 'localhost:5000';
+      const protocol = host.startsWith('localhost') ? 'http' : 'https';
+      const returnUrl = `${protocol}://${host}/checkout-return?result=success`;
+
+      const session = await stripe.checkout.sessions.create({
+        customer: customerId,
+        payment_method_types: ['card'],
+        line_items: [{ price: price.id, quantity: 1 }],
+        mode: 'subscription',
+        ui_mode: 'embedded',
+        return_url: returnUrl,
+        allow_promotion_codes: true,
+      });
+
+      res.json({ clientSecret: session.client_secret });
+    } catch (err: any) {
+      console.error('[Stripe] Embedded checkout error:', err);
+      res.status(err.status || 500).json({ message: err.message });
+    }
+  });
+
   // ── POST /api/subscription/checkout ──────────────────────────────────────
   app.post("/api/subscription/checkout", async (req, res) => {
     try {
