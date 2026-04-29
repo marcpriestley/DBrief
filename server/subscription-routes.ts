@@ -17,6 +17,60 @@ export function isPremiumStatus(status: string | null | undefined): boolean {
 
 export function registerSubscriptionRoutes(app: Express) {
 
+  // ── GET /checkout-return ──────────────────────────────────────────────────
+  // Landing page for native (iOS + Android) Stripe checkout.
+  // SFSafariViewController / Chrome Custom Tab redirect here after payment so
+  // users see a clean "return to app" screen instead of the full web UI.
+  app.get("/checkout-return", (req, res) => {
+    const result = req.query.result as string;
+    const success = result === 'success';
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DBrief</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #141414; color: #f5f5f5;
+      min-height: 100dvh; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; padding: 2rem;
+      text-align: center;
+    }
+    .icon { font-size: 3.5rem; margin-bottom: 1.25rem; }
+    h1 { font-size: 1.5rem; font-weight: 800; margin-bottom: 0.5rem; }
+    p { font-size: 0.95rem; color: #a3a3a3; line-height: 1.5; margin-bottom: 2rem; }
+    .btn {
+      display: inline-block; padding: 0.875rem 2rem;
+      background: #d97706; color: #fff; border-radius: 0.75rem;
+      font-size: 1rem; font-weight: 700; text-decoration: none;
+      border: none; cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="icon">${success ? '🏁' : '👋'}</div>
+  <h1>${success ? 'You\'re on the grid.' : 'No worries.'}</h1>
+  <p>${success
+    ? 'Your DBrief Premium subscription is active.<br/>Close this screen to return to the app.'
+    : 'Your subscription was not started.<br/>Close this screen to return to the app.'
+  }</p>
+  <button class="btn" onclick="window.close()">Return to DBrief</button>
+  <script>
+    // Attempt auto-close — works on some in-app browsers.
+    // If blocked, the button above and the browser's X button work fine.
+    setTimeout(() => { try { window.close(); } catch(e) {} }, 800);
+  </script>
+</body>
+</html>`;
+
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  });
+
   // ── GET /api/subscription/status ─────────────────────────────────────────
   app.get("/api/subscription/status", async (req, res) => {
     try {
@@ -84,13 +138,24 @@ export function registerSubscriptionRoutes(app: Express) {
       const protocol = host.startsWith('localhost') ? 'http' : 'https';
       const baseUrl = `${protocol}://${host}`;
 
+      // Native apps (iOS + Android) open Stripe in an in-app browser (SFSafariViewController /
+      // Chrome Custom Tab). We redirect them to a lightweight close-page rather than the full
+      // web app so users aren't confused by seeing the web UI inside the in-app browser.
+      const isNative = req.body?.native === true;
+      const successUrl = isNative
+        ? `${baseUrl}/checkout-return?result=success`
+        : `${baseUrl}/?subscription=success`;
+      const cancelUrl = isNative
+        ? `${baseUrl}/checkout-return?result=cancelled`
+        : `${baseUrl}/?subscription=cancelled`;
+
       const session = await stripe.checkout.sessions.create({
         customer: customerId,
         payment_method_types: ['card'],
         line_items: [{ price: price.id, quantity: 1 }],
         mode: 'subscription',
-        success_url: `${baseUrl}/?subscription=success`,
-        cancel_url: `${baseUrl}/?subscription=cancelled`,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
         allow_promotion_codes: true,
       });
 

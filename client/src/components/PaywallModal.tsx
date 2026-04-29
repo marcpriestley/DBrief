@@ -27,9 +27,11 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
 
-  // On iOS, pre-fetch the checkout URL as soon as the modal opens.
-  // This means the URL is ready before the user taps — so we can call
-  // window.open() synchronously (required; iOS blocks popups opened after async ops).
+  // On native (iOS + Android), pre-fetch the checkout URL the moment the modal
+  // opens so it's ready before the user taps "Subscribe".
+  // Both WKWebView (iOS) and Android WebView block window.open() when called after
+  // an async operation — the "user gesture" trust expires at the first await.
+  // Pre-fetching means we can call window.open() synchronously on the tap.
   const [prefetchedUrl, setPrefetchedUrl] = useState<string | null>(null);
   const [prefetchError, setPrefetchError] = useState(false);
 
@@ -37,7 +39,7 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
     if (!isOpen || !Capacitor.isNativePlatform()) return;
     setPrefetchedUrl(null);
     setPrefetchError(false);
-    apiRequest("POST", "/api/subscription/checkout", {})
+    apiRequest("POST", "/api/subscription/checkout", { native: true })
       .then(r => r.json())
       .then(({ url }) => {
         if (url) setPrefetchedUrl(url);
@@ -80,12 +82,14 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
         return;
       }
 
-      // We have the URL already — open synchronously so iOS doesn't block the popup.
-      // _blank is intercepted by Capacitor's WKWebView and opens via SFSafariViewController.
+      // Open synchronously — no async gap so the popup is not blocked.
+      // _blank → SFSafariViewController (iOS) / Chrome Custom Tab (Android)
+      // If _blank is blocked for any reason, _system falls back to the system browser.
       onClose();
       listenForReturn();
-      window.open(prefetchedUrl, '_blank');
-      setPrefetchedUrl(null); // single-use — Stripe sessions are one-time
+      const opened = window.open(prefetchedUrl, '_blank');
+      if (!opened) window.open(prefetchedUrl, '_system');
+      setPrefetchedUrl(null); // single-use — Stripe checkout sessions are one-time
       return;
     }
 
