@@ -7,7 +7,6 @@ import { apiRequest } from "@/lib/queryClient";
 import { haptic } from "@/lib/haptics";
 import { queryClient } from "@/lib/queryClient";
 import { Capacitor } from "@capacitor/core";
-import { Browser } from "@capacitor/browser";
 
 interface PaywallModalProps {
   isOpen: boolean;
@@ -41,26 +40,30 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
       onClose();
 
       if (Capacitor.isNativePlatform()) {
-        // On iOS: open Stripe in SFSafariViewController so the main WebView is
-        // never navigated away — localStorage, session, and native background all stay intact.
-        await Browser.open({ url, presentationStyle: "popover" });
+        // On iOS: window.open with '_system' target is intercepted by Capacitor
+        // and opens in Safari — the WKWebView is never navigated away so the
+        // session, localStorage and native state all stay intact.
+        // No @capacitor/browser plugin required.
+        window.open(url, '_system');
 
-        // When the in-app browser closes, poll subscription status to detect success.
-        const listener = await Browser.addListener("browserFinished", async () => {
-          listener.remove();
-          // Small delay to let webhook processing complete
+        // When the user returns from Safari, run the Stripe sync to pick up
+        // any subscription changes made during checkout.
+        const onVisible = async () => {
+          if (document.visibilityState !== 'visible') return;
+          document.removeEventListener('visibilitychange', onVisible);
+          // Brief delay to allow webhook processing to complete on the server
           await new Promise(r => setTimeout(r, 1500));
-          const statusRes = await fetch("/api/subscription/status");
-          const { isPremium } = await statusRes.json();
+          const syncRes = await fetch("/api/subscription/sync", { method: "POST" });
+          const { isPremium: nowPremium } = await syncRes.json();
           queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-          queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
-          if (isPremium) {
+          if (nowPremium) {
             toast({
               title: "Welcome to DBrief Premium",
               description: "Your features are now unlocked. Full throttle.",
             });
           }
-        });
+        };
+        document.addEventListener('visibilitychange', onVisible);
       } else {
         // On web: navigate current window to Stripe.
         // Stripe redirects back to /?subscription=success which App.tsx handles.
