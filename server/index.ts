@@ -152,6 +152,11 @@ app.use((req, res, next) => {
         }
 
         log('[Stripe] Initialized');
+
+        // Warm up the premium price cache — runs once at startup so the first
+        // checkout request is instant and there are no race conditions.
+        const { warmupStripePremiumPrice } = await import('./subscription-routes');
+        warmupStripePremiumPrice();
       } catch (e: any) {
         log(`[Stripe] Init error (non-fatal): ${e.message}`);
       }

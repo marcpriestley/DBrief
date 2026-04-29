@@ -11,48 +11,79 @@ function getUserId(req: any): number {
   return id;
 }
 
-// Resolves (or creates) the DBrief Premium Stripe price.
-// Works in both test and live mode without pre-seeding.
-async function resolveStripePremiumPrice(stripe: import('stripe').default) {
-  // 1. Try STRIPE_PRICE_ID env var for fastest path
-  const directPriceId = process.env.STRIPE_PRICE_ID;
-  if (directPriceId) {
+// ── Stripe Premium Price — singleton cache ────────────────────────────────────
+// The promise is created once at startup (via warmupStripePremiumPrice) and
+// shared by all callers. Concurrent requests race to the same Promise so Stripe
+// is only called once — no duplicates, no race conditions.
+let _priceIdPromise: Promise<string> | null = null;
+
+async function _findOrCreatePremiumPrice(): Promise<string> {
+  const stripe = await getUncachableStripeClient();
+
+  // Log whether we're in test or live mode so it's obvious in production logs.
+  const keyMode = (process.env.STRIPE_SECRET_KEY ?? '').startsWith('sk_live') ? 'LIVE' : 'TEST';
+  console.log(`[Stripe] Resolving premium price (${keyMode} mode)...`);
+
+  // 1. Try STRIPE_PRICE_ID env var — skip if it's from the wrong mode.
+  const envPriceId = process.env.STRIPE_PRICE_ID;
+  if (envPriceId) {
     try {
-      const price = await stripe.prices.retrieve(directPriceId);
-      if (price.active) return price;
+      const price = await stripe.prices.retrieve(envPriceId);
+      if (price.active) {
+        console.log(`[Stripe] Premium price from env: ${price.id}`);
+        return price.id;
+      }
     } catch (e: any) {
-      console.warn('[Stripe] STRIPE_PRICE_ID not found in this mode, will find/create:', e.message);
+      console.warn(`[Stripe] STRIPE_PRICE_ID (${envPriceId}) not in ${keyMode} mode — will find/create.`);
     }
   }
 
-  // 2. Find existing product by name
+  // 2. Find existing product by canonical name.
   const allProducts = await stripe.products.list({ active: true, limit: 100 });
   let product = allProducts.data.find(p => p.name === 'DBrief Premium');
 
-  // 3. Create product if missing
+  // 3. Create the product once if it doesn't exist in this mode.
   if (!product) {
-    console.log('[Stripe] Creating DBrief Premium product...');
     product = await stripe.products.create({
       name: 'DBrief Premium',
       description: 'Full access to all DBrief premium features — voice notes, squad, weekly reports, pattern analysis & mission intelligence.',
     });
-    console.log('[Stripe] Product created:', product.id);
+    console.log(`[Stripe] Product created in ${keyMode} mode: ${product.id}`);
   }
 
-  // 4. Find existing active price for this product
+  // 4. Find existing active price for this product.
   const prices = await stripe.prices.list({ product: product.id, active: true, limit: 1 });
-  if (prices.data[0]) return prices.data[0];
+  if (prices.data[0]) {
+    console.log(`[Stripe] Premium price ready: ${prices.data[0].id} (${keyMode})`);
+    return prices.data[0].id;
+  }
 
-  // 5. Create price if missing (£5.99/month)
-  console.log('[Stripe] Creating £5.99/month price for product:', product.id);
+  // 5. Create the £5.99/month price if it doesn't exist.
   const price = await stripe.prices.create({
     product: product.id,
     unit_amount: 599,
     currency: 'gbp',
     recurring: { interval: 'month' },
   });
-  console.log('[Stripe] Price created:', price.id);
-  return price;
+  console.log(`[Stripe] Price created in ${keyMode} mode: ${price.id} — update STRIPE_PRICE_ID to this value`);
+  return price.id;
+}
+
+/** Called once at server startup. Warms up the price cache so checkout is instant. */
+export function warmupStripePremiumPrice(): void {
+  if (!_priceIdPromise) {
+    _priceIdPromise = _findOrCreatePremiumPrice().catch((e) => {
+      console.error('[Stripe] Premium price warmup failed:', e.message);
+      _priceIdPromise = null; // allow retry on next checkout attempt
+      throw e;
+    });
+  }
+}
+
+/** Returns the cached price ID. Resolves immediately after warmup. */
+async function getPremiumPriceId(): Promise<string> {
+  if (!_priceIdPromise) warmupStripePremiumPrice();
+  return _priceIdPromise!;
 }
 
 export function isPremiumStatus(status: string | null | undefined): boolean {
@@ -181,8 +212,7 @@ export function registerSubscriptionRoutes(app: Express) {
         await db.update(users).set({ stripeCustomerId: customerId }).where(eq(users.id, userId));
       }
 
-      const price = await resolveStripePremiumPrice(stripe);
-      if (!price) return res.status(503).json({ message: "Premium plan not available yet." });
+      const priceId = await getPremiumPriceId();
 
       const host = req.headers.host ?? process.env.REPLIT_DOMAINS?.split(',')[0] ?? 'localhost:5000';
       const protocol = host.startsWith('localhost') ? 'http' : 'https';
@@ -191,7 +221,7 @@ export function registerSubscriptionRoutes(app: Express) {
       const session = await stripe.checkout.sessions.create({
         customer: customerId,
         payment_method_types: ['card'],
-        line_items: [{ price: price.id, quantity: 1 }],
+        line_items: [{ price: priceId, quantity: 1 }],
         mode: 'subscription',
         ui_mode: 'embedded',
         return_url: returnUrl,
@@ -226,10 +256,7 @@ export function registerSubscriptionRoutes(app: Express) {
         await db.update(users).set({ stripeCustomerId: customerId }).where(eq(users.id, userId));
       }
 
-      const price = await resolveStripePremiumPrice(stripe);
-      if (!price) {
-        return res.status(503).json({ message: "Premium plan not available yet — please try again shortly." });
-      }
+      const priceId = await getPremiumPriceId();
 
       const host = req.headers.host ?? process.env.REPLIT_DOMAINS?.split(',')[0] ?? 'localhost:5000';
       const protocol = host.startsWith('localhost') ? 'http' : 'https';
@@ -249,7 +276,7 @@ export function registerSubscriptionRoutes(app: Express) {
       const session = await stripe.checkout.sessions.create({
         customer: customerId,
         payment_method_types: ['card'],
-        line_items: [{ price: price.id, quantity: 1 }],
+        line_items: [{ price: priceId, quantity: 1 }],
         mode: 'subscription',
         success_url: successUrl,
         cancel_url: cancelUrl,
