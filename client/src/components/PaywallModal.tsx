@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Mic, Users, BarChart2, Flag, Target, Zap, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -27,53 +27,85 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
 
-  async function handleSubscribe() {
+  // On iOS, pre-fetch the checkout URL as soon as the modal opens.
+  // This means the URL is ready before the user taps — so we can call
+  // window.open() synchronously (required; iOS blocks popups opened after async ops).
+  const [prefetchedUrl, setPrefetchedUrl] = useState<string | null>(null);
+  const [prefetchError, setPrefetchError] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen || !Capacitor.isNativePlatform()) return;
+    setPrefetchedUrl(null);
+    setPrefetchError(false);
+    apiRequest("POST", "/api/subscription/checkout", {})
+      .then(r => r.json())
+      .then(({ url }) => {
+        if (url) setPrefetchedUrl(url);
+        else setPrefetchError(true);
+      })
+      .catch(() => setPrefetchError(true));
+  }, [isOpen]);
+
+  // Shared post-checkout handler: called when user returns from Safari/Stripe.
+  function listenForReturn() {
+    const onVisible = async () => {
+      if (document.visibilityState !== 'visible') return;
+      document.removeEventListener('visibilitychange', onVisible);
+      // Small delay to let webhook processing finish on the server
+      await new Promise(r => setTimeout(r, 1500));
+      const syncRes = await fetch("/api/subscription/sync", { method: "POST" });
+      const { isPremium: nowPremium } = await syncRes.json();
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      if (nowPremium) {
+        toast({
+          title: "Welcome to DBrief Premium",
+          description: "Your features are now unlocked. Full throttle.",
+        });
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+  }
+
+  function handleSubscribe() {
     haptic("medium");
-    setLoading(true);
-    try {
-      const res = await apiRequest("POST", "/api/subscription/checkout", {});
-      const { url, message } = await res.json();
-      if (!url) {
-        toast({ title: message ?? "Checkout unavailable", description: "Please try again shortly.", variant: "destructive" });
+
+    if (Capacitor.isNativePlatform()) {
+      if (prefetchError) {
+        toast({ title: "Checkout unavailable", description: "Please try again shortly.", variant: "destructive" });
         return;
       }
-      onClose();
-
-      if (Capacitor.isNativePlatform()) {
-        // On iOS: window.open with '_system' target is intercepted by Capacitor
-        // and opens in Safari — the WKWebView is never navigated away so the
-        // session, localStorage and native state all stay intact.
-        // No @capacitor/browser plugin required.
-        window.open(url, '_system');
-
-        // When the user returns from Safari, run the Stripe sync to pick up
-        // any subscription changes made during checkout.
-        const onVisible = async () => {
-          if (document.visibilityState !== 'visible') return;
-          document.removeEventListener('visibilitychange', onVisible);
-          // Brief delay to allow webhook processing to complete on the server
-          await new Promise(r => setTimeout(r, 1500));
-          const syncRes = await fetch("/api/subscription/sync", { method: "POST" });
-          const { isPremium: nowPremium } = await syncRes.json();
-          queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-          if (nowPremium) {
-            toast({
-              title: "Welcome to DBrief Premium",
-              description: "Your features are now unlocked. Full throttle.",
-            });
-          }
-        };
-        document.addEventListener('visibilitychange', onVisible);
-      } else {
-        // On web: navigate current window to Stripe.
-        // Stripe redirects back to /?subscription=success which App.tsx handles.
-        window.location.href = url;
+      if (!prefetchedUrl) {
+        // Still fetching — show brief loading toast and let them try again in a moment
+        toast({ title: "Almost ready…", description: "Please tap again in a moment.", variant: "default" });
+        return;
       }
-    } catch (err: any) {
-      toast({ title: "Checkout failed", description: err.message ?? "Please try again.", variant: "destructive" });
-    } finally {
-      setLoading(false);
+
+      // We have the URL already — open synchronously so iOS doesn't block the popup.
+      // _blank is intercepted by Capacitor's WKWebView and opens via SFSafariViewController.
+      onClose();
+      listenForReturn();
+      window.open(prefetchedUrl, '_blank');
+      setPrefetchedUrl(null); // single-use — Stripe sessions are one-time
+      return;
     }
+
+    // Web flow: fetch URL then navigate the current window to Stripe.
+    // Stripe redirects back to /?subscription=success which App.tsx handles.
+    setLoading(true);
+    apiRequest("POST", "/api/subscription/checkout", {})
+      .then(r => r.json())
+      .then(({ url, message }) => {
+        if (!url) {
+          toast({ title: message ?? "Checkout unavailable", description: "Please try again shortly.", variant: "destructive" });
+          return;
+        }
+        onClose();
+        window.location.href = url;
+      })
+      .catch((err: any) => {
+        toast({ title: "Checkout failed", description: err.message ?? "Please try again.", variant: "destructive" });
+      })
+      .finally(() => setLoading(false));
   }
 
   return (
