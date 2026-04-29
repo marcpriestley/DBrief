@@ -11,6 +11,31 @@ function getUserId(req: any): number {
   return id;
 }
 
+// Returns a valid Stripe customer ID for the user in the current Stripe mode.
+// If the stored ID belongs to a different mode (e.g. test vs live), it creates a fresh one.
+async function getOrCreateStripeCustomer(
+  stripe: import('stripe').default,
+  user: { id: number; username: string; displayName: string | null; stripeCustomerId: string | null }
+): Promise<string> {
+  if (user.stripeCustomerId) {
+    try {
+      const existing = await stripe.customers.retrieve(user.stripeCustomerId);
+      if (!('deleted' in existing)) return existing.id;
+    } catch (e: any) {
+      // "No such customer" — stale ID from wrong Stripe mode; fall through to create new
+      console.warn(`[Stripe] Stale customer ID ${user.stripeCustomerId}, creating fresh one:`, e.message);
+    }
+  }
+  const customer = await stripe.customers.create({
+    email: user.username,
+    name: user.displayName ?? user.username,
+    metadata: { userId: String(user.id) },
+  });
+  await db.update(users).set({ stripeCustomerId: customer.id }).where(eq(users.id, user.id));
+  console.log(`[Stripe] Created customer ${customer.id} for user ${user.id}`);
+  return customer.id;
+}
+
 // ── Stripe Premium Price — singleton cache ────────────────────────────────────
 // The promise is created once at startup (via warmupStripePremiumPrice) and
 // shared by all callers. Concurrent requests race to the same Promise so Stripe
@@ -200,18 +225,7 @@ export function registerSubscriptionRoutes(app: Express) {
       if (!user) return res.status(404).json({ message: "User not found" });
 
       const stripe = await getUncachableStripeClient();
-
-      let customerId = user.stripeCustomerId;
-      if (!customerId) {
-        const customer = await stripe.customers.create({
-          email: user.username,
-          name: user.displayName ?? user.username,
-          metadata: { userId: String(user.id) },
-        });
-        customerId = customer.id;
-        await db.update(users).set({ stripeCustomerId: customerId }).where(eq(users.id, userId));
-      }
-
+      const customerId = await getOrCreateStripeCustomer(stripe, user);
       const priceId = await getPremiumPriceId();
 
       const host = req.headers.host ?? process.env.REPLIT_DOMAINS?.split(',')[0] ?? 'localhost:5000';
@@ -243,19 +257,7 @@ export function registerSubscriptionRoutes(app: Express) {
       if (!user) return res.status(404).json({ message: "User not found" });
 
       const stripe = await getUncachableStripeClient();
-
-      // Find or create Stripe customer
-      let customerId = user.stripeCustomerId;
-      if (!customerId) {
-        const customer = await stripe.customers.create({
-          email: user.username,
-          name: user.displayName ?? user.username,
-          metadata: { userId: String(user.id) },
-        });
-        customerId = customer.id;
-        await db.update(users).set({ stripeCustomerId: customerId }).where(eq(users.id, userId));
-      }
-
+      const customerId = await getOrCreateStripeCustomer(stripe, user);
       const priceId = await getPremiumPriceId();
 
       const host = req.headers.host ?? process.env.REPLIT_DOMAINS?.split(',')[0] ?? 'localhost:5000';
