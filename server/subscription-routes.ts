@@ -47,27 +47,36 @@ export function registerSubscriptionRoutes(app: Express) {
       display: inline-block; padding: 0.875rem 2rem;
       background: #d97706; color: #fff; border-radius: 0.75rem;
       font-size: 1rem; font-weight: 700; text-decoration: none;
-      border: none; cursor: pointer;
+      border: none; cursor: pointer; margin-bottom: 1rem;
     }
+    .hint {
+      font-size: 0.9rem; color: #a3a3a3; margin-top: 0.5rem;
+      line-height: 1.5;
+    }
+    .hint strong { color: #f5f5f5; }
   </style>
 </head>
 <body>
   <div class="icon">${success ? '🏁' : '👋'}</div>
   <h1>${success ? 'You\'re on the grid.' : 'No worries.'}</h1>
-  <p>${success
-    ? 'Your DBrief Premium subscription is active.<br/>Returning to the app…'
-    : 'Your subscription was not started.<br/>Returning to the app…'
+  <p id="msg">${success
+    ? 'Your DBrief Premium subscription is active.'
+    : 'Your subscription was not started.'
   }</p>
-  <a class="btn" href="capacitor://localhost/?subscription=${success ? 'success' : 'cancelled'}">
-    Return to DBrief
-  </a>
+  <button class="btn" onclick="window.close()">Return to DBrief</button>
+  <p class="hint" id="hint" style="display:none">
+    Tap <strong>Done</strong> or <strong>✕</strong> at the top of the screen to return.
+  </p>
   <script>
-    // Redirect back into the native WKWebView app.
-    // capacitor://localhost is Capacitor's internal app URL — navigating to it from
-    // within the same WebView session reloads the React app, which detects the
-    // ?subscription= param and handles it (App.tsx).
-    var dest = 'capacitor://localhost/?subscription=${success ? 'success' : 'cancelled'}';
-    window.location.replace(dest);
+    // Try programmatic close first — works when Capacitor opened this in an overlay WebView.
+    // If the window is still open after a short delay, show a manual instruction instead.
+    try { window.close(); } catch(e) {}
+    setTimeout(function() {
+      // If we're still here, window.close() was blocked (external browser).
+      // Show the manual "tap Done" hint so the user knows what to do.
+      var hint = document.getElementById('hint');
+      if (hint) hint.style.display = 'block';
+    }, 600);
   </script>
 </body>
 </html>`;
