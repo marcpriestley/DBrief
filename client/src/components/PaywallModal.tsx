@@ -26,9 +26,9 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const paymentLinkUrlRef = useRef<string | null>(null);
-  const appStateListenerRef = useRef<any>(null);
+  const visibilityListenerRef = useRef<(() => void) | null>(null);
 
-  // Pre-fetch the payment link URL as soon as the modal opens.
+  // Pre-fetch payment link URL when modal opens so the button tap has zero delay.
   useEffect(() => {
     if (!isOpen || !Capacitor.isNativePlatform()) return;
     let cancelled = false;
@@ -39,11 +39,11 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
     return () => { cancelled = true; };
   }, [isOpen]);
 
-  // Clean up any stale App listener when modal closes.
+  // Remove visibility listener when modal closes without payment.
   useEffect(() => {
-    if (!isOpen && appStateListenerRef.current) {
-      appStateListenerRef.current.remove();
-      appStateListenerRef.current = null;
+    if (!isOpen && visibilityListenerRef.current) {
+      document.removeEventListener("visibilitychange", visibilityListenerRef.current);
+      visibilityListenerRef.current = null;
     }
   }, [isOpen]);
 
@@ -67,37 +67,34 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
     if (Capacitor.isNativePlatform()) {
       setLoading(true);
       try {
-        // Use pre-fetched URL or fetch now as fallback.
         let url = paymentLinkUrlRef.current;
         if (!url) {
           const res = await fetch("/api/subscription/payment-link");
-          const data = await res.json();
-          url = data.url;
+          url = (await res.json()).url;
         }
-
         if (!url) {
           toast({ title: "Checkout unavailable", description: "Please try again shortly.", variant: "destructive" });
           return;
         }
 
-        // Register a one-shot App state listener BEFORE opening the URL.
-        // When the user returns to the app (isActive: true), we sync their subscription.
-        // @capacitor/app is a core Capacitor plugin — always available.
-        const { App } = await import("@capacitor/app");
-        if (appStateListenerRef.current) {
-          appStateListenerRef.current.remove();
+        // Register a one-shot visibilitychange listener BEFORE opening Safari.
+        // When the user returns to the app after paying, we sync their subscription.
+        if (visibilityListenerRef.current) {
+          document.removeEventListener("visibilitychange", visibilityListenerRef.current);
         }
-        appStateListenerRef.current = await App.addListener("appStateChange", (state) => {
-          if (!state.isActive) return;
-          // One-shot: remove immediately on first foreground event.
-          appStateListenerRef.current?.remove();
-          appStateListenerRef.current = null;
+        const handler = () => {
+          if (document.visibilityState !== "visible") return;
+          document.removeEventListener("visibilitychange", handler);
+          visibilityListenerRef.current = null;
           syncAfterPayment();
-        });
+        };
+        visibilityListenerRef.current = handler;
+        document.addEventListener("visibilitychange", handler);
 
-        // Open the Stripe Payment Link via the core App plugin.
-        // This opens in external Safari which supports Apple Pay, Klarna, etc.
-        await App.openUrl({ url });
+        // In Capacitor iOS, window.open() on an external domain is intercepted by the
+        // native bridge and opened via UIApplication.shared.open() → full Safari with
+        // Apple Pay, Klarna, etc. No plugin or rebuild needed.
+        window.open(url);
       } catch (err: any) {
         toast({ title: "Checkout failed", description: err.message ?? "Please try again.", variant: "destructive" });
       } finally {
