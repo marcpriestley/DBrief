@@ -153,6 +153,7 @@ export interface IStorage {
   inviteToChallenge(challengeId: number, inviteeUserId: number, inviterId: number): Promise<void>;
   getUserPoints(userId: number): Promise<number>;
   getWeeklyActivityPoints(userId: number): Promise<number>;
+  getGlobalWeeklyRank(userId: number): Promise<{ rank: number; total: number }>;
 }
 
 export class MemStorage implements IStorage {
@@ -614,6 +615,7 @@ export class MemStorage implements IStorage {
   async getLeaderboard(_viewerId: number, _sortBy: "streak" | "consistency" | "score"): Promise<import("@shared/schema").LeaderboardEntry[]> { return []; }
   async getUserPoints(_userId: number): Promise<number> { return 0; }
   async getWeeklyActivityPoints(_userId: number): Promise<number> { return 0; }
+  async getGlobalWeeklyRank(_userId: number): Promise<{ rank: number; total: number }> { return { rank: 1, total: 1 }; }
   // Challenge stubs (MemStorage not used in production)
   async createChallenge(): Promise<any> { throw new Error("Not implemented"); }
   async getChallengesForUser(): Promise<any[]> { return []; }
@@ -1941,6 +1943,73 @@ export class DatabaseStorage implements IStorage {
 
   async getUserPoints(userId: number): Promise<number> {
     return this._getUserPoints(userId);
+  }
+
+  async getGlobalWeeklyRank(userId: number): Promise<{ rank: number; total: number }> {
+    // Single-pass CTE: compute weekly activity points (habits + goals + consistency)
+    // for every user, then count how many are strictly above the requesting user.
+    // Uses current_date so the 7-day window is stable within a day.
+    const result = await db.execute(sql`
+      WITH
+        score_pts AS (
+          SELECT user_id,
+            LEAST(COUNT(DISTINCT date)::int, 7) * 10 AS pts
+          FROM daily_scores
+          WHERE date >= (current_date - 6)::text
+            AND value > 0
+            AND is_auto_synced = false
+          GROUP BY user_id
+        ),
+        habit_day AS (
+          SELECT hl.user_id, hl.date,
+            COUNT(hl.habit_id) AS done,
+            COALESCE((
+              SELECT COUNT(*) FROM habits h
+              WHERE h.user_id = hl.user_id AND NOT h.is_archived
+            ), 0) AS total
+          FROM habit_logs hl
+          WHERE hl.date >= (current_date - 6)::text
+          GROUP BY hl.user_id, hl.date
+        ),
+        habit_pts AS (
+          SELECT user_id,
+            SUM(done * 5 + CASE WHEN total > 0 AND done >= total THEN 20 ELSE 0 END)::int AS pts
+          FROM habit_day
+          GROUP BY user_id
+        ),
+        goal_day AS (
+          SELECT user_id, date,
+            COUNT(*) AS total,
+            COUNT(*) FILTER (WHERE completed = true) AS completed
+          FROM daily_goals
+          WHERE date >= (current_date - 6)::text
+          GROUP BY user_id, date
+        ),
+        goal_pts AS (
+          SELECT user_id,
+            SUM(completed * 5 + CASE WHEN total > 0 AND completed >= total THEN 20 ELSE 0 END)::int AS pts
+          FROM goal_day
+          GROUP BY user_id
+        ),
+        user_weekly AS (
+          SELECT u.id AS uid,
+            COALESCE(sp.pts, 0) + COALESCE(hp.pts, 0) + COALESCE(gp.pts, 0) AS weekly_pts
+          FROM users u
+          LEFT JOIN score_pts sp ON u.id = sp.user_id
+          LEFT JOIN habit_pts hp ON u.id = hp.user_id
+          LEFT JOIN goal_pts gp ON u.id = gp.user_id
+        )
+      SELECT
+        (SELECT COUNT(*) FROM user_weekly
+         WHERE weekly_pts > (SELECT weekly_pts FROM user_weekly WHERE uid = ${userId})) + 1 AS rank,
+        (SELECT COUNT(*) FROM user_weekly) AS total
+    `);
+
+    const row = (result as any).rows?.[0] ?? result[0];
+    return {
+      rank: Number(row?.rank ?? 1),
+      total: Number(row?.total ?? 1),
+    };
   }
 
   async getWeeklyActivityPoints(userId: number): Promise<number> {

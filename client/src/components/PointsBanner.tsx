@@ -52,6 +52,11 @@ export default function PointsBanner() {
     staleTime: 0,
   });
 
+  const { data: rankData } = useQuery<{ rank: number; total: number }>({
+    queryKey: ["/api/me/global-rank"],
+    staleTime: 5 * 60 * 1000,
+  });
+
   const points = data?.points ?? null;
   const weeklyPoints = data?.weeklyPoints ?? null;
   const [burst, setBurst] = useState<number | null>(null);   // delta for the burst
@@ -133,6 +138,17 @@ export default function PointsBanner() {
             {displayPoints.toLocaleString()} pts
           </motion.span>
         </div>
+        {rankData && (
+          <>
+            <div className="w-px h-6 bg-border/60" />
+            <div className="flex flex-col items-end">
+              <span className="text-[10px] font-medium text-muted-foreground leading-none">Global</span>
+              <span className="text-xs font-bold text-foreground tabular-nums">
+                #{rankData.rank.toLocaleString()}
+              </span>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
