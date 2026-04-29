@@ -25,58 +25,41 @@ const PREMIUM_FEATURES = [
 export default function PaywallModal({ isOpen, onClose, featureName }: PaywallModalProps) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-
-  // Pre-fetched payment link URL and listener — ready before the button is tapped.
   const paymentLinkUrlRef = useRef<string | null>(null);
-  const browserListenerRef = useRef<any>(null);
+  const appStateListenerRef = useRef<any>(null);
 
-  // When the modal opens on native, pre-fetch the URL and register the
-  // browserFinished listener so the button tap has zero async work to do.
+  // Pre-fetch the payment link URL as soon as the modal opens.
   useEffect(() => {
     if (!isOpen || !Capacitor.isNativePlatform()) return;
-
     let cancelled = false;
-
-    (async () => {
-      try {
-        // 1. Pre-fetch payment link URL.
-        const res = await fetch("/api/subscription/payment-link");
-        const { url } = await res.json();
-        if (!url || cancelled) return;
-        paymentLinkUrlRef.current = url;
-
-        // 2. Pre-register browserFinished listener.
-        const { Browser } = await import("@capacitor/browser");
-        if (browserListenerRef.current) {
-          browserListenerRef.current.remove();
-          browserListenerRef.current = null;
-        }
-        browserListenerRef.current = await Browser.addListener("browserFinished", async () => {
-          browserListenerRef.current?.remove();
-          browserListenerRef.current = null;
-          // Give Stripe's webhook a moment to fire and update the DB.
-          await new Promise(r => setTimeout(r, 2500));
-          try { await fetch("/api/subscription/sync", { method: "POST" }); } catch (_) {}
-          queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-          queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
-          // If now premium, show success toast and close.
-          try {
-            const me = await fetch("/api/auth/me").then(r => r.json());
-            if (me.subscriptionStatus === "premium" || me.subscriptionStatus === "beta") {
-              toast({ title: "Welcome to DBrief Premium", description: "Your features are now unlocked. Full throttle." });
-              onClose();
-            }
-          } catch (_) {}
-        });
-      } catch (_) {
-        // Pre-fetch failed — button will attempt a fresh fetch on tap.
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
+    fetch("/api/subscription/payment-link")
+      .then(r => r.json())
+      .then(({ url }) => { if (!cancelled && url) paymentLinkUrlRef.current = url; })
+      .catch(() => {});
+    return () => { cancelled = true; };
   }, [isOpen]);
+
+  // Clean up any stale App listener when modal closes.
+  useEffect(() => {
+    if (!isOpen && appStateListenerRef.current) {
+      appStateListenerRef.current.remove();
+      appStateListenerRef.current = null;
+    }
+  }, [isOpen]);
+
+  async function syncAfterPayment() {
+    await new Promise(r => setTimeout(r, 2500));
+    try { await fetch("/api/subscription/sync", { method: "POST" }); } catch (_) {}
+    queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
+    try {
+      const me = await fetch("/api/auth/me").then(r => r.json());
+      if (me.subscriptionStatus === "premium" || me.subscriptionStatus === "beta") {
+        toast({ title: "Welcome to DBrief Premium", description: "Your features are now unlocked. Full throttle." });
+        onClose();
+      }
+    } catch (_) {}
+  }
 
   async function handleSubscribe() {
     haptic("medium");
@@ -84,29 +67,39 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
     if (Capacitor.isNativePlatform()) {
       setLoading(true);
       try {
-        // Use the pre-fetched URL if available; otherwise fetch now.
+        // Use pre-fetched URL or fetch now as fallback.
         let url = paymentLinkUrlRef.current;
         if (!url) {
           const res = await fetch("/api/subscription/payment-link");
           const data = await res.json();
           url = data.url;
         }
+
         if (!url) {
           toast({ title: "Checkout unavailable", description: "Please try again shortly.", variant: "destructive" });
           return;
         }
-        // Dynamically import Browser so a missing plugin never crashes the module.
-        const { Browser } = await import("@capacitor/browser");
-        // Open the Stripe Payment Link in SFSafariViewController (supports Apple Pay).
-        await Browser.open({ url });
-      } catch (err: any) {
-        // Fallback: open in system browser — Apple Pay still works in external Safari.
-        const url = paymentLinkUrlRef.current;
-        if (url) {
-          window.open(url, "_system");
-        } else {
-          toast({ title: "Checkout failed", description: err.message ?? "Please try again.", variant: "destructive" });
+
+        // Register a one-shot App state listener BEFORE opening the URL.
+        // When the user returns to the app (isActive: true), we sync their subscription.
+        // @capacitor/app is a core Capacitor plugin — always available.
+        const { App } = await import("@capacitor/app");
+        if (appStateListenerRef.current) {
+          appStateListenerRef.current.remove();
         }
+        appStateListenerRef.current = await App.addListener("appStateChange", (state) => {
+          if (!state.isActive) return;
+          // One-shot: remove immediately on first foreground event.
+          appStateListenerRef.current?.remove();
+          appStateListenerRef.current = null;
+          syncAfterPayment();
+        });
+
+        // Open the Stripe Payment Link via the core App plugin.
+        // This opens in external Safari which supports Apple Pay, Klarna, etc.
+        await App.openUrl({ url });
+      } catch (err: any) {
+        toast({ title: "Checkout failed", description: err.message ?? "Please try again.", variant: "destructive" });
       } finally {
         setLoading(false);
       }
@@ -116,7 +109,11 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
     // Web flow: navigate to Stripe's hosted checkout page.
     setLoading(true);
     try {
-      const res = await fetch("/api/subscription/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      const res = await fetch("/api/subscription/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
       const { url, message } = await res.json();
       if (!url) {
         toast({ title: message ?? "Checkout unavailable", description: "Please try again shortly.", variant: "destructive" });
@@ -135,7 +132,6 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
     <AnimatePresence>
       {isOpen && (
         <>
-          {/* Backdrop */}
           <motion.div
             className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm"
             initial={{ opacity: 0 }}
@@ -144,7 +140,6 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
             onClick={onClose}
           />
 
-          {/* Modal */}
           <motion.div
             className="fixed inset-x-0 bottom-0 z-[201] flex flex-col"
             initial={{ y: "100%" }}
