@@ -76,11 +76,8 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
         toast({ title: "Checkout unavailable", description: "Please try again shortly.", variant: "destructive" });
         return;
       }
-      if (!prefetchedUrl) {
-        // Still fetching — show brief loading toast and let them try again in a moment
-        toast({ title: "Almost ready…", description: "Please tap again in a moment.", variant: "default" });
-        return;
-      }
+      // prefetchedUrl is guaranteed by the disabled button state below — this is a safety net
+      if (!prefetchedUrl) return;
 
       // Open synchronously — no async gap so the popup is not blocked.
       // _blank → SFSafariViewController (iOS) / Chrome Custom Tab (Android)
@@ -217,9 +214,13 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
                 <Button
                   className="w-full h-12 text-base font-bold rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg"
                   onClick={handleSubscribe}
-                  disabled={loading}
+                  disabled={loading || (Capacitor.isNativePlatform() && !prefetchedUrl && !prefetchError)}
                 >
-                  {loading ? "Opening checkout…" : "Unlock Premium — £5.99 / month"}
+                  {loading
+                    ? "Opening checkout…"
+                    : (Capacitor.isNativePlatform() && !prefetchedUrl && !prefetchError)
+                    ? "Preparing checkout…"
+                    : "Unlock Premium — £5.99 / month"}
                 </Button>
                 <p className="text-center text-[11px] text-muted-foreground/60 mt-2">
                   Have a promo code? Enter it on the next screen.
