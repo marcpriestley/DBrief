@@ -71,14 +71,20 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
   function handleSubscribe() {
     haptic("medium");
 
-    // Native: the <a> tag handles the happy path when prefetchedUrl is ready.
-    // The Button (and therefore this function) only runs on native when there's
-    // an error or the URL hasn't arrived yet — both cases are handled below.
     if (Capacitor.isNativePlatform()) {
       if (prefetchError) {
         toast({ title: "Checkout unavailable", description: "Please try again shortly.", variant: "destructive" });
+        return;
       }
-      // Button is disabled while !prefetchedUrl, so this is just a safety return
+      if (!prefetchedUrl) return; // still loading — button is disabled, safety net only
+
+      // Navigate the main WKWebView to Stripe — stays in-app, no popup blocker.
+      // After payment Stripe redirects to /checkout-return which redirects back
+      // to capacitor://localhost/?subscription=success, reloading the native app.
+      const url = prefetchedUrl;
+      setPrefetchedUrl(null); // single-use
+      onClose();
+      window.location.href = url;
       return;
     }
 
@@ -203,29 +209,13 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
                 className="px-6 pb-8 pt-4 flex-shrink-0 border-t border-border/40"
                 style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 2rem)' }}
               >
-                {/* On native: render as a real <a> tag once the URL is ready.
-                    Native link taps bypass iOS/Android WebView popup blocking entirely —
-                    Capacitor's navigation delegate intercepts external hrefs and opens
-                    them in the system browser, unlike window.open() which is blocked. */}
-                {Capacitor.isNativePlatform() && prefetchedUrl ? (
-                  <a
-                    href={prefetchedUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => { haptic("medium"); onClose(); listenForReturn(); setPrefetchedUrl(null); }}
-                    className="flex w-full h-12 items-center justify-center rounded-xl bg-primary text-base font-bold text-primary-foreground shadow-lg"
-                  >
-                    Unlock Premium — £5.99 / month
-                  </a>
-                ) : (
-                  <Button
-                    className="w-full h-12 text-base font-bold rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg"
-                    onClick={handleSubscribe}
-                    disabled={loading || (Capacitor.isNativePlatform() && !prefetchedUrl && !prefetchError)}
-                  >
-                    {loading ? "Opening checkout…" : "Unlock Premium — £5.99 / month"}
-                  </Button>
-                )}
+                <Button
+                  className="w-full h-12 text-base font-bold rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg"
+                  onClick={handleSubscribe}
+                  disabled={loading || (Capacitor.isNativePlatform() && !prefetchedUrl && !prefetchError)}
+                >
+                  {loading ? "Opening checkout…" : "Unlock Premium — £5.99 / month"}
+                </Button>
                 <p className="text-center text-[11px] text-muted-foreground/60 mt-2">
                   Have a promo code? Enter it on the next screen.
                 </p>

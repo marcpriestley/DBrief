@@ -55,14 +55,19 @@ export function registerSubscriptionRoutes(app: Express) {
   <div class="icon">${success ? '🏁' : '👋'}</div>
   <h1>${success ? 'You\'re on the grid.' : 'No worries.'}</h1>
   <p>${success
-    ? 'Your DBrief Premium subscription is active.<br/>Close this screen to return to the app.'
-    : 'Your subscription was not started.<br/>Close this screen to return to the app.'
+    ? 'Your DBrief Premium subscription is active.<br/>Returning to the app…'
+    : 'Your subscription was not started.<br/>Returning to the app…'
   }</p>
-  <button class="btn" onclick="window.close()">Return to DBrief</button>
+  <a class="btn" href="capacitor://localhost/?subscription=${success ? 'success' : 'cancelled'}">
+    Return to DBrief
+  </a>
   <script>
-    // Attempt auto-close — works on some in-app browsers.
-    // If blocked, the button above and the browser's X button work fine.
-    setTimeout(() => { try { window.close(); } catch(e) {} }, 800);
+    // Redirect back into the native WKWebView app.
+    // capacitor://localhost is Capacitor's internal app URL — navigating to it from
+    // within the same WebView session reloads the React app, which detects the
+    // ?subscription= param and handles it (App.tsx).
+    var dest = 'capacitor://localhost/?subscription=${success ? 'success' : 'cancelled'}';
+    window.location.replace(dest);
   </script>
 </body>
 </html>`;
