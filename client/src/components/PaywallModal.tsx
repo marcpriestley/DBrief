@@ -1,10 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Mic, Users, BarChart2, Flag, Target, Zap, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { haptic } from "@/lib/haptics";
 import { Capacitor } from "@capacitor/core";
+import { Browser } from "@capacitor/browser";
+import { queryClient } from "@/lib/queryClient";
 
 interface PaywallModalProps {
   isOpen: boolean;
@@ -25,25 +27,26 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
   const { toast } = useToast();
   const isNative = Capacitor.isNativePlatform();
 
-  // Native: a personalised Stripe Checkout Session URL fetched each time the modal
-  // opens. This ties the payment to THIS user's Stripe customer ID so the webhook
-  // and sync endpoint can always find the subscription. (Payment links create a
-  // fresh anonymous customer each time, breaking the lookup.)
+  // Personalised Stripe Checkout Session URL — fetched fresh each time the modal
+  // opens so it's tied to THIS user's Stripe customer ID. Both paths (native +
+  // web) use this endpoint, keeping the webhook / sync logic consistent.
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
   const [linkLoading, setLinkLoading] = useState(false);
-
-  // Web: tracks when the hosted-checkout redirect is in progress.
   const [webLoading, setWebLoading] = useState(false);
 
-  // POST /api/subscription/checkout to get a session URL tied to this user's customer.
+  // Cleanup ref: holds the remove() function for the browserFinished listener
+  // so we can always clean up even if the component unmounts first.
+  const browserListenerRef = useRef<{ remove: () => void } | null>(null);
+
+  // Fetch a personalised checkout session URL each time the modal opens.
   useEffect(() => {
-    if (!isOpen || !isNative) return;
+    if (!isOpen) return;
     setLinkLoading(true);
     setCheckoutUrl(null);
     fetch("/api/subscription/checkout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ native: true }),
+      body: JSON.stringify({ native: isNative }),
     })
       .then(r => r.json())
       .then(({ url }) => { if (url) setCheckoutUrl(url); })
@@ -51,73 +54,87 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
       .finally(() => setLinkLoading(false));
   }, [isOpen, isNative]);
 
-  // Called when the user taps the native checkout anchor.
-  // The <a> tap is handled by the OS (no JS in the critical path).
-  // We set a localStorage flag that persists even if iOS terminates the WKWebView
-  // while Safari is open — App.tsx reads it on the next foreground/startup.
-  function handleNativeLinkTap() {
+  // Clean up any lingering browserFinished listener when the modal closes or unmounts.
+  useEffect(() => {
+    if (!isOpen) {
+      browserListenerRef.current?.remove();
+      browserListenerRef.current = null;
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    return () => {
+      browserListenerRef.current?.remove();
+    };
+  }, []);
+
+  // Native checkout: opens the Stripe Checkout page in an in-app SFSafariViewController
+  // (iOS) / Chrome Custom Tab (Android). The WKWebView stays alive underneath —
+  // no backgrounding, no iOS snapshot, no white safe-area bands on return.
+  // Apple Pay works because SFSafariViewController shares Safari's full capabilities.
+  async function handleNativeCheckout() {
+    if (!checkoutUrl) return;
     haptic("medium");
-    localStorage.setItem("dbrief_sub_pending", Date.now().toString());
+
+    // Register the listener BEFORE opening the browser, so we never miss the event.
+    // Remove any previous listener first (safety — shouldn't be one at this point).
+    browserListenerRef.current?.remove();
+
+    const listener = await Browser.addListener("browserFinished", async () => {
+      listener.remove();
+      browserListenerRef.current = null;
+
+      // Sync from Stripe — webhook may have fired while browser was open.
+      try { await fetch("/api/subscription/sync", { method: "POST" }); } catch (_) {}
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
+
+      // Check the fresh auth data and show the welcome toast if now premium.
+      try {
+        const me = await fetch("/api/auth/me").then(r => r.json());
+        if (me.subscriptionStatus === "premium" || me.subscriptionStatus === "beta") {
+          toast({
+            title: "Welcome to DBrief Premium",
+            description: "Your features are now unlocked. Full throttle.",
+          });
+          onClose();
+        }
+      } catch (_) {}
+    });
+
+    browserListenerRef.current = listener;
+
+    await Browser.open({ url: checkoutUrl });
   }
 
-  // Web: navigate to Stripe's hosted checkout page.
+  // Web checkout: navigate the browser tab to Stripe's hosted checkout page.
   async function handleWebSubscribe() {
     haptic("medium");
+    if (!checkoutUrl) return;
     setWebLoading(true);
-    try {
-      const res = await fetch("/api/subscription/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: "{}",
-      });
-      const { url, message } = await res.json();
-      if (!url) {
-        toast({ title: message ?? "Checkout unavailable", description: "Please try again shortly.", variant: "destructive" });
-        return;
-      }
-      onClose();
-      window.location.href = url;
-    } catch (err: any) {
-      toast({ title: "Checkout failed", description: err.message ?? "Please try again.", variant: "destructive" });
-    } finally {
-      setWebLoading(false);
-    }
+    onClose();
+    window.location.href = checkoutUrl;
   }
 
-  // The CTA rendered in the footer — a real <a> on native so the OS handles the
-  // tap directly (no gesture-context loss), a Button on web.
   function renderCTA() {
     if (isNative) {
-      if (linkLoading || !checkoutUrl) {
-        return (
-          <Button
-            className="w-full h-12 text-base font-bold rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg"
-            disabled
-          >
-            {linkLoading ? "Loading checkout…" : "Checkout unavailable"}
-          </Button>
-        );
-      }
       return (
-        <a
-          href={checkoutUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={handleNativeLinkTap}
-          className="flex items-center justify-center w-full h-12 text-base font-bold rounded-xl shadow-lg"
-          style={{ background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))', textDecoration: 'none' }}
+        <Button
+          className="w-full h-12 text-base font-bold rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg"
+          onClick={handleNativeCheckout}
+          disabled={linkLoading || !checkoutUrl}
         >
-          Unlock Premium — £5.99 / month
-        </a>
+          {linkLoading ? "Loading checkout…" : "Unlock Premium — £5.99 / month"}
+        </Button>
       );
     }
     return (
       <Button
         className="w-full h-12 text-base font-bold rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg"
         onClick={handleWebSubscribe}
-        disabled={webLoading}
+        disabled={webLoading || linkLoading || !checkoutUrl}
       >
-        {webLoading ? "Opening checkout…" : "Unlock Premium — £5.99 / month"}
+        {webLoading || linkLoading ? "Opening checkout…" : "Unlock Premium — £5.99 / month"}
       </Button>
     );
   }

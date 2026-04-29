@@ -142,35 +142,28 @@ export function registerSubscriptionRoutes(app: Express) {
     }
     .icon { font-size: 3.5rem; margin-bottom: 1.25rem; }
     h1 { font-size: 1.5rem; font-weight: 800; margin-bottom: 0.5rem; }
-    p { font-size: 0.95rem; color: #a3a3a3; line-height: 1.5; margin-bottom: 2rem; }
-    .btn {
-      display: inline-block; padding: 0.875rem 2rem;
-      background: #d97706; color: #fff; border-radius: 0.75rem;
-      font-size: 1rem; font-weight: 700; text-decoration: none;
-      border: none; cursor: pointer; margin-bottom: 1rem;
-    }
+    p { font-size: 0.95rem; color: #a3a3a3; line-height: 1.5; margin-bottom: 1.5rem; }
     .hint {
       font-size: 0.9rem; color: #a3a3a3; margin-top: 0.5rem;
-      line-height: 1.5;
+      line-height: 1.6; border: 1px solid #333; border-radius: 0.75rem;
+      padding: 1rem 1.25rem;
     }
-    .hint strong { color: #f5f5f5; }
+    .hint strong { color: #d97706; }
   </style>
 </head>
 <body>
   <div class="icon">${success ? '🏁' : '👋'}</div>
-  <h1>${success ? 'You\'re on the grid.' : 'No worries.'}</h1>
-  <p id="msg">${success
+  <h1>${success ? "You're on the grid." : 'No worries.'}</h1>
+  <p>${success
     ? 'Your DBrief Premium subscription is active.'
-    : 'Your subscription was not started.'
+    : 'Your subscription was not started. You can try again in the app.'
   }</p>
-  <button class="btn" id="returnBtn" onclick="goBack()">Return to DBrief</button>
-  <p class="hint">Returning you to the app…</p>
-  <script>
-    var dest = ${success ? "'/?subscription=success'" : "'/?subscription=cancelled'"};
-    function goBack() { window.location.href = dest; }
-    // Auto-redirect after a short pause so the user can read the message.
-    setTimeout(goBack, 2200);
-  </script>
+  <div class="hint">
+    ${success
+      ? 'Tap <strong>Done</strong> at the top of the screen to return to DBrief.'
+      : 'Tap <strong>Done</strong> to return to DBrief.'
+    }
+  </div>
 </body>
 </html>`;
 
