@@ -66,7 +66,7 @@ export default function StripeCheckoutModal({ isOpen, onClose }: Props) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/70"
+            className="fixed inset-0 z-[300] bg-black/70"
             onClick={onClose}
           />
 
@@ -77,7 +77,7 @@ export default function StripeCheckoutModal({ isOpen, onClose }: Props) {
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
             transition={{ type: "spring", damping: 30, stiffness: 300 }}
-            className="fixed inset-x-0 bottom-0 z-50 flex flex-col bg-white rounded-t-2xl overflow-hidden"
+            className="fixed inset-x-0 bottom-0 z-[301] flex flex-col bg-white rounded-t-2xl overflow-hidden"
             style={{
               height: '92dvh',
               paddingBottom: 'env(safe-area-inset-bottom, 0px)',
