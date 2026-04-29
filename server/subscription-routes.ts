@@ -208,6 +208,34 @@ export function registerSubscriptionRoutes(app: Express) {
     }
   });
 
+  // ── GET /api/subscription/payment-link ───────────────────────────────────
+  // Returns the Stripe Payment Link URL (supports Apple Pay, Klarna, etc.)
+  // for use in native iOS via SFSafariViewController (Browser plugin).
+  app.get("/api/subscription/payment-link", async (_req, res) => {
+    try {
+      // Allow override via env var for instant config without a deploy.
+      if (process.env.STRIPE_PAYMENT_LINK_URL) {
+        return res.json({ url: process.env.STRIPE_PAYMENT_LINK_URL });
+      }
+      const stripe = await getUncachableStripeClient();
+      const priceId = await getPremiumPriceId();
+      // Find the active payment link that uses the premium price.
+      const links = await stripe.paymentLinks.list({ active: true, limit: 20 });
+      let found: string | null = null;
+      for (const link of links.data) {
+        const items = await stripe.paymentLinks.listLineItems(link.id, { limit: 5 });
+        if (items.data.some(i => i.price?.id === priceId)) {
+          found = link.url;
+          break;
+        }
+      }
+      if (!found) return res.status(404).json({ message: "No active payment link found for this plan." });
+      res.json({ url: found });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // ── POST /api/subscription/checkout-embedded ─────────────────────────────
   // Returns a Stripe Checkout clientSecret for Embedded Checkout (ui_mode='embedded').
   // The checkout form renders inside the native app — no external browser needed.
