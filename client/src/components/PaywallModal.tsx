@@ -24,22 +24,30 @@ const PREMIUM_FEATURES = [
 
 export default function PaywallModal({ isOpen, onClose, featureName }: PaywallModalProps) {
   const { toast } = useToast();
-  const [loading, setLoading] = useState(false);
-  const paymentLinkUrlRef = useRef<string | null>(null);
+  const isNative = Capacitor.isNativePlatform();
+
+  // Native: payment link URL fetched when modal opens, rendered as a real <a> element
+  // so the tap goes directly to the OS with zero JS in the path.
+  const [paymentLinkUrl, setPaymentLinkUrl] = useState<string | null>(null);
+  const [linkLoading, setLinkLoading] = useState(false);
+
+  // Web: tracks when the hosted-checkout redirect is in progress.
+  const [webLoading, setWebLoading] = useState(false);
+
   const visibilityListenerRef = useRef<(() => void) | null>(null);
 
-  // Pre-fetch payment link URL when modal opens so the button tap has zero delay.
+  // Fetch the Stripe payment link URL as soon as the modal opens on native.
   useEffect(() => {
-    if (!isOpen || !Capacitor.isNativePlatform()) return;
-    let cancelled = false;
+    if (!isOpen || !isNative) return;
+    setLinkLoading(true);
     fetch("/api/subscription/payment-link")
       .then(r => r.json())
-      .then(({ url }) => { if (!cancelled && url) paymentLinkUrlRef.current = url; })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [isOpen]);
+      .then(({ url }) => { if (url) setPaymentLinkUrl(url); })
+      .catch(() => {})
+      .finally(() => setLinkLoading(false));
+  }, [isOpen, isNative]);
 
-  // Remove visibility listener when modal closes without payment.
+  // Clean up visibility listener when modal is dismissed without paying.
   useEffect(() => {
     if (!isOpen && visibilityListenerRef.current) {
       document.removeEventListener("visibilitychange", visibilityListenerRef.current);
@@ -47,64 +55,40 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
     }
   }, [isOpen]);
 
-  async function syncAfterPayment() {
-    await new Promise(r => setTimeout(r, 2500));
-    try { await fetch("/api/subscription/sync", { method: "POST" }); } catch (_) {}
-    queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
-    try {
-      const me = await fetch("/api/auth/me").then(r => r.json());
-      if (me.subscriptionStatus === "premium" || me.subscriptionStatus === "beta") {
-        toast({ title: "Welcome to DBrief Premium", description: "Your features are now unlocked. Full throttle." });
-        onClose();
-      }
-    } catch (_) {}
-  }
-
-  async function handleSubscribe() {
+  // Called when the user taps the native payment link anchor.
+  // The actual navigation is handled by the OS (<a> click, no JS in the path).
+  function handleNativeLinkTap() {
     haptic("medium");
 
-    if (Capacitor.isNativePlatform()) {
-      setLoading(true);
-      try {
-        let url = paymentLinkUrlRef.current;
-        if (!url) {
-          const res = await fetch("/api/subscription/payment-link");
-          url = (await res.json()).url;
-        }
-        if (!url) {
-          toast({ title: "Checkout unavailable", description: "Please try again shortly.", variant: "destructive" });
-          return;
-        }
-
-        // Register a one-shot visibilitychange listener BEFORE opening Safari.
-        // When the user returns to the app after paying, we sync their subscription.
-        if (visibilityListenerRef.current) {
-          document.removeEventListener("visibilitychange", visibilityListenerRef.current);
-        }
-        const handler = () => {
-          if (document.visibilityState !== "visible") return;
-          document.removeEventListener("visibilitychange", handler);
-          visibilityListenerRef.current = null;
-          syncAfterPayment();
-        };
-        visibilityListenerRef.current = handler;
-        document.addEventListener("visibilitychange", handler);
-
-        // In Capacitor iOS, window.open() on an external domain is intercepted by the
-        // native bridge and opened via UIApplication.shared.open() → full Safari with
-        // Apple Pay, Klarna, etc. No plugin or rebuild needed.
-        window.open(url);
-      } catch (err: any) {
-        toast({ title: "Checkout failed", description: err.message ?? "Please try again.", variant: "destructive" });
-      } finally {
-        setLoading(false);
-      }
-      return;
+    // Register a one-shot visibilitychange listener so when the user returns
+    // from Safari we sync their subscription and unlock features if they paid.
+    if (visibilityListenerRef.current) {
+      document.removeEventListener("visibilitychange", visibilityListenerRef.current);
     }
+    const handler = async () => {
+      if (document.visibilityState !== "visible") return;
+      document.removeEventListener("visibilitychange", handler);
+      visibilityListenerRef.current = null;
+      await new Promise(r => setTimeout(r, 2500));
+      try { await fetch("/api/subscription/sync", { method: "POST" }); } catch (_) {}
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
+      try {
+        const me = await fetch("/api/auth/me").then(r => r.json());
+        if (me.subscriptionStatus === "premium" || me.subscriptionStatus === "beta") {
+          toast({ title: "Welcome to DBrief Premium", description: "Your features are now unlocked. Full throttle." });
+          onClose();
+        }
+      } catch (_) {}
+    };
+    visibilityListenerRef.current = handler;
+    document.addEventListener("visibilitychange", handler);
+  }
 
-    // Web flow: navigate to Stripe's hosted checkout page.
-    setLoading(true);
+  // Web: navigate to Stripe's hosted checkout page.
+  async function handleWebSubscribe() {
+    haptic("medium");
+    setWebLoading(true);
     try {
       const res = await fetch("/api/subscription/checkout", {
         method: "POST",
@@ -121,8 +105,46 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
     } catch (err: any) {
       toast({ title: "Checkout failed", description: err.message ?? "Please try again.", variant: "destructive" });
     } finally {
-      setLoading(false);
+      setWebLoading(false);
     }
+  }
+
+  // The CTA rendered in the footer — a real <a> on native so the OS handles the
+  // tap directly (no gesture-context loss), a Button on web.
+  function renderCTA() {
+    if (isNative) {
+      if (linkLoading || !paymentLinkUrl) {
+        return (
+          <Button
+            className="w-full h-12 text-base font-bold rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg"
+            disabled
+          >
+            {linkLoading ? "Loading checkout…" : "Checkout unavailable"}
+          </Button>
+        );
+      }
+      return (
+        <a
+          href={paymentLinkUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={handleNativeLinkTap}
+          className="flex items-center justify-center w-full h-12 text-base font-bold rounded-xl shadow-lg"
+          style={{ background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))', textDecoration: 'none' }}
+        >
+          Unlock Premium — £5.99 / month
+        </a>
+      );
+    }
+    return (
+      <Button
+        className="w-full h-12 text-base font-bold rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg"
+        onClick={handleWebSubscribe}
+        disabled={webLoading}
+      >
+        {webLoading ? "Opening checkout…" : "Unlock Premium — £5.99 / month"}
+      </Button>
+    );
   }
 
   return (
@@ -208,13 +230,7 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
                 className="px-6 pb-8 pt-4 flex-shrink-0 border-t border-border/40"
                 style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 2rem)' }}
               >
-                <Button
-                  className="w-full h-12 text-base font-bold rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg"
-                  onClick={handleSubscribe}
-                  disabled={loading}
-                >
-                  {loading ? "Opening checkout…" : "Unlock Premium — £5.99 / month"}
-                </Button>
+                {renderCTA()}
                 <p className="text-center text-[11px] text-muted-foreground/60 mt-2">
                   Apple Pay · Card · Klarna · and more
                 </p>
