@@ -163,20 +163,13 @@ export function registerSubscriptionRoutes(app: Express) {
     ? 'Your DBrief Premium subscription is active.'
     : 'Your subscription was not started.'
   }</p>
-  <button class="btn" onclick="window.close()">Return to DBrief</button>
-  <p class="hint" id="hint" style="display:none">
-    Tap <strong>Done</strong> or <strong>✕</strong> at the top of the screen to return.
-  </p>
+  <button class="btn" id="returnBtn" onclick="goBack()">Return to DBrief</button>
+  <p class="hint">Returning you to the app…</p>
   <script>
-    // Try programmatic close first — works when Capacitor opened this in an overlay WebView.
-    // If the window is still open after a short delay, show a manual instruction instead.
-    try { window.close(); } catch(e) {}
-    setTimeout(function() {
-      // If we're still here, window.close() was blocked (external browser).
-      // Show the manual "tap Done" hint so the user knows what to do.
-      var hint = document.getElementById('hint');
-      if (hint) hint.style.display = 'block';
-    }, 600);
+    var dest = ${success ? "'/?subscription=success'" : "'/?subscription=cancelled'"};
+    function goBack() { window.location.href = dest; }
+    // Auto-redirect after a short pause so the user can read the message.
+    setTimeout(goBack, 2200);
   </script>
 </body>
 </html>`;
