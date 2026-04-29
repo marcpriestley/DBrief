@@ -11,24 +11,48 @@ function getUserId(req: any): number {
   return id;
 }
 
-// Resolves the DBrief Premium Stripe price.
-// 1. Uses STRIPE_PRICE_ID env var when set (fastest, most reliable).
-// 2. Falls back to listing all active products and finding by name.
+// Resolves (or creates) the DBrief Premium Stripe price.
+// Works in both test and live mode without pre-seeding.
 async function resolveStripePremiumPrice(stripe: import('stripe').default) {
+  // 1. Try STRIPE_PRICE_ID env var for fastest path
   const directPriceId = process.env.STRIPE_PRICE_ID;
   if (directPriceId) {
     try {
       const price = await stripe.prices.retrieve(directPriceId);
       if (price.active) return price;
-    } catch (e) {
-      console.warn('[Stripe] STRIPE_PRICE_ID lookup failed, falling back to product list:', e);
+    } catch (e: any) {
+      console.warn('[Stripe] STRIPE_PRICE_ID not found in this mode, will find/create:', e.message);
     }
   }
+
+  // 2. Find existing product by name
   const allProducts = await stripe.products.list({ active: true, limit: 100 });
-  const product = allProducts.data.find(p => p.name === 'DBrief Premium');
-  if (!product) { console.error('[Stripe] DBrief Premium product not found. Products:', allProducts.data.map(p => p.name)); return null; }
+  let product = allProducts.data.find(p => p.name === 'DBrief Premium');
+
+  // 3. Create product if missing
+  if (!product) {
+    console.log('[Stripe] Creating DBrief Premium product...');
+    product = await stripe.products.create({
+      name: 'DBrief Premium',
+      description: 'Full access to all DBrief premium features — voice notes, squad, weekly reports, pattern analysis & mission intelligence.',
+    });
+    console.log('[Stripe] Product created:', product.id);
+  }
+
+  // 4. Find existing active price for this product
   const prices = await stripe.prices.list({ product: product.id, active: true, limit: 1 });
-  return prices.data[0] ?? null;
+  if (prices.data[0]) return prices.data[0];
+
+  // 5. Create price if missing (£5.99/month)
+  console.log('[Stripe] Creating £5.99/month price for product:', product.id);
+  const price = await stripe.prices.create({
+    product: product.id,
+    unit_amount: 599,
+    currency: 'gbp',
+    recurring: { interval: 'month' },
+  });
+  console.log('[Stripe] Price created:', price.id);
+  return price;
 }
 
 export function isPremiumStatus(status: string | null | undefined): boolean {
