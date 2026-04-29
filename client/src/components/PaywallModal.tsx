@@ -1,9 +1,8 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Mic, Users, BarChart2, Flag, Target, Zap, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient } from "@/lib/queryClient";
 import { haptic } from "@/lib/haptics";
 import { Capacitor } from "@capacitor/core";
 
@@ -34,8 +33,6 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
   // Web: tracks when the hosted-checkout redirect is in progress.
   const [webLoading, setWebLoading] = useState(false);
 
-  const visibilityListenerRef = useRef<(() => void) | null>(null);
-
   // Fetch the Stripe payment link URL as soon as the modal opens on native.
   useEffect(() => {
     if (!isOpen || !isNative) return;
@@ -47,42 +44,13 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
       .finally(() => setLinkLoading(false));
   }, [isOpen, isNative]);
 
-  // Clean up visibility listener when modal is dismissed without paying.
-  useEffect(() => {
-    if (!isOpen && visibilityListenerRef.current) {
-      document.removeEventListener("visibilitychange", visibilityListenerRef.current);
-      visibilityListenerRef.current = null;
-    }
-  }, [isOpen]);
-
   // Called when the user taps the native payment link anchor.
   // The actual navigation is handled by the OS (<a> click, no JS in the path).
+  // We only set a sessionStorage flag — App.tsx's global visibilitychange handler
+  // picks it up when the user returns from Safari and syncs the subscription.
   function handleNativeLinkTap() {
     haptic("medium");
-
-    // Register a one-shot visibilitychange listener so when the user returns
-    // from Safari we sync their subscription and unlock features if they paid.
-    if (visibilityListenerRef.current) {
-      document.removeEventListener("visibilitychange", visibilityListenerRef.current);
-    }
-    const handler = async () => {
-      if (document.visibilityState !== "visible") return;
-      document.removeEventListener("visibilitychange", handler);
-      visibilityListenerRef.current = null;
-      await new Promise(r => setTimeout(r, 2500));
-      try { await fetch("/api/subscription/sync", { method: "POST" }); } catch (_) {}
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
-      try {
-        const me = await fetch("/api/auth/me").then(r => r.json());
-        if (me.subscriptionStatus === "premium" || me.subscriptionStatus === "beta") {
-          toast({ title: "Welcome to DBrief Premium", description: "Your features are now unlocked. Full throttle." });
-          onClose();
-        }
-      } catch (_) {}
-    };
-    visibilityListenerRef.current = handler;
-    document.addEventListener("visibilitychange", handler);
+    sessionStorage.setItem("dbrief_sub_pending", Date.now().toString());
   }
 
   // Web: navigate to Stripe's hosted checkout page.

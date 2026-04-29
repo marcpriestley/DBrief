@@ -158,6 +158,25 @@ function AuthenticatedRouter() {
     // Re-checking here closes the timing gap.
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
+
+      // Subscription payment pending — user just returned from Stripe checkout
+      // in external Safari. Sync with Stripe and unlock features if payment went through.
+      const pendingSubCheck = sessionStorage.getItem("dbrief_sub_pending");
+      if (pendingSubCheck) {
+        sessionStorage.removeItem("dbrief_sub_pending");
+        setTimeout(async () => {
+          try { await fetch("/api/subscription/sync", { method: "POST" }); } catch (_) {}
+          queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
+          try {
+            const me = await fetch("/api/auth/me").then(r => r.json());
+            if (me.subscriptionStatus === "premium" || me.subscriptionStatus === "beta") {
+              toast({ title: "Welcome to DBrief Premium", description: "Your features are now unlocked. Full throttle." });
+            }
+          } catch (_) {}
+        }, 2500);
+      }
+
       // Mood modal pending from a notification tap while app was backgrounded
       if (consumePendingMoodOpen()) { setIsMoodOpen(true); return; }
       checkMoodParam();
