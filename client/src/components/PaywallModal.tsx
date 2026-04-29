@@ -1,12 +1,11 @@
-import { useState, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Mic, Users, BarChart2, Flag, Target, Zap, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
 import { haptic } from "@/lib/haptics";
 import { Capacitor } from "@capacitor/core";
-import { Browser } from "@capacitor/browser";
 
 interface PaywallModalProps {
   isOpen: boolean;
@@ -26,81 +25,110 @@ const PREMIUM_FEATURES = [
 export default function PaywallModal({ isOpen, onClose, featureName }: PaywallModalProps) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const listenerRef = useRef<any>(null);
+
+  // Pre-fetched payment link URL and listener — ready before the button is tapped.
+  const paymentLinkUrlRef = useRef<string | null>(null);
+  const browserListenerRef = useRef<any>(null);
+
+  // When the modal opens on native, pre-fetch the URL and register the
+  // browserFinished listener so the button tap has zero async work to do.
+  useEffect(() => {
+    if (!isOpen || !Capacitor.isNativePlatform()) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        // 1. Pre-fetch payment link URL.
+        const res = await fetch("/api/subscription/payment-link");
+        const { url } = await res.json();
+        if (!url || cancelled) return;
+        paymentLinkUrlRef.current = url;
+
+        // 2. Pre-register browserFinished listener.
+        const { Browser } = await import("@capacitor/browser");
+        if (browserListenerRef.current) {
+          browserListenerRef.current.remove();
+          browserListenerRef.current = null;
+        }
+        browserListenerRef.current = await Browser.addListener("browserFinished", async () => {
+          browserListenerRef.current?.remove();
+          browserListenerRef.current = null;
+          // Give Stripe's webhook a moment to fire and update the DB.
+          await new Promise(r => setTimeout(r, 2500));
+          try { await fetch("/api/subscription/sync", { method: "POST" }); } catch (_) {}
+          queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
+          // If now premium, show success toast and close.
+          try {
+            const me = await fetch("/api/auth/me").then(r => r.json());
+            if (me.subscriptionStatus === "premium" || me.subscriptionStatus === "beta") {
+              toast({ title: "Welcome to DBrief Premium", description: "Your features are now unlocked. Full throttle." });
+              onClose();
+            }
+          } catch (_) {}
+        });
+      } catch (_) {
+        // Pre-fetch failed — button will attempt a fresh fetch on tap.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
 
   async function handleSubscribe() {
     haptic("medium");
 
     if (Capacitor.isNativePlatform()) {
-      // Native path: open the Stripe Payment Link in SFSafariViewController.
-      // This gives us Apple Pay, Klarna, Revolut Pay etc. — all the payment
-      // methods that require a real Safari context.
       setLoading(true);
       try {
-        const res = await fetch("/api/subscription/payment-link");
-        const { url, message } = await res.json();
+        // Use the pre-fetched URL if available; otherwise fetch now.
+        let url = paymentLinkUrlRef.current;
         if (!url) {
-          toast({ title: message ?? "Checkout unavailable", description: "Please try again shortly.", variant: "destructive" });
+          const res = await fetch("/api/subscription/payment-link");
+          const data = await res.json();
+          url = data.url;
+        }
+        if (!url) {
+          toast({ title: "Checkout unavailable", description: "Please try again shortly.", variant: "destructive" });
           return;
         }
-
-        // Remove any previous listener before adding a new one.
-        if (listenerRef.current) {
-          listenerRef.current.remove();
-          listenerRef.current = null;
-        }
-
-        // When the user dismisses the browser (paid or cancelled),
-        // sync the subscription and unlock features if payment succeeded.
-        listenerRef.current = await Browser.addListener("browserFinished", async () => {
-          listenerRef.current?.remove();
-          listenerRef.current = null;
-          // Give the Stripe webhook a moment to fire and update the DB.
-          await new Promise(r => setTimeout(r, 2500));
-          try {
-            await fetch("/api/subscription/sync", { method: "POST" });
-          } catch (_) {}
-          queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-          queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
-          // Fetch fresh status to decide whether to show the success toast.
-          try {
-            const me = await fetch("/api/auth/me").then(r => r.json());
-            if (me.subscriptionStatus === "premium" || me.subscriptionStatus === "beta") {
-              toast({
-                title: "Welcome to DBrief Premium",
-                description: "Your features are now unlocked. Full throttle.",
-              });
-              onClose();
-            }
-          } catch (_) {}
-        });
-
-        await Browser.open({ url, presentationStyle: "popover" });
+        // Dynamically import Browser so a missing plugin never crashes the module.
+        const { Browser } = await import("@capacitor/browser");
+        // Open the Stripe Payment Link in SFSafariViewController (supports Apple Pay).
+        await Browser.open({ url });
       } catch (err: any) {
-        toast({ title: "Checkout failed", description: err.message ?? "Please try again.", variant: "destructive" });
+        // Fallback: open in system browser — Apple Pay still works in external Safari.
+        const url = paymentLinkUrlRef.current;
+        if (url) {
+          window.open(url, "_system");
+        } else {
+          toast({ title: "Checkout failed", description: err.message ?? "Please try again.", variant: "destructive" });
+        }
       } finally {
         setLoading(false);
       }
       return;
     }
 
-    // Web flow: navigate the current window to Stripe's hosted checkout.
-    // Stripe redirects back to /?subscription=success which App.tsx handles.
+    // Web flow: navigate to Stripe's hosted checkout page.
     setLoading(true);
-    apiRequest("POST", "/api/subscription/checkout", {})
-      .then(r => r.json())
-      .then(({ url, message }) => {
-        if (!url) {
-          toast({ title: message ?? "Checkout unavailable", description: "Please try again shortly.", variant: "destructive" });
-          return;
-        }
-        onClose();
-        window.location.href = url;
-      })
-      .catch((err: any) => {
-        toast({ title: "Checkout failed", description: err.message ?? "Please try again.", variant: "destructive" });
-      })
-      .finally(() => setLoading(false));
+    try {
+      const res = await fetch("/api/subscription/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      const { url, message } = await res.json();
+      if (!url) {
+        toast({ title: message ?? "Checkout unavailable", description: "Please try again shortly.", variant: "destructive" });
+        return;
+      }
+      onClose();
+      window.location.href = url;
+    } catch (err: any) {
+      toast({ title: "Checkout failed", description: err.message ?? "Please try again.", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -132,24 +160,14 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
               {/* Amber header gradient */}
               <div
                 className="relative px-6 pt-8 pb-6 text-center flex-shrink-0"
-                style={{
-                  background: 'linear-gradient(160deg, #78350f 0%, #b45309 40%, #d97706 100%)',
-                }}
+                style={{ background: 'linear-gradient(160deg, #78350f 0%, #b45309 40%, #d97706 100%)' }}
               >
-                <button
-                  onClick={onClose}
-                  className="absolute top-4 right-4 text-amber-200/70 hover:text-white transition-colors"
-                >
+                <button onClick={onClose} className="absolute top-4 right-4 text-amber-200/70 hover:text-white transition-colors">
                   <X className="h-5 w-5" />
                 </button>
 
-                {/* DBrief logo */}
                 <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-white/15 backdrop-blur mb-3 overflow-hidden">
-                  <img
-                    src="/app-icon.png"
-                    alt="DBrief"
-                    className="w-14 h-14 object-contain rounded-xl"
-                  />
+                  <img src="/app-icon.png" alt="DBrief" className="w-14 h-14 object-contain rounded-xl" />
                 </div>
 
                 <h2 className="text-2xl font-black text-white tracking-tight">DBrief Premium</h2>
@@ -160,30 +178,23 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
                   </p>
                 )}
 
-                {/* Introductory badge */}
                 <div className="mt-3 inline-flex items-center gap-1.5 bg-white/20 backdrop-blur rounded-full px-3 py-1">
                   <span className="text-xs font-bold text-amber-100 uppercase tracking-widest">
                     Introductory offer — limited time
                   </span>
                 </div>
 
-                {/* Price */}
                 <div className="mt-4 flex items-end justify-center gap-1">
                   <span className="text-4xl font-black text-white leading-none">£5.99</span>
                   <span className="text-sm text-amber-200 mb-1">/ month</span>
                 </div>
 
-                {/* Cancel anytime */}
-                <p className="mt-1.5 text-xs text-amber-200/70">
-                  Cancel anytime · No minimum term
-                </p>
+                <p className="mt-1.5 text-xs text-amber-200/70">Cancel anytime · No minimum term</p>
               </div>
 
-              {/* Features list — scrollable */}
+              {/* Features list */}
               <div className="flex-1 overflow-y-auto px-6 py-4">
-                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-4">
-                  What's included
-                </p>
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-4">What's included</p>
                 <div className="space-y-3">
                   {PREMIUM_FEATURES.map(({ icon: Icon, label, desc }) => (
                     <div key={label} className="flex items-start gap-3">
