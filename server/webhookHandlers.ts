@@ -33,13 +33,38 @@ export class WebhookHandlers {
     switch (event.type) {
       case 'checkout.session.completed': {
         if (obj.mode !== 'subscription') break;
-        const customerId = obj.customer;
-        const subscriptionId = obj.subscription;
+        const customerId = obj.customer as string | null;
         if (!customerId) break;
-        await db.update(users)
-          .set({ subscriptionStatus: 'premium' })
-          .where(eq(users.stripeCustomerId, customerId));
-        console.log(`[Stripe] Checkout complete — customer ${customerId} -> premium`);
+
+        // Primary match: by stripeCustomerId (for sessions created via our checkout endpoint).
+        const primaryResult = await db.update(users)
+          .set({ subscriptionStatus: 'premium', stripeCustomerId: customerId })
+          .where(eq(users.stripeCustomerId, customerId))
+          .returning({ id: users.id });
+
+        if (primaryResult.length > 0) {
+          console.log(`[Stripe] Checkout complete — customer ${customerId} -> premium (matched by customerId)`);
+          break;
+        }
+
+        // Fallback: match by email — handles payment-link purchases where no prior
+        // customer ID was stored. We also update stripeCustomerId so future syncs work.
+        const customerEmail = obj.customer_details?.email as string | null;
+        if (!customerEmail) {
+          console.warn(`[Stripe] Checkout complete — customer ${customerId}: no user match and no email in event.`);
+          break;
+        }
+
+        const emailResult = await db.update(users)
+          .set({ subscriptionStatus: 'premium', stripeCustomerId: customerId })
+          .where(eq(users.username, customerEmail))
+          .returning({ id: users.id });
+
+        if (emailResult.length > 0) {
+          console.log(`[Stripe] Checkout complete — customer ${customerId} -> premium (matched by email ${customerEmail})`);
+        } else {
+          console.warn(`[Stripe] Checkout complete — customer ${customerId} (${customerEmail}): no matching user found.`);
+        }
         break;
       }
 

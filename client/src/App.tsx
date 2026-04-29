@@ -55,25 +55,61 @@ function AuthenticatedRouter() {
     staleTime: 5 * 60 * 1000,
   });
 
+  // Once per session (debounced), sync subscription state from Stripe.
+  // This heals users whose status is out of sync (e.g. paid via payment link before
+  // the checkout-session fix, or missed webhook). Runs silently in the background.
+  // Debounce is shorter for free users (5 min) so a mis-classified user gets fixed
+  // quickly, and longer for premium users (30 min) to avoid unnecessary Stripe calls.
+  useEffect(() => {
+    if (!user) return; // only when logged in
+    const isPremiumNow = user.subscriptionStatus === 'premium' || user.subscriptionStatus === 'beta';
+    const DEBOUNCE_MS = isPremiumNow ? 30 * 60 * 1000 : 5 * 60 * 1000;
+    const lastSync = parseInt(localStorage.getItem("dbrief_last_sub_sync") ?? "0", 10);
+    if (Date.now() - lastSync < DEBOUNCE_MS) return;
+    localStorage.setItem("dbrief_last_sub_sync", Date.now().toString());
+    fetch("/api/subscription/sync", { method: "POST" })
+      .then(r => r.json())
+      .then(data => {
+        if (data.isPremium) {
+          queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
+        }
+      })
+      .catch(() => {});
+  }, [user?.id]);
+
   // Handle Stripe Checkout return — Stripe redirects to /?subscription=success or ?subscription=cancelled
+  // Also handles the localStorage flag set when the user taps the native payment link —
+  // covers the WKWebView-reload case where iOS terminated the WebView while Safari was open.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const sub = params.get("subscription");
-    if (!sub) return;
-    window.history.replaceState({}, "", window.location.pathname);
-    if (sub === "success") {
-      // Refresh auth/me so isPremium flips immediately
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
-      toast({
-        title: "Welcome to DBrief Premium",
-        description: "Your features are now unlocked. Full throttle.",
-      });
-    } else if (sub === "cancelled") {
-      toast({
-        title: "No changes made",
-        description: "You can upgrade any time from the premium features.",
-      });
+    if (sub) {
+      window.history.replaceState({}, "", window.location.pathname);
+      if (sub === "success") {
+        queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
+        toast({ title: "Welcome to DBrief Premium", description: "Your features are now unlocked. Full throttle." });
+      } else if (sub === "cancelled") {
+        toast({ title: "No changes made", description: "You can upgrade any time from the premium features." });
+      }
+    }
+
+    // localStorage persists across WKWebView reloads — check on every startup.
+    const pendingSub = localStorage.getItem("dbrief_sub_pending");
+    if (pendingSub) {
+      localStorage.removeItem("dbrief_sub_pending");
+      setTimeout(async () => {
+        try { await fetch("/api/subscription/sync", { method: "POST" }); } catch (_) {}
+        queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
+        try {
+          const me = await fetch("/api/auth/me").then(r => r.json());
+          if (me.subscriptionStatus === "premium" || me.subscriptionStatus === "beta") {
+            toast({ title: "Welcome to DBrief Premium", description: "Your features are now unlocked. Full throttle." });
+          }
+        } catch (_) {}
+      }, 1500);
     }
   }, []);
 
@@ -159,11 +195,14 @@ function AuthenticatedRouter() {
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
 
-      // Subscription payment pending — user just returned from Stripe checkout
-      // in external Safari. Sync with Stripe and unlock features if payment went through.
-      const pendingSubCheck = sessionStorage.getItem("dbrief_sub_pending");
+      // Always refresh auth on foreground — the Stripe webhook has already updated
+      // the DB; we just need React Query to fetch the new value.
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+
+      // If the user just returned from Stripe payment, also call sync and show toast.
+      const pendingSubCheck = localStorage.getItem("dbrief_sub_pending");
       if (pendingSubCheck) {
-        sessionStorage.removeItem("dbrief_sub_pending");
+        localStorage.removeItem("dbrief_sub_pending");
         setTimeout(async () => {
           try { await fetch("/api/subscription/sync", { method: "POST" }); } catch (_) {}
           queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });

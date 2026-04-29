@@ -25,32 +25,39 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
   const { toast } = useToast();
   const isNative = Capacitor.isNativePlatform();
 
-  // Native: payment link URL fetched when modal opens, rendered as a real <a> element
-  // so the tap goes directly to the OS with zero JS in the path.
-  const [paymentLinkUrl, setPaymentLinkUrl] = useState<string | null>(null);
+  // Native: a personalised Stripe Checkout Session URL fetched each time the modal
+  // opens. This ties the payment to THIS user's Stripe customer ID so the webhook
+  // and sync endpoint can always find the subscription. (Payment links create a
+  // fresh anonymous customer each time, breaking the lookup.)
+  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
   const [linkLoading, setLinkLoading] = useState(false);
 
   // Web: tracks when the hosted-checkout redirect is in progress.
   const [webLoading, setWebLoading] = useState(false);
 
-  // Fetch the Stripe payment link URL as soon as the modal opens on native.
+  // POST /api/subscription/checkout to get a session URL tied to this user's customer.
   useEffect(() => {
     if (!isOpen || !isNative) return;
     setLinkLoading(true);
-    fetch("/api/subscription/payment-link")
+    setCheckoutUrl(null);
+    fetch("/api/subscription/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ native: true }),
+    })
       .then(r => r.json())
-      .then(({ url }) => { if (url) setPaymentLinkUrl(url); })
+      .then(({ url }) => { if (url) setCheckoutUrl(url); })
       .catch(() => {})
       .finally(() => setLinkLoading(false));
   }, [isOpen, isNative]);
 
-  // Called when the user taps the native payment link anchor.
-  // The actual navigation is handled by the OS (<a> click, no JS in the path).
-  // We only set a sessionStorage flag — App.tsx's global visibilitychange handler
-  // picks it up when the user returns from Safari and syncs the subscription.
+  // Called when the user taps the native checkout anchor.
+  // The <a> tap is handled by the OS (no JS in the critical path).
+  // We set a localStorage flag that persists even if iOS terminates the WKWebView
+  // while Safari is open — App.tsx reads it on the next foreground/startup.
   function handleNativeLinkTap() {
     haptic("medium");
-    sessionStorage.setItem("dbrief_sub_pending", Date.now().toString());
+    localStorage.setItem("dbrief_sub_pending", Date.now().toString());
   }
 
   // Web: navigate to Stripe's hosted checkout page.
@@ -81,7 +88,7 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
   // tap directly (no gesture-context loss), a Button on web.
   function renderCTA() {
     if (isNative) {
-      if (linkLoading || !paymentLinkUrl) {
+      if (linkLoading || !checkoutUrl) {
         return (
           <Button
             className="w-full h-12 text-base font-bold rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg"
@@ -93,7 +100,7 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
       }
       return (
         <a
-          href={paymentLinkUrl}
+          href={checkoutUrl}
           target="_blank"
           rel="noopener noreferrer"
           onClick={handleNativeLinkTap}

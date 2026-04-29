@@ -326,35 +326,70 @@ export function registerSubscriptionRoutes(app: Express) {
       }
 
       const stripe = await getUncachableStripeClient();
+
+      // Helper: resolve the most relevant status from a list of subscriptions
+      function resolveStatus(subs: import('stripe').default.Subscription[], currentStatus: string): { newStatus: string; periodEnd: Date | null } {
+        const active = subs.find(s => s.status === 'active' || s.status === 'trialing');
+        const latest = subs[0];
+        let newStatus: string;
+        let periodEnd: Date | null = null;
+        if (active) {
+          newStatus = 'premium';
+          periodEnd = active.current_period_end ? new Date(active.current_period_end * 1000) : null;
+        } else if (latest && (latest.status === 'canceled' || latest.status === 'unpaid' || latest.status === 'incomplete_expired')) {
+          newStatus = 'free';
+        } else if (!latest) {
+          newStatus = 'free';
+        } else {
+          newStatus = currentStatus ?? 'free';
+        }
+        return { newStatus, periodEnd };
+      }
+
+      // Primary lookup: by stored stripeCustomerId
       const subscriptions = await stripe.subscriptions.list({
         customer: user.stripeCustomerId,
         status: 'all',
         limit: 5,
       });
 
-      // Find the most relevant subscription
-      const active = subscriptions.data.find(s => s.status === 'active' || s.status === 'trialing');
-      const latest = subscriptions.data[0]; // most recent regardless of status
+      let { newStatus, periodEnd } = resolveStatus(subscriptions.data, user.subscriptionStatus ?? 'free');
+      let healedCustomerId: string | null = null;
 
-      let newStatus: string;
-      let periodEnd: Date | null = null;
-
-      if (active) {
-        newStatus = 'premium';
-        periodEnd = active.current_period_end ? new Date(active.current_period_end * 1000) : null;
-      } else if (latest && (latest.status === 'canceled' || latest.status === 'unpaid' || latest.status === 'incomplete_expired')) {
-        newStatus = 'free';
-      } else if (!latest) {
-        newStatus = 'free';
-      } else {
-        // Past due or other — keep current status
-        newStatus = user.subscriptionStatus ?? 'free';
+      // If we found no active subscription via the stored customer ID, search Stripe
+      // by email. This heals users who paid via a payment link (which creates an
+      // anonymous customer we couldn't pre-store) or had a stale customer ID.
+      if (newStatus === 'free' && user.username) {
+        const customers = await stripe.customers.search({
+          query: `email:"${user.username}"`,
+          limit: 5,
+        });
+        for (const cust of customers.data) {
+          if (cust.id === user.stripeCustomerId) continue; // already checked
+          const custSubs = await stripe.subscriptions.list({
+            customer: cust.id,
+            status: 'all',
+            limit: 5,
+          });
+          const resolved = resolveStatus(custSubs.data, 'free');
+          if (resolved.newStatus === 'premium') {
+            newStatus = 'premium';
+            periodEnd = resolved.periodEnd;
+            healedCustomerId = cust.id; // we'll store this as the canonical customer ID
+            console.log(`[Stripe] Sync — healed user ${userId}: found active subscription under email-matched customer ${cust.id}`);
+            break;
+          }
+        }
       }
 
       // Only update if status has actually changed (don't touch beta users)
-      if (user.subscriptionStatus !== 'beta' && user.subscriptionStatus !== newStatus) {
+      if (user.subscriptionStatus !== 'beta' && (user.subscriptionStatus !== newStatus || healedCustomerId)) {
         await db.update(users)
-          .set({ subscriptionStatus: newStatus, ...(periodEnd ? { subscriptionCurrentPeriodEnd: periodEnd } : {}) })
+          .set({
+            subscriptionStatus: newStatus,
+            ...(healedCustomerId ? { stripeCustomerId: healedCustomerId } : {}),
+            ...(periodEnd ? { subscriptionCurrentPeriodEnd: periodEnd } : {}),
+          })
           .where(eq(users.id, userId));
         console.log(`[Stripe] Sync — user ${userId}: ${user.subscriptionStatus} -> ${newStatus}`);
       }
