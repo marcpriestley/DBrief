@@ -160,8 +160,8 @@ export function registerSubscriptionRoutes(app: Express) {
   }</p>
   <div class="hint">
     ${success
-      ? 'Tap <strong>Done</strong> at the top of the screen to return to DBrief.'
-      : 'Tap <strong>Done</strong> to return to DBrief.'
+      ? 'Tap <strong>Done</strong> (top or bottom of the screen) to return to DBrief.'
+      : 'Tap <strong>Done</strong> (top or bottom of the screen) to return to DBrief.'
     }
   </div>
 </body>

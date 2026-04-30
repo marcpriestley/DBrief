@@ -303,7 +303,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = getUserId(req);
       const rank = await storage.getGlobalWeeklyRank(userId);
       res.json(rank);
-    } catch (error) {
+    } catch (error: any) {
+      console.error("[global-rank] error:", error?.message ?? error);
       res.status(500).json({ message: "Failed to fetch global rank" });
     }
   });

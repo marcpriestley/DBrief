@@ -1968,7 +1968,7 @@ export class DatabaseStorage implements IStorage {
               WHERE h.user_id = hl.user_id AND NOT h.is_archived
             ), 0) AS total
           FROM habit_logs hl
-          WHERE hl.date >= current_date - 6
+          WHERE hl.date >= to_char(current_date - 6, 'YYYY-MM-DD')
           GROUP BY hl.user_id, hl.date
         ),
         habit_pts AS (
