@@ -1955,7 +1955,7 @@ export class DatabaseStorage implements IStorage {
           SELECT user_id,
             LEAST(COUNT(DISTINCT date)::int, 7) * 10 AS pts
           FROM daily_scores
-          WHERE date >= (current_date - 6)::text
+          WHERE date >= current_date - 6
             AND value > 0
             AND is_auto_synced = false
           GROUP BY user_id
@@ -1968,7 +1968,7 @@ export class DatabaseStorage implements IStorage {
               WHERE h.user_id = hl.user_id AND NOT h.is_archived
             ), 0) AS total
           FROM habit_logs hl
-          WHERE hl.date >= (current_date - 6)::text
+          WHERE hl.date >= current_date - 6
           GROUP BY hl.user_id, hl.date
         ),
         habit_pts AS (
@@ -1980,14 +1980,14 @@ export class DatabaseStorage implements IStorage {
         goal_day AS (
           SELECT user_id, date,
             COUNT(*) AS total,
-            COUNT(*) FILTER (WHERE completed = true) AS completed
+            COUNT(*) FILTER (WHERE completed = true) AS done_count
           FROM daily_goals
-          WHERE date >= (current_date - 6)::text
+          WHERE date >= to_char(current_date - 6, 'YYYY-MM-DD')
           GROUP BY user_id, date
         ),
         goal_pts AS (
           SELECT user_id,
-            SUM(completed * 5 + CASE WHEN total > 0 AND completed >= total THEN 20 ELSE 0 END)::int AS pts
+            SUM(done_count * 5 + CASE WHEN total > 0 AND done_count >= total THEN 20 ELSE 0 END)::int AS pts
           FROM goal_day
           GROUP BY user_id
         ),

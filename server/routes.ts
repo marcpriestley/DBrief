@@ -2,6 +2,7 @@ import express from "express";
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage, todayInTz } from "./storage";
+import { updateUserStreak } from "./streakHelper";
 import { authLimiter, aiLimiter, generalLimiter } from "./rate-limit";
 import { 
   insertJournalEntrySchema, insertDailyScoreSchema, 
@@ -701,21 +702,15 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
       const existingEntry = await storage.getJournalEntryByDate(userId, validatedData.date);
       
       if (existingEntry) {
-        // Update existing entry
         const updatedEntry = await storage.updateJournalEntry(existingEntry.id, {
           content: validatedData.content,
           isVoiceEntry: validatedData.isVoiceEntry,
         });
-        
-        // Removed streak update from journal entries - now tracked by score inputs
-        
+        updateUserStreak(userId, validatedData.date).catch(() => {});
         res.json(updatedEntry);
       } else {
-        // Create new entry
         const entry = await storage.createJournalEntry(validatedData);
-        
-        // Removed streak update from journal entries - now tracked by score inputs
-        
+        updateUserStreak(userId, validatedData.date).catch(() => {});
         res.json(entry);
       }
     } catch (error) {
@@ -996,6 +991,8 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
       const { id } = req.params;
       const updated = await storage.toggleDailyGoal(parseInt(id), userId);
       if (!updated) return res.status(404).json({ message: "Goal not found" });
+      const today = new Date().toISOString().split("T")[0];
+      if (updated.date === today) updateUserStreak(userId, today).catch(() => {});
       res.json(updated);
     } catch (error) {
       res.status(500).json({ message: "Failed to toggle goal" });
@@ -1072,6 +1069,7 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
         value,
         label: label || null,
       });
+      updateUserStreak(userId, today).catch(() => {});
       res.json(checkin);
     } catch (error) {
       res.status(500).json({ message: "Failed to save mood check-in" });
@@ -1812,48 +1810,6 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
     }
   });
 
-
-  async function updateUserStreak(userId: number, entryDate: string) {
-    try {
-      let streak = await storage.getUserStreak(userId);
-      const user = await storage.getUser(userId);
-      const today = todayInTz(user?.timezone);
-      const yesterdayDate = new Date(new Date(today + "T12:00:00Z").getTime() - 86400000);
-      const yesterdayStr = yesterdayDate.toISOString().split("T")[0];
-
-      if (!streak) {
-        // Create new streak
-        await storage.createStreak({
-          userId,
-          currentStreak: 1,
-          longestStreak: 1,
-          lastEntryDate: entryDate,
-        });
-        return;
-      }
-
-      if (entryDate === today) {
-        // Entry for today
-        if (streak.lastEntryDate === yesterdayStr) {
-          // Continuing streak
-          const newCurrentStreak = (streak.currentStreak ?? 0) + 1;
-          await storage.updateStreak(userId, {
-            currentStreak: newCurrentStreak,
-            longestStreak: Math.max(streak.longestStreak ?? 0, newCurrentStreak),
-            lastEntryDate: entryDate,
-          });
-        } else if (streak.lastEntryDate !== today) {
-          // Starting new streak
-          await storage.updateStreak(userId, {
-            currentStreak: 1,
-            lastEntryDate: entryDate,
-          });
-        }
-      }
-    } catch (error) {
-      console.error("Failed to update streak:", error);
-    }
-  }
 
   // ─── Habit routes ─────────────────────────────────────────────────────────
 

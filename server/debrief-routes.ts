@@ -5,6 +5,7 @@ import { db } from "./db";
 import { debriefs, debriefMessages, dailyScores, journalEntries, moodCheckins, dailyGoals, userMetrics, users, infiniteGoals, longTermGoals, goalTemplates, habits, habitLogs, challenges, challengeParticipants } from "@shared/schema";
 import { eq, and, desc, gte, lt } from "drizzle-orm";
 import { encrypt, decrypt } from "./encryption";
+import { updateUserStreak } from "./streakHelper";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -633,6 +634,8 @@ export function registerDebriefRoutes(app: Express): void {
         content: encrypt(content || ""),
         ...(attachmentUrl ? { attachmentUrl, attachmentType: attachmentType || "image" } : {}),
       });
+
+      updateUserStreak(userId, date).catch(() => {});
 
       const allMessages = await db.select().from(debriefMessages)
         .where(eq(debriefMessages.debriefId, debriefId))
