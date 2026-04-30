@@ -32,7 +32,8 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
   // web) use this endpoint, keeping the webhook / sync logic consistent.
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
   const [linkLoading, setLinkLoading] = useState(false);
-  const [webLoading, setWebLoading] = useState(false);
+  const [fetchError, setFetchError] = useState(false);
+  const [tapped, setTapped] = useState(false);
 
   // Cleanup ref: holds the remove() function for the browserFinished listener
   // so we can always clean up even if the component unmounts first.
@@ -43,14 +44,19 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
     if (!isOpen) return;
     setLinkLoading(true);
     setCheckoutUrl(null);
+    setFetchError(false);
+    setTapped(false);
     fetch("/api/subscription/checkout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ native: isNative }),
     })
       .then(r => r.json())
-      .then(({ url }) => { if (url) setCheckoutUrl(url); })
-      .catch(() => {})
+      .then(({ url }) => {
+        if (url) setCheckoutUrl(url);
+        else setFetchError(true);
+      })
+      .catch(() => setFetchError(true))
       .finally(() => setLinkLoading(false));
   }, [isOpen, isNative]);
 
@@ -73,58 +79,88 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
   // no backgrounding, no iOS snapshot, no white safe-area bands on return.
   // Apple Pay works because SFSafariViewController shares Safari's full capabilities.
   async function handleNativeCheckout() {
-    if (!checkoutUrl) return;
+    if (!checkoutUrl || tapped) return;
     haptic("medium");
+    setTapped(true);
 
     // Register the listener BEFORE opening the browser, so we never miss the event.
     // Remove any previous listener first (safety — shouldn't be one at this point).
     browserListenerRef.current?.remove();
 
-    const listener = await Browser.addListener("browserFinished", async () => {
-      listener.remove();
-      browserListenerRef.current = null;
+    try {
+      const listener = await Browser.addListener("browserFinished", async () => {
+        setTapped(false);
+        listener.remove();
+        browserListenerRef.current = null;
 
-      // Sync from Stripe — webhook may have fired while browser was open.
-      try { await fetch("/api/subscription/sync", { method: "POST" }); } catch (_) {}
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
+        // Sync from Stripe — webhook may have fired while browser was open.
+        try { await fetch("/api/subscription/sync", { method: "POST" }); } catch (_) {}
+        queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
 
-      // Check the fresh auth data and show the welcome toast if now premium.
-      try {
-        const me = await fetch("/api/auth/me").then(r => r.json());
-        if (me.subscriptionStatus === "premium" || me.subscriptionStatus === "beta") {
-          toast({
-            title: "Welcome to DBrief Premium",
-            description: "Your features are now unlocked. Full throttle.",
-          });
-          onClose();
-        }
-      } catch (_) {}
-    });
+        // Check the fresh auth data and show the welcome toast if now premium.
+        try {
+          const me = await fetch("/api/auth/me").then(r => r.json());
+          if (me.subscriptionStatus === "premium" || me.subscriptionStatus === "beta") {
+            toast({
+              title: "Welcome to DBrief Premium",
+              description: "Your features are now unlocked. Full throttle.",
+            });
+            onClose();
+          }
+        } catch (_) {}
+      });
 
-    browserListenerRef.current = listener;
-
-    await Browser.open({ url: checkoutUrl });
+      browserListenerRef.current = listener;
+      await Browser.open({ url: checkoutUrl });
+    } catch (_) {
+      // Browser plugin failed — fall back to opening in the system browser.
+      setTapped(false);
+      window.location.href = checkoutUrl;
+    }
   }
 
   // Web checkout: navigate the browser tab to Stripe's hosted checkout page.
   async function handleWebSubscribe() {
     haptic("medium");
-    if (!checkoutUrl) return;
-    setWebLoading(true);
+    if (!checkoutUrl || tapped) return;
+    setTapped(true);
     onClose();
     window.location.href = checkoutUrl;
   }
 
   function renderCTA() {
+    if (fetchError) {
+      return (
+        <Button
+          className="w-full h-12 text-base font-bold rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg"
+          onClick={() => {
+            setFetchError(false);
+            setLinkLoading(true);
+            setCheckoutUrl(null);
+            fetch("/api/subscription/checkout", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ native: isNative }),
+            })
+              .then(r => r.json())
+              .then(({ url }) => { if (url) setCheckoutUrl(url); else setFetchError(true); })
+              .catch(() => setFetchError(true))
+              .finally(() => setLinkLoading(false));
+          }}
+        >
+          Tap to retry
+        </Button>
+      );
+    }
     if (isNative) {
       return (
         <Button
           className="w-full h-12 text-base font-bold rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg"
           onClick={handleNativeCheckout}
-          disabled={linkLoading || !checkoutUrl}
+          disabled={linkLoading || !checkoutUrl || tapped}
         >
-          {linkLoading ? "Loading checkout…" : "Unlock Premium — £5.99 / month"}
+          {linkLoading ? "Loading checkout…" : tapped ? "Opening checkout…" : "Unlock Premium — £5.99 / month"}
         </Button>
       );
     }
@@ -132,9 +168,9 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
       <Button
         className="w-full h-12 text-base font-bold rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg"
         onClick={handleWebSubscribe}
-        disabled={webLoading || linkLoading || !checkoutUrl}
+        disabled={tapped || linkLoading || !checkoutUrl}
       >
-        {webLoading || linkLoading ? "Opening checkout…" : "Unlock Premium — £5.99 / month"}
+        {tapped || linkLoading ? "Opening checkout…" : "Unlock Premium — £5.99 / month"}
       </Button>
     );
   }
