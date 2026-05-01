@@ -161,11 +161,13 @@ export function registerSubscriptionRoutes(app: Express) {
     ? 'Your DBrief Premium subscription is active.'
     : 'Your subscription was not started. You can try again in the app.'
   }</p>
-  <button class="btn" onclick="returnToApp()">Return to DBrief</button>
+  <button class="btn" id="btn" onclick="returnToApp()">Return to DBrief</button>
+  <p style="margin-top:1rem;font-size:0.8rem;color:#555;">Returning automatically…</p>
   <script>
     function returnToApp() {
-      window.close();
+      window.location.href = 'com.dbrief.app://checkout-done?result=${result || "success"}';
     }
+    returnToApp();
   </script>
 </body>
 </html>`;

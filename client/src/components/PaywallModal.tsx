@@ -38,6 +38,10 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
   // Cleanup ref: holds the remove() function for the browserFinished listener
   // so we can always clean up even if the component unmounts first.
   const browserListenerRef = useRef<{ remove: () => void } | null>(null);
+  // Polling interval ref — polls /api/auth/me every few seconds while the
+  // Stripe browser is open so the modal self-upgrades the moment the webhook
+  // fires, without requiring the user to close the browser first.
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Fetch a personalised checkout session URL each time the modal opens.
   useEffect(() => {
@@ -60,17 +64,55 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
       .finally(() => setLinkLoading(false));
   }, [isOpen, isNative]);
 
+  function stopPolling() {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }
+
+  async function handlePremiumDetected() {
+    stopPolling();
+    browserListenerRef.current?.remove();
+    browserListenerRef.current = null;
+    try { await fetch("/api/subscription/sync", { method: "POST" }); } catch (_) {}
+    queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
+    toast({
+      title: "Welcome to DBrief Premium",
+      description: "Your features are now unlocked. Full throttle.",
+    });
+    setTapped(false);
+    onClose();
+  }
+
+  function startPolling() {
+    stopPolling();
+    const deadline = Date.now() + 5 * 60 * 1000;
+    pollRef.current = setInterval(async () => {
+      if (Date.now() > deadline) { stopPolling(); return; }
+      try {
+        const me = await fetch("/api/auth/me").then(r => r.json());
+        if (me.subscriptionStatus === "premium" || me.subscriptionStatus === "beta") {
+          handlePremiumDetected();
+        }
+      } catch (_) {}
+    }, 4000);
+  }
+
   // Clean up any lingering browserFinished listener when the modal closes or unmounts.
   useEffect(() => {
     if (!isOpen) {
       browserListenerRef.current?.remove();
       browserListenerRef.current = null;
+      stopPolling();
     }
   }, [isOpen]);
 
   useEffect(() => {
     return () => {
       browserListenerRef.current?.remove();
+      stopPolling();
     };
   }, []);
 
@@ -89,30 +131,26 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
 
     try {
       const listener = await Browser.addListener("browserFinished", async () => {
-        setTapped(false);
         listener.remove();
         browserListenerRef.current = null;
-
-        // Sync from Stripe — webhook may have fired while browser was open.
-        try { await fetch("/api/subscription/sync", { method: "POST" }); } catch (_) {}
-        queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-        queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
-
-        // Check the fresh auth data and show the welcome toast if now premium.
+        stopPolling();
+        // Check if the payment went through.
         try {
+          await fetch("/api/subscription/sync", { method: "POST" });
           const me = await fetch("/api/auth/me").then(r => r.json());
           if (me.subscriptionStatus === "premium" || me.subscriptionStatus === "beta") {
-            toast({
-              title: "Welcome to DBrief Premium",
-              description: "Your features are now unlocked. Full throttle.",
-            });
-            onClose();
+            handlePremiumDetected();
+            return;
           }
         } catch (_) {}
+        setTapped(false);
       });
 
       browserListenerRef.current = listener;
       await Browser.open({ url: checkoutUrl });
+      // Start polling immediately so we detect the webhook firing while the
+      // SFSafariViewController is still open — user won't need to close it.
+      startPolling();
     } catch (_) {
       // Browser plugin failed — fall back to opening in the system browser.
       setTapped(false);
