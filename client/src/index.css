@@ -242,8 +242,10 @@ input[type="range"].native-range::-webkit-slider-runnable-track {
   border-radius: 4px;
   /* --range-fill is set directly on the element via JS (el.style.setProperty).
      CSS custom properties cascade into WebKit pseudo-elements reliably,
-     whereas background: inherit from an inline style does not. */
-  background: var(--range-fill, hsl(var(--muted)));
+     whereas background: inherit from an inline style does not.
+     NOTE: CSS vars in this codebase store full hsl() values, so use var()
+     directly — never wrap in hsl() again. */
+  background: var(--range-fill, var(--muted));
 }
 input[type="range"].native-range::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -253,7 +255,7 @@ input[type="range"].native-range::-webkit-slider-thumb {
   background: var(--thumb-color, hsl(40, 95%, 48%));
   margin-top: -10px;
   box-shadow: 0 2px 6px rgba(0,0,0,0.35);
-  border: 2px solid hsl(var(--background));
+  border: 2px solid var(--background);
   transition: transform 0.1s;
 }
 input[type="range"].native-range:active::-webkit-slider-thumb {
@@ -264,14 +266,14 @@ input[type="range"].native-range::-moz-range-thumb {
   height: 26px;
   border-radius: 50%;
   background: var(--thumb-color, hsl(40, 95%, 48%));
-  border: 2px solid hsl(var(--background));
+  border: 2px solid var(--background);
   box-shadow: 0 2px 6px rgba(0,0,0,0.35);
   cursor: pointer;
 }
 input[type="range"].native-range::-moz-range-track {
   height: 8px;
   border-radius: 4px;
-  background: hsl(var(--muted));
+  background: var(--muted);
 }
 input[type="range"].native-range::-moz-range-progress {
   height: 8px;

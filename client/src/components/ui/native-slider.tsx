@@ -35,7 +35,7 @@ export default function NativeSlider({
       const pct = range === 0 ? 0 : Math.max(0, Math.min(100, ((v - min) / range) * 100));
       el.style.setProperty(
         "--range-fill",
-        `linear-gradient(to right, ${fillColor} ${pct}%, hsl(var(--muted)) ${pct}%)`
+        `linear-gradient(to right, ${fillColor} ${pct}%, var(--muted) ${pct}%)`
       );
       el.style.setProperty("--thumb-color", fillColor);
     },
