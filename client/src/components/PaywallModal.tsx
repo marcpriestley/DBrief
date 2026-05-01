@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { haptic } from "@/lib/haptics";
 import { Capacitor } from "@capacitor/core";
 import { Browser } from "@capacitor/browser";
+import { App as CapApp } from "@capacitor/app";
 import { queryClient } from "@/lib/queryClient";
 
 interface PaywallModalProps {
@@ -60,22 +61,22 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
   }
 
-  async function handlePremiumDetected() {
+  function handlePremiumDetected() {
     stopPolling();
     browserListenerRef.current?.remove();
     browserListenerRef.current = null;
-    // Close the SFSafariViewController. With checkout-signal already having fired
-    // from the checkout-return page, the polling detects premium reliably within
-    // 4 s and this call lands while the VC is still open.
-    try { await Browser.close(); } catch (_) {}
+    setTapped(false);
+    // Close the modal first so the user gets back to the app immediately.
+    onClose();
+    // Then dismiss the SFSafariViewController (fire-and-forget — might already
+    // be closed if the user returned via the dbrief:// URL scheme).
+    Browser.close().catch(() => {});
     queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
     queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
     toast({
       title: "Welcome to DBrief Premium",
       description: "Your features are now unlocked. Full throttle.",
     });
-    setTapped(false);
-    onClose();
   }
 
   function startPolling() {
@@ -95,6 +96,30 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
       } catch (_) {}
     }, 3000);
   }
+
+  // When the dbrief:// URL scheme fires (iOS intercepts the checkout-return
+  // redirect), the system closes SFSafariViewController and fires appUrlOpen.
+  // We listen here so the modal closes immediately on that event, before
+  // App.tsx's handler even runs — no polling tick needed.
+  useEffect(() => {
+    if (!isOpen || !isNative) return;
+    let listener: { remove: () => void } | null = null;
+    CapApp.addListener("appUrlOpen", (event) => {
+      if (event.url.includes("checkout-done") && event.url.includes("result=success")) {
+        listener?.remove();
+        stopPolling();
+        browserListenerRef.current?.remove();
+        browserListenerRef.current = null;
+        setTapped(false);
+        onClose();
+        // Invalidate so the rest of the app picks up premium immediately.
+        // The toast is shown by App.tsx's appUrlOpen handler (avoids duplicates).
+        queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
+      }
+    }).then(h => { listener = h; });
+    return () => { listener?.remove(); };
+  }, [isOpen, isNative]);
 
   useEffect(() => {
     if (!isOpen) {

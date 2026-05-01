@@ -237,15 +237,21 @@ input[type="range"].native-range {
   padding: 0;
   border: none;
 }
+/* ── WebKit (Safari / iOS) track ─────────────────────────────────────────────
+   IMPORTANT: CSS custom properties do NOT reliably cascade from an element
+   into ::-webkit-slider-runnable-track in Safari/iOS (WebKit bug).
+   NativeSlider injects a per-element <style> rule that targets the track by ID
+   with a real gradient — that rule has !important and wins over this one.
+   This rule is the FALLBACK for raw <input type="range"> elements that have no
+   JS fill driver (e.g. ScoreDashboard, MoodCheckinModal).
+   Hardcoded colours are used here because CSS vars don't cascade reliably. */
 input[type="range"].native-range::-webkit-slider-runnable-track {
   height: 8px;
   border-radius: 4px;
-  /* --range-fill is set directly on the element via JS (el.style.setProperty).
-     CSS custom properties cascade into WebKit pseudo-elements reliably,
-     whereas background: inherit from an inline style does not.
-     NOTE: CSS vars in this codebase store full hsl() values, so use var()
-     directly — never wrap in hsl() again. */
-  background: var(--range-fill, var(--muted));
+  background: hsl(0, 0%, 92%); /* light-mode --muted */
+}
+.dark input[type="range"].native-range::-webkit-slider-runnable-track {
+  background: hsl(0, 0%, 15%); /* dark-mode --muted */
 }
 input[type="range"].native-range::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -255,28 +261,32 @@ input[type="range"].native-range::-webkit-slider-thumb {
   background: var(--thumb-color, hsl(40, 95%, 48%));
   margin-top: -10px;
   box-shadow: 0 2px 6px rgba(0,0,0,0.35);
-  border: 2px solid var(--background);
+  border: 2px solid hsl(0, 0%, 8%); /* dark bg — matches dark mode --background */
   transition: transform 0.1s;
 }
 input[type="range"].native-range:active::-webkit-slider-thumb {
   transform: scale(1.15);
 }
+/* ── Firefox track / progress ─────────────────────────────────────────────── */
 input[type="range"].native-range::-moz-range-thumb {
   width: 26px;
   height: 26px;
   border-radius: 50%;
   background: var(--thumb-color, hsl(40, 95%, 48%));
-  border: 2px solid var(--background);
+  border: 2px solid hsl(0, 0%, 8%);
   box-shadow: 0 2px 6px rgba(0,0,0,0.35);
   cursor: pointer;
 }
 input[type="range"].native-range::-moz-range-track {
   height: 8px;
   border-radius: 4px;
-  background: var(--muted);
+  background: hsl(0, 0%, 92%);
+}
+.dark input[type="range"].native-range::-moz-range-track {
+  background: hsl(0, 0%, 15%);
 }
 input[type="range"].native-range::-moz-range-progress {
   height: 8px;
   border-radius: 4px;
-  background: var(--thumb-color, hsl(40, 95%, 48%));
+  background: hsl(40, 95%, 48%);
 }

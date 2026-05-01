@@ -175,8 +175,11 @@ export function registerSubscriptionRoutes(app: Express) {
     : 'Your subscription was not completed.'
   }</p>
   ${success ? `
-  <div class="status">Returning you to DBrief…</div>
-  <div class="spinner"></div>
+  <div class="status" id="st">Returning you to DBrief…</div>
+  <div class="spinner" id="sp"></div>
+  <p id="hint" style="display:none;margin-top:1.25rem;font-size:0.85rem;color:#a3a3a3;line-height:1.6;">
+    Tap <strong style="color:#f5f5f5">Open</strong> on the prompt to return to DBrief.
+  </p>
   <script>
     (async function() {
       var sid = ${sessionId ? JSON.stringify(sessionId) : 'null'};
@@ -186,11 +189,15 @@ export function registerSubscriptionRoutes(app: Express) {
         try { await fetch('/api/subscription/checkout-signal?session_id=' + encodeURIComponent(sid)); }
         catch(_) {}
       }
-      // 2. If the dbrief:// URL scheme is registered (Xcode step), iOS will
-      //    intercept this navigation, close this browser window automatically,
-      //    and fire the appUrlOpen event in the native app — instant return.
-      //    If the scheme isn't registered yet, the redirect silently fails and
-      //    the app's background polling closes the window via Browser.close().
+      // 2. Attempt to return via the dbrief:// URL scheme. On iOS this triggers
+      //    a system prompt: "Open in DBrief?" — show a hint so users know
+      //    to tap Open. The hint appears just before the redirect so it's
+      //    visible behind the system dialog. If the scheme isn't registered yet
+      //    the redirect silently fails and the app's background polling closes
+      //    the window via Browser.close() instead.
+      document.getElementById('sp').style.display = 'none';
+      document.getElementById('st').textContent = 'Almost there — tap Open to return';
+      document.getElementById('hint').style.display = 'block';
       try {
         window.location.href = 'dbrief://checkout-done?result=${success ? 'success' : 'cancelled'}' +
           (sid ? '&session_id=' + encodeURIComponent(sid) : '');
