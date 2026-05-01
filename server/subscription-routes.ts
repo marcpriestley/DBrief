@@ -143,15 +143,6 @@ export function registerSubscriptionRoutes(app: Express) {
     .icon { font-size: 3.5rem; margin-bottom: 1.25rem; }
     h1 { font-size: 1.5rem; font-weight: 800; margin-bottom: 0.5rem; }
     p { font-size: 0.95rem; color: #a3a3a3; line-height: 1.5; margin-bottom: 1.5rem; }
-    .btn {
-      display: inline-block; margin-top: 1.5rem;
-      background: #d97706; color: #fff;
-      font-size: 1rem; font-weight: 700;
-      border: none; border-radius: 0.75rem;
-      padding: 0.9rem 2rem; cursor: pointer;
-      -webkit-tap-highlight-color: transparent;
-    }
-    .btn:active { opacity: 0.8; }
   </style>
 </head>
 <body>
@@ -161,14 +152,7 @@ export function registerSubscriptionRoutes(app: Express) {
     ? 'Your DBrief Premium subscription is active.'
     : 'Your subscription was not started. You can try again in the app.'
   }</p>
-  <button class="btn" id="btn" onclick="returnToApp()">Return to DBrief</button>
-  <p style="margin-top:1rem;font-size:0.8rem;color:#555;">Returning automatically…</p>
-  <script>
-    function returnToApp() {
-      window.location.href = 'com.dbrief.app://checkout-done?result=${result || "success"}';
-    }
-    returnToApp();
-  </script>
+  <p style="font-size:0.8rem;color:#555;margin-top:0.5rem;">Returning you to the app…</p>
 </body>
 </html>`;
 

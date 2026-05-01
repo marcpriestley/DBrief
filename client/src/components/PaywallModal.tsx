@@ -75,6 +75,8 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
     stopPolling();
     browserListenerRef.current?.remove();
     browserListenerRef.current = null;
+    // Close the in-app browser sheet programmatically before showing the toast.
+    try { await Browser.close(); } catch (_) {}
     try { await fetch("/api/subscription/sync", { method: "POST" }); } catch (_) {}
     queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
     queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });

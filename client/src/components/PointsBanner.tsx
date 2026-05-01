@@ -119,7 +119,9 @@ export default function PointsBanner() {
       </AnimatePresence>
       <div className="flex items-center gap-2">
         <span className="text-base">🏆</span>
-        <span className="text-xs font-medium text-muted-foreground">Performance Points</span>
+        <span className="text-xs font-medium text-muted-foreground leading-tight">
+          Performance<br />Points
+        </span>
       </div>
       <div className="flex items-center gap-3">
         {weeklyPoints !== null && (
