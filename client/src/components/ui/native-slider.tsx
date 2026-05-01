@@ -1,10 +1,9 @@
-import { useRef } from "react";
+import { useRef, useEffect, useCallback } from "react";
 import { haptic } from "@/lib/haptics";
 
 interface NativeSliderProps {
   value: number;
   onChange: (v: number) => void;
-  /** Called once when the user releases the thumb — use for save-on-release. */
   onCommit?: (v: number) => void;
   min?: number;
   max?: number;
@@ -13,16 +12,6 @@ interface NativeSliderProps {
   className?: string;
 }
 
-/**
- * PERMANENT FIX: uses a native <input type="range"> element.
- *
- * iOS WKWebView handles range inputs at the OS/native layer, completely
- * bypassing JavaScript touch event competition with Capacitor's gesture
- * recognizers. This is more reliable than any custom touch handler approach.
- *
- * The track fill is implemented as a CSS linear-gradient on the element
- * background, updated reactively with value changes.
- */
 export default function NativeSlider({
   value,
   onChange,
@@ -33,13 +22,41 @@ export default function NativeSlider({
   color,
   className = "",
 }: NativeSliderProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const isDragging = useRef(false);
   const lastHapticVal = useRef<number | null>(null);
-  const fillColor = color ?? "hsl(var(--primary))";
-  const range = max - min;
-  const pct = range === 0 ? 0 : Math.max(0, Math.min(100, ((value - min) / range) * 100));
+  const fillColor = color ?? "hsl(40, 95%, 48%)";
+
+  const updateFill = useCallback(
+    (v: number) => {
+      const el = inputRef.current;
+      if (!el) return;
+      const range = max - min;
+      const pct = range === 0 ? 0 : Math.max(0, Math.min(100, ((v - min) / range) * 100));
+      el.style.setProperty(
+        "--range-fill",
+        `linear-gradient(to right, ${fillColor} ${pct}%, hsl(var(--muted)) ${pct}%)`
+      );
+      el.style.setProperty("--thumb-color", fillColor);
+    },
+    [min, max, fillColor]
+  );
+
+  useEffect(() => {
+    updateFill(value);
+  }, []);
+
+  useEffect(() => {
+    if (!isDragging.current) {
+      if (inputRef.current) inputRef.current.value = String(value);
+      updateFill(value);
+    }
+  }, [value, updateFill]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = Number(e.target.value);
+    isDragging.current = true;
+    updateFill(v);
     onChange(v);
     if (lastHapticVal.current === null || Math.abs(v - lastHapticVal.current) >= step * 5) {
       haptic("light");
@@ -48,25 +65,23 @@ export default function NativeSlider({
   };
 
   const handleCommit = (e: React.SyntheticEvent<HTMLInputElement>) => {
+    isDragging.current = false;
     lastHapticVal.current = null;
     onCommit?.(Number((e.target as HTMLInputElement).value));
   };
 
   return (
     <input
+      ref={inputRef}
       type="range"
       min={min}
       max={max}
       step={step}
-      value={value}
+      defaultValue={value}
       onChange={handleChange}
       onMouseUp={handleCommit}
       onTouchEnd={handleCommit}
       className={`native-range ${className}`}
-      style={{
-        background: `linear-gradient(to right, ${fillColor} ${pct}%, hsl(var(--muted)) ${pct}%)`,
-        "--thumb-color": fillColor,
-      } as React.CSSProperties}
     />
   );
 }

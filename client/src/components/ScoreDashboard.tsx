@@ -65,11 +65,31 @@ function NativeOverlay({ open, onClose, title, description, children, scrollable
 function NativeSlider({ value, onChange, min = 0, max = 100, color = "hsl(40, 95%, 48%)" }: {
   value: number; onChange: (v: number) => void; min?: number; max?: number; color?: string;
 }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const isDragging = useRef(false);
   const lastHapticVal = useRef<number | null>(null);
-  const pct = Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100));
+
+  const updateFill = (v: number) => {
+    const el = inputRef.current;
+    if (!el) return;
+    const range = max - min;
+    const pct = range === 0 ? 0 : Math.max(0, Math.min(100, ((v - min) / range) * 100));
+    el.style.setProperty("--range-fill", `linear-gradient(to right, ${color} ${pct}%, hsl(var(--muted)) ${pct}%)`);
+    el.style.setProperty("--thumb-color", color);
+  };
+
+  useEffect(() => { updateFill(value); }, []);
+  useEffect(() => {
+    if (!isDragging.current) {
+      if (inputRef.current) inputRef.current.value = String(value);
+      updateFill(value);
+    }
+  }, [value]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = Number(e.target.value);
+    isDragging.current = true;
+    updateFill(v);
     onChange(v);
     if (lastHapticVal.current === null || Math.abs(v - lastHapticVal.current) >= 5) {
       haptic("light");
@@ -79,18 +99,16 @@ function NativeSlider({ value, onChange, min = 0, max = 100, color = "hsl(40, 95
 
   return (
     <input
+      ref={inputRef}
       type="range"
       min={min}
       max={max}
       step={1}
-      value={value}
+      defaultValue={value}
       onChange={handleChange}
-      onTouchEnd={() => { lastHapticVal.current = null; }}
+      onTouchEnd={() => { isDragging.current = false; lastHapticVal.current = null; }}
+      onMouseUp={() => { isDragging.current = false; }}
       className="native-range"
-      style={{
-        background: `linear-gradient(to right, ${color} ${pct}%, hsl(var(--muted)) ${pct}%)`,
-        "--thumb-color": color,
-      } as React.CSSProperties}
     />
   );
 }

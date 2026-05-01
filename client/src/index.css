@@ -240,8 +240,10 @@ input[type="range"].native-range {
 input[type="range"].native-range::-webkit-slider-runnable-track {
   height: 8px;
   border-radius: 4px;
-  /* background is set inline as a gradient showing fill */
-  background: inherit;
+  /* --range-fill is set directly on the element via JS (el.style.setProperty).
+     CSS custom properties cascade into WebKit pseudo-elements reliably,
+     whereas background: inherit from an inline style does not. */
+  background: var(--range-fill, hsl(var(--muted)));
 }
 input[type="range"].native-range::-webkit-slider-thumb {
   -webkit-appearance: none;

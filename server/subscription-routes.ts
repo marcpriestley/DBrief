@@ -125,6 +125,7 @@ export function registerSubscriptionRoutes(app: Express) {
     const result = req.query.result as string;
     const success = result === 'success';
 
+    const returnUrl = `com.dbrief.app://checkout-done?result=${success ? 'success' : 'cancelled'}`;
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -143,19 +144,24 @@ export function registerSubscriptionRoutes(app: Express) {
     .icon { font-size: 3.5rem; margin-bottom: 1.25rem; }
     h1 { font-size: 1.5rem; font-weight: 800; margin-bottom: 0.5rem; }
     p { font-size: 0.95rem; color: #a3a3a3; line-height: 1.5; margin-bottom: 0.75rem; }
-    .done-hint {
+    .return-btn {
+      display: inline-block;
       margin-top: 2rem;
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      background: #1f1f1f;
-      border: 1px solid #333;
+      background: #d97706;
+      color: #000;
+      font-weight: 700;
+      font-size: 1rem;
+      padding: 0.85rem 2rem;
       border-radius: 999px;
-      padding: 0.6rem 1.2rem;
-      font-size: 0.85rem;
-      color: #d97706;
-      font-weight: 600;
+      text-decoration: none;
       letter-spacing: 0.02em;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .return-btn:active { opacity: 0.8; }
+    .fallback {
+      margin-top: 1.25rem;
+      font-size: 0.75rem;
+      color: #555;
     }
   </style>
 </head>
@@ -166,7 +172,8 @@ export function registerSubscriptionRoutes(app: Express) {
     ? 'Your DBrief Premium subscription is active.'
     : 'Your subscription was not completed. You can try again in the app.'
   }</p>
-  <span class="done-hint">Tap <strong>Done</strong> above to return to DBrief</span>
+  <a href="${returnUrl}" class="return-btn">Return to DBrief</a>
+  <p class="fallback">Or tap <strong style="color:#888">Done</strong> at the top of this window</p>
 </body>
 </html>`;
 

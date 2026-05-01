@@ -41,15 +41,31 @@ function getTimeOfDayLabel(): string {
   return "evening";
 }
 
-// Uses a native <input type="range"> so iOS WKWebView handles touch at the OS
-// layer — bypasses JavaScript touch-event competition on cold starts.
 function MoodSlider({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const isDragging = useRef(false);
   const lastHapticVal = useRef<number | null>(null);
-  const color = getMoodColor(value);
-  const pct = Math.max(0, Math.min(100, value));
+
+  const updateFill = (v: number) => {
+    const el = inputRef.current;
+    if (!el) return;
+    const color = getMoodColor(v);
+    el.style.setProperty("--range-fill", `linear-gradient(to right, ${color} ${v}%, hsl(var(--muted)) ${v}%)`);
+    el.style.setProperty("--thumb-color", color);
+  };
+
+  useEffect(() => { updateFill(value); }, []);
+  useEffect(() => {
+    if (!isDragging.current) {
+      if (inputRef.current) inputRef.current.value = String(value);
+      updateFill(value);
+    }
+  }, [value]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = Number(e.target.value);
+    isDragging.current = true;
+    updateFill(v);
     onChange(v);
     if (lastHapticVal.current === null || Math.abs(v - lastHapticVal.current) >= 5) {
       haptic("light");
@@ -57,23 +73,18 @@ function MoodSlider({ value, onChange }: { value: number; onChange: (v: number) 
     }
   };
 
-  const handleCommit = () => { lastHapticVal.current = null; };
-
   return (
     <input
+      ref={inputRef}
       type="range"
       min={0}
       max={100}
       step={1}
-      value={value}
+      defaultValue={value}
       onChange={handleChange}
-      onMouseUp={handleCommit}
-      onTouchEnd={handleCommit}
+      onMouseUp={() => { isDragging.current = false; lastHapticVal.current = null; }}
+      onTouchEnd={() => { isDragging.current = false; lastHapticVal.current = null; }}
       className="native-range w-full"
-      style={{
-        background: `linear-gradient(to right, ${color} ${pct}%, hsl(var(--muted)) ${pct}%)`,
-        "--thumb-color": color,
-      } as React.CSSProperties}
     />
   );
 }
