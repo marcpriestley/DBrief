@@ -3,6 +3,25 @@ import { db } from './db';
 import { users } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 
+// ── Webhook idempotency ───────────────────────────────────────────────────────
+// Stripe guarantees at-least-once delivery — duplicate events are normal.
+// We keep a sliding window of recently-processed event IDs so we don't write
+// the same status change to the DB multiple times in quick succession.
+// Entries expire after 10 minutes (Stripe retries happen within that window).
+const processedEvents = new Map<string, number>();
+const DEDUP_WINDOW_MS = 10 * 60 * 1000;
+
+function markProcessed(eventId: string): boolean {
+  const now = Date.now();
+  // Evict stale entries to prevent unbounded growth
+  for (const [id, ts] of processedEvents) {
+    if (now - ts > DEDUP_WINDOW_MS) processedEvents.delete(id);
+  }
+  if (processedEvents.has(eventId)) return false; // already handled
+  processedEvents.set(eventId, now);
+  return true;
+}
+
 export class WebhookHandlers {
   static async processWebhook(payload: Buffer, signature: string): Promise<void> {
     if (!Buffer.isBuffer(payload)) {
@@ -27,6 +46,11 @@ export class WebhookHandlers {
   }
 
   static async handleAppEvent(event: any): Promise<void> {
+    // Deduplicate — Stripe may send the same event more than once
+    if (!markProcessed(event.id)) {
+      console.log(`[Stripe] Duplicate event ignored: ${event.id} (${event.type})`);
+      return;
+    }
     const obj = event.data?.object;
     if (!obj) return;
 

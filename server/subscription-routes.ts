@@ -4,6 +4,7 @@ import { users } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { sql } from "drizzle-orm";
+import { checkoutSignalLimiter } from "./rate-limit";
 
 function getUserId(req: any): number {
   const id = (req.session as any)?.userId;
@@ -354,7 +355,7 @@ export function registerSubscriptionRoutes(app: Express) {
   // Called by the checkout-return page (running inside SFSafariViewController)
   // using the Stripe session ID as proof of payment — no session cookie needed.
   // Immediately syncs the subscription without waiting for the webhook.
-  app.get("/api/subscription/checkout-signal", async (req, res) => {
+  app.get("/api/subscription/checkout-signal", checkoutSignalLimiter, async (req, res) => {
     const sessionId = req.query.session_id as string;
     if (!sessionId) return res.status(400).json({ ok: false });
     try {

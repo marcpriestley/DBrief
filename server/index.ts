@@ -97,15 +97,20 @@ app.use((req, res, next) => {
   next();
 });
 
+// ── Health check — used by load balancers and uptime monitors ────────────────
+// No auth required. Returns 200 while the server is accepting requests.
+app.get("/health", (_req, res) => {
+  res.json({ status: "ok", uptime: Math.floor(process.uptime()) });
+});
+
 (async () => {
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
-
-    res.status(status).json({ message });
-    throw err;
+    if (status >= 500) console.error("[server] unhandled error:", err);
+    if (!res.headersSent) res.status(status).json({ message });
   });
 
   // importantly only setup vite in development and after

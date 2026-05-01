@@ -40,3 +40,17 @@ export const generalLimiter = rateLimit({
   message: { message: "Too many requests. Please slow down." },
   skip: () => process.env.NODE_ENV === "test",
 });
+
+// ── Checkout signal — fraud / enumeration protection ─────────────────────────
+// The checkout-signal endpoint is unauthenticated (it's called from a browser
+// redirect page before the app has re-hydrated). Stripe session IDs are
+// cryptographically unpredictable, but we still limit probing attempts.
+// 10 requests per minute per IP.
+export const checkoutSignalLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many checkout requests. Please try again shortly." },
+  skip: () => process.env.NODE_ENV === "test",
+});
