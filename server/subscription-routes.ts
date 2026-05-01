@@ -164,10 +164,8 @@ export function registerSubscriptionRoutes(app: Express) {
   <button class="btn" onclick="returnToApp()">Return to DBrief</button>
   <script>
     function returnToApp() {
-      try { window.close(); } catch(e) {}
-      setTimeout(function() { window.location.href = '/'; }, 150);
+      window.close();
     }
-    ${success ? 'setTimeout(returnToApp, 3000);' : ''}
   </script>
 </body>
 </html>`;
