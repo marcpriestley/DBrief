@@ -117,6 +117,18 @@ export function isPremiumStatus(status: string | null | undefined): boolean {
 
 export function registerSubscriptionRoutes(app: Express) {
 
+  // ── GET /.well-known/apple-pay-domain-association ─────────────────────────
+  // Required by Apple/Stripe to enable Apple Pay on dbrief.replit.app.
+  // After adding the domain in Stripe Dashboard → Settings → Apple Pay,
+  // download the domain association file and set its contents in the
+  // APPLE_PAY_DOMAIN_ASSOCIATION environment variable.
+  app.get("/.well-known/apple-pay-domain-association", (req, res) => {
+    const fileContent = process.env.APPLE_PAY_DOMAIN_ASSOCIATION;
+    if (!fileContent) return res.status(404).send("Not configured");
+    res.setHeader("Content-Type", "application/json");
+    res.send(fileContent);
+  });
+
   // ── GET /checkout-return ──────────────────────────────────────────────────
   // Landing page for native (iOS + Android) Stripe checkout.
   // SFSafariViewController / Chrome Custom Tab redirect here after payment so
@@ -144,16 +156,12 @@ export function registerSubscriptionRoutes(app: Express) {
     .icon { font-size: 3.5rem; margin-bottom: 1.25rem; }
     h1 { font-size: 1.5rem; font-weight: 800; margin-bottom: 0.5rem; }
     p { font-size: 0.95rem; color: #a3a3a3; line-height: 1.5; margin-bottom: 0.5rem; }
-    .status { margin-top: 2rem; font-size: 0.85rem; color: #d97706; font-weight: 600; min-height: 1.5rem; }
+    .status { margin-top: 2rem; font-size: 0.85rem; color: #d97706; font-weight: 600; }
     .spinner {
-      width: 28px; height: 28px; margin: 1rem auto 0;
+      width: 28px; height: 28px; margin: 0.75rem auto 0;
       border: 3px solid #333; border-top-color: #d97706;
       border-radius: 50%;
       animation: spin 0.8s linear infinite;
-    }
-    .done-hint {
-      display: none; margin-top: 1.5rem;
-      font-size: 0.8rem; color: #555; line-height: 1.6;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
@@ -166,25 +174,26 @@ export function registerSubscriptionRoutes(app: Express) {
     : 'Your subscription was not completed.'
   }</p>
   ${success ? `
-  <div class="status" id="st">Returning you to DBrief…</div>
-  <div class="spinner" id="sp"></div>
-  <p class="done-hint" id="dh">If the app didn't close automatically,<br>tap <strong style="color:#f5f5f5">Done</strong> at the top of this page.</p>
+  <div class="status">Returning you to DBrief…</div>
+  <div class="spinner"></div>
   <script>
     (async function() {
       var sid = ${sessionId ? JSON.stringify(sessionId) : 'null'};
+      // 1. Immediately signal the server so subscription is premium in DB
+      //    before the app's polling tick fires — no webhook wait needed.
       if (sid) {
         try { await fetch('/api/subscription/checkout-signal?session_id=' + encodeURIComponent(sid)); }
         catch(_) {}
       }
-      // Show fallback Done instruction after 6 seconds if app hasn't closed us.
-      setTimeout(function() {
-        var sp = document.getElementById('sp');
-        var st = document.getElementById('st');
-        var dh = document.getElementById('dh');
-        if (sp) sp.style.display = 'none';
-        if (st) st.textContent = '';
-        if (dh) dh.style.display = 'block';
-      }, 6000);
+      // 2. If the dbrief:// URL scheme is registered (Xcode step), iOS will
+      //    intercept this navigation, close this browser window automatically,
+      //    and fire the appUrlOpen event in the native app — instant return.
+      //    If the scheme isn't registered yet, the redirect silently fails and
+      //    the app's background polling closes the window via Browser.close().
+      try {
+        window.location.href = 'dbrief://checkout-done?result=${success ? 'success' : 'cancelled'}' +
+          (sid ? '&session_id=' + encodeURIComponent(sid) : '');
+      } catch(_) {}
     })();
   </script>
   ` : ''}

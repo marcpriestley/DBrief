@@ -120,19 +120,33 @@ function AuthenticatedRouter() {
     }
   }, []);
 
-  // Handle checkout-done deep-link: com.dbrief.app://checkout-done?result=success
-  // iOS fires appUrlOpen when SFSafariViewController navigates to our custom URL scheme.
-  // Registering this listener prevents iOS from showing "something went wrong".
+  // Handle dbrief://checkout-done deep-link.
+  // When the Stripe checkout redirects to dbrief://checkout-done?result=success,
+  // iOS automatically closes the SFSafariViewController and fires this event.
+  // The session_id param lets us instantly sync the subscription via checkout-signal
+  // without waiting for the Stripe webhook.
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
     let handle: { remove: () => void } | null = null;
     CapApp.addListener("appUrlOpen", async (event) => {
       if (!event.url.includes("checkout-done")) return;
-      const resultParam = new URL(event.url).searchParams.get("result");
-      try { await fetch("/api/subscription/sync", { method: "POST" }); } catch (_) {}
+      let url: URL;
+      try { url = new URL(event.url); } catch (_) { return; }
+      const resultParam = url.searchParams.get("result");
+      const sessionId = url.searchParams.get("session_id");
+      // Immediately sync via session ID (no webhook wait).
+      if (sessionId) {
+        try {
+          await fetch(`/api/subscription/checkout-signal?session_id=${encodeURIComponent(sessionId)}`);
+        } catch (_) {}
+      } else {
+        try { await fetch("/api/subscription/sync", { method: "POST" }); } catch (_) {}
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
       if (resultParam === "success") {
+        // Small delay so the invalidated query refetches before we show the toast.
+        await new Promise(r => setTimeout(r, 600));
         try {
           const me = await fetch("/api/auth/me").then(r => r.json());
           if (me.subscriptionStatus === "premium" || me.subscriptionStatus === "beta") {
