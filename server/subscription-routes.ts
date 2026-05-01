@@ -152,7 +152,12 @@ export function registerSubscriptionRoutes(app: Express) {
     ? 'Your DBrief Premium subscription is active.'
     : 'Your subscription was not started. You can try again in the app.'
   }</p>
-  <p style="font-size:0.8rem;color:#555;margin-top:0.5rem;">Returning you to the app…</p>
+  <p style="font-size:0.8rem;color:#6b7280;margin-top:0.5rem;">Tap <strong style="color:#d97706">Open</strong> when prompted to return to DBrief.</p>
+  <script>
+    setTimeout(function() {
+      window.location.href = 'com.dbrief.app://checkout-done?result=${result || "cancelled"}';
+    }, 800);
+  </script>
 </body>
 </html>`;
 

@@ -21,6 +21,7 @@ import { useLocation } from "wouter";
 import { registerNativePush, isNativePlatform, clearBadge, setupNotificationTapListener, consumePendingMoodOpen, consumePendingSquadNav } from "@/hooks/useNativeNotifications";
 import { useToast } from "@/hooks/use-toast";
 import { Capacitor } from "@capacitor/core";
+import { App as CapApp } from "@capacitor/app";
 
 // ── Status-bar: overlay + light-icon style ──────────────────────────────────
 // StatusBar is bundled into every Capacitor 8 iOS shell by default (Swift
@@ -111,6 +112,30 @@ function AuthenticatedRouter() {
         } catch (_) {}
       }, 1500);
     }
+  }, []);
+
+  // Handle checkout-done deep-link: com.dbrief.app://checkout-done?result=success
+  // iOS fires appUrlOpen when SFSafariViewController navigates to our custom URL scheme.
+  // Registering this listener prevents iOS from showing "something went wrong".
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    let handle: { remove: () => void } | null = null;
+    CapApp.addListener("appUrlOpen", async (event) => {
+      if (!event.url.includes("checkout-done")) return;
+      const resultParam = new URL(event.url).searchParams.get("result");
+      try { await fetch("/api/subscription/sync", { method: "POST" }); } catch (_) {}
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
+      if (resultParam === "success") {
+        try {
+          const me = await fetch("/api/auth/me").then(r => r.json());
+          if (me.subscriptionStatus === "premium" || me.subscriptionStatus === "beta") {
+            toast({ title: "Welcome to DBrief Premium", description: "Your features are now unlocked. Full throttle." });
+          }
+        } catch (_) {}
+      }
+    }).then(h => { handle = h; });
+    return () => { handle?.remove(); };
   }, []);
 
   // Handle Google OAuth redirect callback — Google returns to the app with
