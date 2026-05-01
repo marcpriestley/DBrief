@@ -125,7 +125,6 @@ export function registerSubscriptionRoutes(app: Express) {
     const result = req.query.result as string;
     const success = result === 'success';
 
-    const returnUrl = `com.dbrief.app://checkout-done?result=${success ? 'success' : 'cancelled'}`;
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -140,28 +139,33 @@ export function registerSubscriptionRoutes(app: Express) {
       min-height: 100dvh; display: flex; flex-direction: column;
       align-items: center; justify-content: center; padding: 2rem;
       text-align: center;
+      overflow: hidden;
     }
     .icon { font-size: 3.5rem; margin-bottom: 1.25rem; }
     h1 { font-size: 1.5rem; font-weight: 800; margin-bottom: 0.5rem; }
     p { font-size: 0.95rem; color: #a3a3a3; line-height: 1.5; margin-bottom: 0.75rem; }
-    .return-btn {
-      display: inline-block;
-      margin-top: 2rem;
-      background: #d97706;
-      color: #000;
-      font-weight: 700;
-      font-size: 1rem;
-      padding: 0.85rem 2rem;
-      border-radius: 999px;
-      text-decoration: none;
-      letter-spacing: 0.02em;
-      -webkit-tap-highlight-color: transparent;
+    .swipe-hint {
+      margin-top: 2.5rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
     }
-    .return-btn:active { opacity: 0.8; }
-    .fallback {
-      margin-top: 1.25rem;
-      font-size: 0.75rem;
-      color: #555;
+    .swipe-arrow {
+      font-size: 2rem;
+      color: #d97706;
+      animation: bounce 1.4s ease-in-out infinite;
+    }
+    .swipe-label {
+      font-size: 0.85rem;
+      color: #d97706;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-6px); }
     }
   </style>
 </head>
@@ -172,8 +176,10 @@ export function registerSubscriptionRoutes(app: Express) {
     ? 'Your DBrief Premium subscription is active.'
     : 'Your subscription was not completed. You can try again in the app.'
   }</p>
-  <a href="${returnUrl}" class="return-btn">Return to DBrief</a>
-  <p class="fallback">Or tap <strong style="color:#888">Done</strong> at the top of this window</p>
+  <div class="swipe-hint">
+    <div class="swipe-arrow">↑</div>
+    <div class="swipe-label">Swipe down to return to DBrief</div>
+  </div>
 </body>
 </html>`;
 

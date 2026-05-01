@@ -35,13 +35,11 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
   const [fetchError, setFetchError] = useState(false);
   const [tapped, setTapped] = useState(false);
 
-  // Cleanup ref: holds the remove() function for the browserFinished listener
-  // so we can always clean up even if the component unmounts first.
   const browserListenerRef = useRef<{ remove: () => void } | null>(null);
-  // Polling interval ref — polls /api/auth/me every few seconds while the
-  // Stripe browser is open so the modal self-upgrades the moment the webhook
-  // fires, without requiring the user to close the browser first.
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // visibilitychange listener ref — fires when SFSafariViewController is dismissed
+  // (swipe-down or any other dismissal). This is the primary return mechanism.
+  const visibilityListenerRef = useRef<(() => void) | null>(null);
 
   // Fetch a personalised checkout session URL each time the modal opens.
   useEffect(() => {
@@ -71,11 +69,18 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
     }
   }
 
+  function removeVisibilityListener() {
+    if (visibilityListenerRef.current) {
+      document.removeEventListener("visibilitychange", visibilityListenerRef.current);
+      visibilityListenerRef.current = null;
+    }
+  }
+
   async function handlePremiumDetected() {
     stopPolling();
+    removeVisibilityListener();
     browserListenerRef.current?.remove();
     browserListenerRef.current = null;
-    // Close the in-app browser sheet programmatically before showing the toast.
     try { await Browser.close(); } catch (_) {}
     try { await fetch("/api/subscription/sync", { method: "POST" }); } catch (_) {}
     queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
@@ -102,12 +107,12 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
     }, 4000);
   }
 
-  // Clean up any lingering browserFinished listener when the modal closes or unmounts.
   useEffect(() => {
     if (!isOpen) {
       browserListenerRef.current?.remove();
       browserListenerRef.current = null;
       stopPolling();
+      removeVisibilityListener();
     }
   }, [isOpen]);
 
@@ -115,6 +120,7 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
     return () => {
       browserListenerRef.current?.remove();
       stopPolling();
+      removeVisibilityListener();
     };
   }, []);
 
@@ -127,34 +133,46 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
     haptic("medium");
     setTapped(true);
 
-    // Register the listener BEFORE opening the browser, so we never miss the event.
-    // Remove any previous listener first (safety — shouldn't be one at this point).
     browserListenerRef.current?.remove();
+    removeVisibilityListener();
+
+    // PRIMARY: visibilitychange fires whenever SFSafariViewController is dismissed
+    // by any means — swipe down, programmatic close, URL scheme, or Done button.
+    // The WKWebView regains visibility and we check subscription status immediately.
+    const onVisible = async () => {
+      if (document.visibilityState !== "visible") return;
+      removeVisibilityListener();
+      stopPolling();
+      // Brief delay to allow the SFSafariViewController dismiss animation to finish
+      // and let any in-flight Stripe webhook reach our server first.
+      await new Promise(r => setTimeout(r, 800));
+      try {
+        await fetch("/api/subscription/sync", { method: "POST" });
+        const me = await fetch("/api/auth/me").then(r => r.json());
+        if (me.subscriptionStatus === "premium" || me.subscriptionStatus === "beta") {
+          handlePremiumDetected();
+          return;
+        }
+      } catch (_) {}
+      setTapped(false);
+    };
+    visibilityListenerRef.current = onVisible;
+    document.addEventListener("visibilitychange", onVisible);
 
     try {
+      // SECONDARY: browserFinished fires if the Browser plugin also fires it on dismiss.
       const listener = await Browser.addListener("browserFinished", async () => {
         listener.remove();
         browserListenerRef.current = null;
-        stopPolling();
-        // Check if the payment went through.
-        try {
-          await fetch("/api/subscription/sync", { method: "POST" });
-          const me = await fetch("/api/auth/me").then(r => r.json());
-          if (me.subscriptionStatus === "premium" || me.subscriptionStatus === "beta") {
-            handlePremiumDetected();
-            return;
-          }
-        } catch (_) {}
-        setTapped(false);
+        // visibilitychange will also fire — let it handle the sync to avoid double-toast.
       });
-
       browserListenerRef.current = listener;
       await Browser.open({ url: checkoutUrl });
-      // Start polling immediately so we detect the webhook firing while the
-      // SFSafariViewController is still open — user won't need to close it.
+      // TERTIARY: poll so we can auto-close via Browser.close() if webhook fires fast.
       startPolling();
     } catch (_) {
       // Browser plugin failed — fall back to opening in the system browser.
+      removeVisibilityListener();
       setTapped(false);
       window.location.href = checkoutUrl;
     }
