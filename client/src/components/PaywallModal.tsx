@@ -167,7 +167,7 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
         // visibilitychange will also fire — let it handle the sync to avoid double-toast.
       });
       browserListenerRef.current = listener;
-      await Browser.open({ url: checkoutUrl });
+      await Browser.open({ url: checkoutUrl, presentationStyle: 'fullscreen' });
       // TERTIARY: poll so we can auto-close via Browser.close() if webhook fires fast.
       startPolling();
     } catch (_) {

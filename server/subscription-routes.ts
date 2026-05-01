@@ -125,6 +125,7 @@ export function registerSubscriptionRoutes(app: Express) {
     const result = req.query.result as string;
     const success = result === 'success';
 
+    const sessionId = req.query.session_id as string | undefined;
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -138,48 +139,55 @@ export function registerSubscriptionRoutes(app: Express) {
       background: #141414; color: #f5f5f5;
       min-height: 100dvh; display: flex; flex-direction: column;
       align-items: center; justify-content: center; padding: 2rem;
-      text-align: center;
-      overflow: hidden;
+      text-align: center; overflow: hidden;
     }
     .icon { font-size: 3.5rem; margin-bottom: 1.25rem; }
     h1 { font-size: 1.5rem; font-weight: 800; margin-bottom: 0.5rem; }
-    p { font-size: 0.95rem; color: #a3a3a3; line-height: 1.5; margin-bottom: 0.75rem; }
-    .swipe-hint {
-      margin-top: 2.5rem;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 0.5rem;
+    p { font-size: 0.95rem; color: #a3a3a3; line-height: 1.5; margin-bottom: 0.5rem; }
+    .status { margin-top: 2rem; font-size: 0.85rem; color: #d97706; font-weight: 600; min-height: 1.5rem; }
+    .spinner {
+      width: 28px; height: 28px; margin: 1rem auto 0;
+      border: 3px solid #333; border-top-color: #d97706;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
     }
-    .swipe-arrow {
-      font-size: 2rem;
-      color: #d97706;
-      animation: bounce 1.4s ease-in-out infinite;
+    .done-hint {
+      display: none; margin-top: 1.5rem;
+      font-size: 0.8rem; color: #555; line-height: 1.6;
     }
-    .swipe-label {
-      font-size: 0.85rem;
-      color: #d97706;
-      font-weight: 600;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-    }
-    @keyframes bounce {
-      0%, 100% { transform: translateY(0); }
-      50% { transform: translateY(-6px); }
-    }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
   <div class="icon">${success ? '🏁' : '👋'}</div>
   <h1>${success ? "You're on the grid." : 'No worries.'}</h1>
   <p>${success
-    ? 'Your DBrief Premium subscription is active.'
-    : 'Your subscription was not completed. You can try again in the app.'
+    ? 'DBrief Premium is now active.'
+    : 'Your subscription was not completed.'
   }</p>
-  <div class="swipe-hint">
-    <div class="swipe-arrow">↑</div>
-    <div class="swipe-label">Swipe down to return to DBrief</div>
-  </div>
+  ${success ? `
+  <div class="status" id="st">Returning you to DBrief…</div>
+  <div class="spinner" id="sp"></div>
+  <p class="done-hint" id="dh">If the app didn't close automatically,<br>tap <strong style="color:#f5f5f5">Done</strong> at the top of this page.</p>
+  <script>
+    (async function() {
+      var sid = ${sessionId ? JSON.stringify(sessionId) : 'null'};
+      if (sid) {
+        try { await fetch('/api/subscription/checkout-signal?session_id=' + encodeURIComponent(sid)); }
+        catch(_) {}
+      }
+      // Show fallback Done instruction after 6 seconds if app hasn't closed us.
+      setTimeout(function() {
+        var sp = document.getElementById('sp');
+        var st = document.getElementById('st');
+        var dh = document.getElementById('dh');
+        if (sp) sp.style.display = 'none';
+        if (st) st.textContent = '';
+        if (dh) dh.style.display = 'block';
+      }, 6000);
+    })();
+  </script>
+  ` : ''}
 </body>
 </html>`;
 
@@ -299,7 +307,7 @@ export function registerSubscriptionRoutes(app: Express) {
       // web app so users aren't confused by seeing the web UI inside the in-app browser.
       const isNative = req.body?.native === true;
       const successUrl = isNative
-        ? `${baseUrl}/checkout-return?result=success`
+        ? `${baseUrl}/checkout-return?result=success&session_id={CHECKOUT_SESSION_ID}`
         : `${baseUrl}/?subscription=success`;
       const cancelUrl = isNative
         ? `${baseUrl}/checkout-return?result=cancelled`
@@ -319,6 +327,39 @@ export function registerSubscriptionRoutes(app: Express) {
     } catch (err: any) {
       console.error('[Stripe] Checkout error:', err);
       res.status(err.status || 500).json({ message: err.message });
+    }
+  });
+
+  // ── GET /api/subscription/checkout-signal ────────────────────────────────
+  // Called by the checkout-return page (running inside SFSafariViewController)
+  // using the Stripe session ID as proof of payment — no session cookie needed.
+  // Immediately syncs the subscription without waiting for the webhook.
+  app.get("/api/subscription/checkout-signal", async (req, res) => {
+    const sessionId = req.query.session_id as string;
+    if (!sessionId) return res.status(400).json({ ok: false });
+    try {
+      const stripe = await getUncachableStripeClient();
+      const session = await stripe.checkout.sessions.retrieve(sessionId, {
+        expand: ['subscription'],
+      });
+      if (session.payment_status !== 'paid' || !session.customer) {
+        return res.json({ ok: false, reason: 'not_paid' });
+      }
+      const customerId = typeof session.customer === 'string' ? session.customer : session.customer.id;
+      const [user] = await db.select().from(users).where(eq(users.stripeCustomerId, customerId));
+      if (!user) return res.json({ ok: false, reason: 'no_user' });
+      let periodEnd: Date | null = null;
+      if (session.subscription && typeof session.subscription !== 'string') {
+        const sub = session.subscription as import('stripe').default.Subscription;
+        if (sub.current_period_end) periodEnd = new Date(sub.current_period_end * 1000);
+      }
+      await db.update(users).set({
+        subscriptionStatus: 'premium',
+        ...(periodEnd ? { subscriptionCurrentPeriodEnd: periodEnd } : {}),
+      }).where(eq(users.id, user.id));
+      return res.json({ ok: true });
+    } catch (err: any) {
+      return res.json({ ok: false, reason: err.message });
     }
   });
 
