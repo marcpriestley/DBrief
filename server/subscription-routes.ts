@@ -142,7 +142,21 @@ export function registerSubscriptionRoutes(app: Express) {
     }
     .icon { font-size: 3.5rem; margin-bottom: 1.25rem; }
     h1 { font-size: 1.5rem; font-weight: 800; margin-bottom: 0.5rem; }
-    p { font-size: 0.95rem; color: #a3a3a3; line-height: 1.5; margin-bottom: 1.5rem; }
+    p { font-size: 0.95rem; color: #a3a3a3; line-height: 1.5; margin-bottom: 0.75rem; }
+    .done-hint {
+      margin-top: 2rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: #1f1f1f;
+      border: 1px solid #333;
+      border-radius: 999px;
+      padding: 0.6rem 1.2rem;
+      font-size: 0.85rem;
+      color: #d97706;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
   </style>
 </head>
 <body>
@@ -150,14 +164,9 @@ export function registerSubscriptionRoutes(app: Express) {
   <h1>${success ? "You're on the grid." : 'No worries.'}</h1>
   <p>${success
     ? 'Your DBrief Premium subscription is active.'
-    : 'Your subscription was not started. You can try again in the app.'
+    : 'Your subscription was not completed. You can try again in the app.'
   }</p>
-  <p style="font-size:0.8rem;color:#6b7280;margin-top:0.5rem;">Tap <strong style="color:#d97706">Open</strong> when prompted to return to DBrief.</p>
-  <script>
-    setTimeout(function() {
-      window.location.href = 'com.dbrief.app://checkout-done?result=${result || "cancelled"}';
-    }, 800);
-  </script>
+  <span class="done-hint">Tap <strong>Done</strong> above to return to DBrief</span>
 </body>
 </html>`;
 
