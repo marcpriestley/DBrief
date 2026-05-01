@@ -253,6 +253,14 @@ export function registerSubscriptionRoutes(app: Express) {
     }
   });
 
+  // ── GET /api/stripe/config ───────────────────────────────────────────────
+  // Returns the Stripe publishable key for use by client-side Stripe.js.
+  // The publishable key is intentionally public (it's shipped in frontend code).
+  app.get("/api/stripe/config", (_req, res) => {
+    const publishableKey = process.env.STRIPE_PUBLISHABLE_KEY ?? "";
+    res.json({ publishableKey });
+  });
+
   // ── POST /api/subscription/checkout-embedded ─────────────────────────────
   // Returns a Stripe Checkout clientSecret for Embedded Checkout (ui_mode='embedded').
   // The checkout form renders inside the native app — no external browser needed.
@@ -268,7 +276,10 @@ export function registerSubscriptionRoutes(app: Express) {
 
       const host = req.headers.host ?? process.env.REPLIT_DOMAINS?.split(',')[0] ?? 'localhost:5000';
       const protocol = host.startsWith('localhost') ? 'http' : 'https';
-      const returnUrl = `${protocol}://${host}/checkout-return?result=success`;
+      // Return URL navigates back into the React app — App.tsx detects ?subscription=success
+      // and shows the premium toast. Stripe appends ?session_id=... automatically for
+      // embedded checkout so App.tsx can immediately sync via checkout-signal.
+      const returnUrl = `${protocol}://${host}/?subscription=success`;
 
       const session = await stripe.checkout.sessions.create({
         customer: customerId,

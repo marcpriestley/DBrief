@@ -88,6 +88,12 @@ function AuthenticatedRouter() {
     if (sub) {
       window.history.replaceState({}, "", window.location.pathname);
       if (sub === "success") {
+        // If a Stripe session_id is present (embedded checkout appends it automatically),
+        // call checkout-signal to instantly sync the subscription without waiting for webhook.
+        const sessionId = params.get("session_id");
+        if (sessionId) {
+          fetch(`/api/subscription/checkout-signal?session_id=${encodeURIComponent(sessionId)}`).catch(() => {});
+        }
         queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
         queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
         toast({ title: "Welcome to DBrief Premium", description: "Your features are now unlocked. Full throttle." });
