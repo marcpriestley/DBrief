@@ -134,16 +134,16 @@
       opacity: 0;
       pointer-events: none;
     }
-    /* Inner wrapper uses transform-based centering instead of flexbox so
-       the logo position is derived from the element's own size, not the
-       container's height.  When the container briefly changes height during
-       WKWebView init the logo stays pixel-locked to the viewport centre. */
+    /* Inner wrapper is fixed to the VIEWPORT directly — not relative to the
+       outer div.  This means its centering is never recalculated when the
+       outer div's dimensions flutter during WKWebView init.  The outer div
+       still provides the backdrop colour and fade; the inner is independent. */
     #dbrief-splash-inner {
-      position: absolute;
+      position: fixed;
       top: 50%;
       left: 50%;
-      -webkit-transform: translate(-50%, -50%);
-      transform: translate(-50%, -50%);
+      -webkit-transform: translate(-50%, -50%) translateZ(0);
+      transform: translate(-50%, -50%) translateZ(0);
       display: flex;
       flex-direction: column;
       align-items: center;

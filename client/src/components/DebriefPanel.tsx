@@ -720,16 +720,19 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
 
       return null;
     },
-    onSuccess: (data) => {
-      // Always re-fetch from server so all sessions (including previous ones) are in the list
-      queryClient.invalidateQueries({ queryKey: ["/api/debriefs", selectedDate] });
-      queryClient.invalidateQueries({ queryKey: ["/api/dates-with-data"] });
+    onSuccess: async (data) => {
       setContinuedPastCheckpoint(false);
-      setIsOpeningStreaming(false);
-      setOpeningStreamContent("");
       // User-led path returns the debrief JSON directly — track its ID so the panel
       // can show it as "active" even though it has no AI messages yet.
       if (data && (data as any).id) setUserLedDebriefId((data as any).id);
+      // Wait for the debriefs query to refetch BEFORE clearing isOpeningStreaming.
+      // Without this there is a brief window where isOpeningStreaming=false AND
+      // debrief=null (query still fetching) which re-shows the "start" panel,
+      // making users think the first tap failed and causing them to tap twice.
+      await queryClient.invalidateQueries({ queryKey: ["/api/debriefs", selectedDate] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dates-with-data"] });
+      setIsOpeningStreaming(false);
+      setOpeningStreamContent("");
     },
     onError: () => {
       setIsOpeningStreaming(false);
@@ -1177,33 +1180,29 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     if (isStreaming && streamingContent) {
       // First content token: scroll so the START of the streaming bubble is visible.
       // Lock out further auto-scrolls so the user can read from the beginning.
+      // IMPORTANT: only lock if we successfully scrolled — framer-motion can attach
+      // the ref slightly after the useEffect fires (on the same render cycle but
+      // after layout), so el may be null on the very first token.  If we lock
+      // without scrolling, both the container auto-scroll AND the final
+      // scrollIntoView after streaming are suppressed, leaving the response
+      // invisible below the fold.  Not locking lets the next token retry.
       if (!hasScrolledToStreamStart.current) {
-        hasScrolledToStreamStart.current = true;
-        lockScrollAfterStreamRef.current = true;
         const el = streamingMsgRef.current;
         if (el) {
-          // 1. Scroll the internal chat container so the streaming bubble sits
-          //    at the top of its visible area.
-          //    Formula: currentScrollTop + (el viewport top - container viewport top) - padding
-          //    This is reliable regardless of DOM positioning context — offsetTop alone
-          //    is relative to offsetParent (not necessarily the scroll container) and
-          //    gives wrong results on later exchanges when intermediate elements exist.
+          hasScrolledToStreamStart.current = true;
+          lockScrollAfterStreamRef.current = true;
+          // Scroll the internal chat container so the streaming bubble sits
+          // near the top of its visible area.
+          // Formula: position within the scrollable content = current scrollTop +
+          // (element's viewport top - container's viewport top).
+          // Using getBoundingClientRect deltas is safe here because the container
+          // is an overflow scroll box — elements it clips still report their full
+          // viewport position (possibly below the visible fold), so the delta
+          // correctly gives us how far to scroll the container.
           const elRect = el.getBoundingClientRect();
           const containerRect = container.getBoundingClientRect();
-          container.scrollTop = container.scrollTop + (elRect.top - containerRect.top) - 8;
-          // 2. Also scroll the PAGE so the chat container itself is in view —
-          //    the card-top scroll from sendMessage may have put the user at
-          //    the top of a tall card while the active chat is near the bottom.
-          //    (containerRect already computed above — reuse it; changing scrollTop
-          //     doesn't move the container on the page, only its internal content.)
-          const root = document.getElementById("root");
-          const header = document.querySelector("header");
-          if (root) {
-            const headerH = header?.getBoundingClientRect().height ?? 130;
-            const rootRect = root.getBoundingClientRect();
-            const containerAbsTop = containerRect.top - rootRect.top + root.scrollTop;
-            root.scrollTo({ top: containerAbsTop - headerH - 8, behavior: "smooth" });
-          }
+          const targetScrollTop = container.scrollTop + (elRect.top - containerRect.top) - 8;
+          container.scrollTop = Math.max(0, Math.min(targetScrollTop, container.scrollHeight - container.clientHeight));
         }
       }
       // Subsequent tokens: do NOT chase scrollHeight — keep start of response pinned.
