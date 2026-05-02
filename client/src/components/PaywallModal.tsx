@@ -66,11 +66,16 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
     browserListenerRef.current?.remove();
     browserListenerRef.current = null;
     setTapped(false);
-    // Close the modal first so the user gets back to the app immediately.
+    // Optimistically update the cache BEFORE closing the modal so that any
+    // premium-gated component that renders immediately after onClose() sees
+    // isPremium: true and does NOT re-open the paywall.
+    queryClient.setQueryData(["/api/auth/me"], (old: any) =>
+      old ? { ...old, isPremium: true, subscriptionStatus: "premium" } : old
+    );
+    // Close the modal and dismiss the SFSafariViewController.
     onClose();
-    // Then dismiss the SFSafariViewController (fire-and-forget — might already
-    // be closed if the user returned via the dbrief:// URL scheme).
     Browser.close().catch(() => {});
+    // Then kick off a real refetch so the full user object is up-to-date.
     queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
     queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
     toast({
@@ -111,9 +116,14 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
         browserListenerRef.current?.remove();
         browserListenerRef.current = null;
         setTapped(false);
+        // Optimistic update — makes isPremium: true immediately so no
+        // downstream component re-opens the paywall before the refetch lands.
+        queryClient.setQueryData(["/api/auth/me"], (old: any) =>
+          old ? { ...old, isPremium: true, subscriptionStatus: "premium" } : old
+        );
         onClose();
-        // Invalidate so the rest of the app picks up premium immediately.
-        // The toast is shown by App.tsx's appUrlOpen handler (avoids duplicates).
+        // Full refetch runs in the background to get the authoritative value.
+        // Toast is shown by App.tsx's appUrlOpen handler (avoids duplicates).
         queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
         queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
       }

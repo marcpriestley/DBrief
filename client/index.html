@@ -118,14 +118,20 @@
       inset: 0;
       z-index: 99999;
       background-color: hsl(0, 0%, 8%);
-      transition: opacity 0.35s ease;
-      /* GPU compositing layer — prevents CPU-side layout reflows from
-         affecting the rendered position of this element on iOS WKWebView.
-         Without this, a brief viewport-dimension flutter during WKWebView
-         init causes the splash contents to visibly jump. */
+      /* Single GPU compositing layer — the entire splash (backdrop + logo) is
+         one fixed element centred with flexbox.  Previously the inner wrapper
+         was its own position:fixed element, which created a second compositing
+         layer that could re-trigger an independent layout calculation during
+         the opacity fade on WKWebView, causing the logo to visibly jump.
+         Flexbox centering inside a single fixed div eliminates that entirely. */
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
       -webkit-transform: translateZ(0);
       transform: translateZ(0);
       will-change: opacity;
+      transition: opacity 0.35s ease;
     }
     html:not(.dark) #dbrief-splash {
       background-color: hsl(0, 0%, 97%);
@@ -134,16 +140,7 @@
       opacity: 0;
       pointer-events: none;
     }
-    /* Inner wrapper is fixed to the VIEWPORT directly — not relative to the
-       outer div.  This means its centering is never recalculated when the
-       outer div's dimensions flutter during WKWebView init.  The outer div
-       still provides the backdrop colour and fade; the inner is independent. */
     #dbrief-splash-inner {
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      -webkit-transform: translate(-50%, -50%) translateZ(0);
-      transform: translate(-50%, -50%) translateZ(0);
       display: flex;
       flex-direction: column;
       align-items: center;
