@@ -149,18 +149,13 @@
       width: 110px;
       height: 110px;
       border-radius: 26px;
-      overflow: hidden;
       display: flex;
       align-items: center;
       justify-content: center;
       box-shadow: 0 8px 32px rgba(245, 168, 0, 0.35);
       margin-bottom: 20px;
-    }
-    #dbrief-splash-logo img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      display: block;
+      background: #1a1a1a;
+      flex-shrink: 0;
     }
     #dbrief-splash-name {
       font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
@@ -189,7 +184,12 @@
     <div id="dbrief-splash">
       <div id="dbrief-splash-inner">
         <div id="dbrief-splash-logo">
-          <img src="/dbrief-logo.jpeg" alt="DBrief" />
+          <!-- Inline SVG — renders in the same paint as the HTML with zero
+               network requests. A JPEG src caused a blank logo hole during
+               the splash because the image loaded after the first paint. -->
+          <svg width="72" height="72" viewBox="0 0 72 72" xmlns="http://www.w3.org/2000/svg">
+            <text x="36" y="58" font-family="-apple-system, BlinkMacSystemFont, 'Inter', 'Helvetica Neue', sans-serif" font-size="62" font-weight="800" fill="#f5a800" text-anchor="middle" dominant-baseline="auto">D</text>
+          </svg>
         </div>
         <div id="dbrief-splash-name">DBrief</div>
         <div id="dbrief-splash-sub">Your daily debrief</div>

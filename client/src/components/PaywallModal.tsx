@@ -160,11 +160,23 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
     setTapped(true);
     browserListenerRef.current?.remove();
     try {
-      const listener = await Browser.addListener("browserFinished", () => {
+      const listener = await Browser.addListener("browserFinished", async () => {
         listener.remove();
         browserListenerRef.current = null;
         stopPolling();
         setTapped(false);
+        // The user closed the in-app browser (tapped "Done" or the deep link
+        // wasn't registered so they couldn't return automatically).
+        // The checkout-return page always calls checkout-signal BEFORE attempting
+        // the deep link, so the DB is already updated by the time we get here.
+        // Do one final authoritative check so we don't leave a paying user
+        // staring at the paywall.
+        try {
+          const me = await fetch("/api/auth/me").then(r => r.json());
+          if (me.subscriptionStatus === "premium" || me.subscriptionStatus === "beta") {
+            handlePremiumDetected();
+          }
+        } catch (_) {}
       });
       browserListenerRef.current = listener;
       await Browser.open({ url: checkoutUrl, presentationStyle: "fullscreen" });
