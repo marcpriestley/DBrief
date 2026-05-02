@@ -190,6 +190,14 @@ export default function JournalPanel({ selectedDate, onVoiceRecord }: JournalPan
               placeholder="What's on your mind today?"
               className="min-h-[128px] resize-none"
             />
+            {/* Privacy indicator — reassures users their journal is private */}
+            <div className="flex items-center gap-1 -mt-1">
+              <svg width="9" height="10" viewBox="0 0 9 10" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-muted-foreground/40 shrink-0">
+                <rect x="1" y="4" width="7" height="5.5" rx="1" fill="currentColor"/>
+                <path d="M2.5 4V3a2 2 0 0 1 4 0v1" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" fill="none"/>
+              </svg>
+              <span className="text-[10px] text-muted-foreground/50 tracking-wide">Private · encrypted at rest · only you can read this</span>
+            </div>
 
             {attachments.length > 0 && (
               <div className="space-y-2">

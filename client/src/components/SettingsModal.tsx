@@ -1032,6 +1032,44 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 </button>
               </SettingsSection>
 
+              {/* ── Privacy & Security ───────────────────── */}
+              <SettingsSection title="Privacy & Security" icon={<Lock className="h-4 w-4" />}>
+                <div className="space-y-3">
+                  <p className="text-[12px] text-muted-foreground leading-relaxed">
+                    Your most personal data is encrypted at rest using AES-256-GCM — the same standard used by banks and governments. Nobody at DBrief can read your entries.
+                  </p>
+                  <div className="space-y-2">
+                    {[
+                      "Journal entries & voice notes",
+                      "Debrief conversations",
+                      "AI summaries & insights",
+                      "Infinite goal & long-term targets",
+                    ].map((item) => (
+                      <div key={item} className="flex items-center gap-2.5">
+                        <div className="h-5 w-5 rounded-full bg-emerald-500/10 flex items-center justify-center shrink-0">
+                          <svg width="9" height="10" viewBox="0 0 9 10" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-emerald-500">
+                            <rect x="1" y="4" width="7" height="5.5" rx="1" fill="currentColor"/>
+                            <path d="M2.5 4V3a2 2 0 0 1 4 0v1" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" fill="none"/>
+                          </svg>
+                        </div>
+                        <span className="text-[12px] text-foreground/80">{item}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="pt-2 border-t border-border/40 space-y-1.5">
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      Your data is never sold or shared with third parties for advertising. It is only shared with OpenAI to generate your AI responses.
+                    </p>
+                    <a
+                      href="/privacy"
+                      className="inline-flex items-center gap-1 text-[11px] text-primary underline underline-offset-2"
+                    >
+                      Read our full privacy policy →
+                    </a>
+                  </div>
+                </div>
+              </SettingsSection>
+
               {/* ── Danger Zone ──────────────────────────── */}
               <div className="border border-red-500/30 rounded-xl overflow-hidden">
                 <button

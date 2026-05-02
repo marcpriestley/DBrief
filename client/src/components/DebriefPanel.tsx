@@ -2459,6 +2459,14 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                       <Send className="h-3.5 w-3.5" />
                     </Button>
                   </div>
+                  {/* Secure channel indicator — sits flush below the input bar */}
+                  <div className="flex items-center justify-center gap-1 pb-0.5">
+                    <svg width="9" height="10" viewBox="0 0 9 10" fill="none" xmlns="http://www.w3.org/2000/svg" className="opacity-40">
+                      <rect x="1" y="4" width="7" height="5.5" rx="1" fill="currentColor"/>
+                      <path d="M2.5 4V3a2 2 0 0 1 4 0v1" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" fill="none"/>
+                    </svg>
+                    <span className="text-[10px] text-muted-foreground/50 tracking-wide">Secure channel · encrypted end-to-end</span>
+                  </div>
                 </div>
               )}
             </>
