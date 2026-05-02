@@ -12,19 +12,13 @@ interface NativeSliderProps {
   className?: string;
 }
 
-// Permanent fix for WebKit/iOS Safari pseudo-element limitation.
-//
-// The root cause of the recurring "slider freeze" was that all previous
-// approaches relied on styling ::-webkit-slider-runnable-track via either:
-//   (a) CSS custom properties — don't cascade into pseudo-elements reliably
-//   (b) Injected <style> tags — Safari can stop honouring dynamic stylesheets
-//       after certain repaint/re-render cycles
-//
-// This implementation abandons pseudo-elements entirely.  The native
-// <input type="range"> is made fully transparent and acts only as the touch/
-// mouse interaction target (iOS respects it perfectly that way).  Three plain
-// <div> elements provide the visual track background, fill, and thumb — all
-// styled with normal inline styles that are 100% immune to pseudo-element bugs.
+// Uses Pointer Events API (mouse + touch unified) with setPointerCapture so
+// that drag works correctly even when the slider sits inside a scroll container.
+// The previous approach relied on <input type="range"> native touch handling —
+// on iOS WebKit inside overflow:auto containers the browser intercepts the
+// touch for scrolling before the range input sees it, so only taps registered.
+// Pointer Events + setPointerCapture hands exclusive ownership of the gesture
+// to this element for the lifetime of the drag, regardless of the parent scroll.
 export default function NativeSlider({
   value,
   onChange,
@@ -39,51 +33,84 @@ export default function NativeSlider({
   const [displayValue, setDisplayValue] = useState(value);
   const isDragging = useRef(false);
   const lastHapticVal = useRef<number | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const pct = max === min ? 0 : Math.max(0, Math.min(100, ((displayValue - min) / (max - min)) * 100));
+  const containerRef = useRef<HTMLDivElement>(null);
+  // Keep a ref so pointer-event callbacks always see the latest value
+  const displayValueRef = useRef(displayValue);
+  useEffect(() => { displayValueRef.current = displayValue; }, [displayValue]);
 
   useEffect(() => {
     if (!isDragging.current) {
       setDisplayValue(value);
-      if (inputRef.current) inputRef.current.value = String(value);
     }
   }, [value]);
 
-  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = Number(e.target.value);
-    isDragging.current = true;
-    setDisplayValue(v);
-    onChange(v);
-    if (lastHapticVal.current === null || Math.abs(v - lastHapticVal.current) >= step * 5) {
-      haptic("light");
-      lastHapticVal.current = v;
-    }
-  }, [onChange, step]);
+  const pct = max === min ? 0 : Math.max(0, Math.min(100, ((displayValue - min) / (max - min)) * 100));
 
-  const handleCommit = useCallback((e: React.SyntheticEvent<HTMLInputElement>) => {
+  const updateFromX = useCallback((clientX: number) => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    // Thumb is 28px wide — track starts at 14px and ends 14px before right edge
+    const x = clientX - rect.left - 14;
+    const trackWidth = Math.max(1, rect.width - 28);
+    const fraction = Math.max(0, Math.min(1, x / trackWidth));
+    const raw = min + fraction * (max - min);
+    const stepped = Math.round(raw / step) * step;
+    const clamped = Math.max(min, Math.min(max, stepped));
+    setDisplayValue(clamped);
+    onChange(clamped);
+    if (lastHapticVal.current === null || Math.abs(clamped - lastHapticVal.current) >= step * 5) {
+      haptic("light");
+      lastHapticVal.current = clamped;
+    }
+  }, [min, max, step, onChange]);
+
+  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    isDragging.current = true;
+    updateFromX(e.clientX);
+  }, [updateFromX]);
+
+  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+    updateFromX(e.clientX);
+  }, [updateFromX]);
+
+  const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+    e.currentTarget.releasePointerCapture(e.pointerId);
     isDragging.current = false;
     lastHapticVal.current = null;
-    const v = Number((e.target as HTMLInputElement).value);
+    onCommit?.(displayValueRef.current);
+  }, [onCommit]);
+
+  // Keyboard accessibility via a hidden native range input
+  const handleKeyChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = Number(e.target.value);
     setDisplayValue(v);
-    onCommit?.(v);
+    onChange(v);
+  }, [onChange]);
+
+  const handleKeyCommit = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "Home" || e.key === "End") {
+      onCommit?.(Number((e.target as HTMLInputElement).value));
+    }
   }, [onCommit]);
 
   return (
     <div
-      className={`relative ${className}`}
-      style={{ height: 28 }}
+      ref={containerRef}
+      className={`relative select-none ${className}`}
+      style={{ height: 28, touchAction: "none", cursor: "pointer" }}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
     >
-      {/* Background track — from thumb-min to thumb-max position */}
+      {/* Background track */}
       <div
         className="absolute pointer-events-none rounded-full"
-        style={{
-          left: 14,
-          right: 14,
-          top: 10,
-          height: 8,
-          background: "var(--muted)",
-        }}
+        style={{ left: 14, right: 14, top: 10, height: 8, background: "var(--muted)" }}
       />
       {/* Fill track */}
       <div
@@ -109,17 +136,16 @@ export default function NativeSlider({
           boxShadow: "0 2px 6px rgba(0,0,0,0.35)",
         }}
       />
-      {/* Transparent native input — handles all touch/mouse events */}
+      {/* Hidden native input — keyboard / VoiceOver accessibility only */}
       <input
-        ref={inputRef}
         type="range"
         min={min}
         max={max}
         step={step}
-        defaultValue={value}
-        onChange={handleChange}
-        onMouseUp={handleCommit}
-        onTouchEnd={handleCommit}
+        value={displayValue}
+        onChange={handleKeyChange}
+        onKeyUp={handleKeyCommit}
+        tabIndex={0}
         style={{
           position: "absolute",
           inset: 0,
@@ -129,7 +155,7 @@ export default function NativeSlider({
           cursor: "pointer",
           margin: 0,
           padding: 0,
-          WebkitAppearance: "none",
+          pointerEvents: "none",
         }}
       />
     </div>

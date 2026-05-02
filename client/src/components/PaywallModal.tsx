@@ -158,6 +158,9 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
     if (!checkoutUrl || tapped) return;
     haptic("medium");
     setTapped(true);
+    // Mark a pending subscription in localStorage so that if WKWebView is
+    // killed/restarted while Safari is open, App.tsx will sync on next launch.
+    try { localStorage.setItem("dbrief_sub_pending", "1"); } catch (_) {}
     browserListenerRef.current?.remove();
     try {
       const listener = await Browser.addListener("browserFinished", async () => {
@@ -165,15 +168,16 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
         browserListenerRef.current = null;
         stopPolling();
         setTapped(false);
-        // The user closed the in-app browser (tapped "Done" or the deep link
-        // wasn't registered so they couldn't return automatically).
-        // The checkout-return page always calls checkout-signal BEFORE attempting
-        // the deep link, so the DB is already updated by the time we get here.
-        // Do one final authoritative check so we don't leave a paying user
-        // staring at the paywall.
+        // User closed the in-app browser (tapped native "Done" button, or the
+        // deep-link wasn't registered so auto-return didn't fire).
+        // checkout-return page calls checkout-signal BEFORE showing the "Done"
+        // hint, so the DB is already updated. Do one final authoritative check.
         try {
+          // First try a Stripe-side sync for maximum reliability.
+          await fetch("/api/subscription/sync", { method: "POST" }).catch(() => {});
           const me = await fetch("/api/auth/me").then(r => r.json());
           if (me.subscriptionStatus === "premium" || me.subscriptionStatus === "beta") {
+            try { localStorage.removeItem("dbrief_sub_pending"); } catch (_) {}
             handlePremiumDetected();
           }
         } catch (_) {}

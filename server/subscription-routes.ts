@@ -151,19 +151,31 @@ export function registerSubscriptionRoutes(app: Express) {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       background: #141414; color: #f5f5f5;
       min-height: 100dvh; display: flex; flex-direction: column;
-      align-items: center; justify-content: center; padding: 2rem;
-      text-align: center; overflow: hidden;
+      align-items: flex-start; justify-content: flex-start;
+      padding: 3.5rem 2rem 2rem;
+      text-align: left; overflow: hidden;
     }
-    .icon { font-size: 3.5rem; margin-bottom: 1.25rem; }
-    h1 { font-size: 1.5rem; font-weight: 800; margin-bottom: 0.5rem; }
-    p { font-size: 0.95rem; color: #a3a3a3; line-height: 1.5; margin-bottom: 0.5rem; }
-    .status { margin-top: 2rem; font-size: 0.85rem; color: #d97706; font-weight: 600; }
+    .icon { font-size: 3rem; margin-bottom: 1rem; }
+    h1 { font-size: 1.6rem; font-weight: 800; margin-bottom: 0.5rem; letter-spacing: -0.3px; }
+    p { font-size: 0.95rem; color: #a3a3a3; line-height: 1.6; margin-bottom: 0.5rem; }
+    .status {
+      margin-top: 2.5rem;
+      display: inline-flex; align-items: center; gap: 0.6rem;
+      font-size: 0.9rem; color: #d97706; font-weight: 600;
+    }
     .spinner {
-      width: 28px; height: 28px; margin: 0.75rem auto 0;
-      border: 3px solid #333; border-top-color: #d97706;
+      width: 18px; height: 18px; flex-shrink: 0;
+      border: 2.5px solid #333; border-top-color: #d97706;
       border-radius: 50%;
       animation: spin 0.8s linear infinite;
     }
+    .hint {
+      display: none; margin-top: 1.5rem;
+      background: #1f1f1f; border: 1px solid #2a2a2a;
+      border-radius: 14px; padding: 1rem 1.25rem;
+    }
+    .hint p { color: #c4c4c4; margin: 0; font-size: 0.9rem; line-height: 1.6; }
+    .hint strong { color: #f5f5f5; }
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
@@ -171,33 +183,33 @@ export function registerSubscriptionRoutes(app: Express) {
   <div class="icon">${success ? '🏁' : '👋'}</div>
   <h1>${success ? "You're on the grid." : 'No worries.'}</h1>
   <p>${success
-    ? 'DBrief Premium is now active.'
+    ? 'DBrief Premium is now active. The app will detect your subscription automatically.'
     : 'Your subscription was not completed.'
   }</p>
   ${success ? `
-  <div class="status" id="st">Returning you to DBrief…</div>
-  <div class="spinner" id="sp"></div>
-  <p id="hint" style="display:none;margin-top:1.25rem;font-size:0.85rem;color:#a3a3a3;line-height:1.6;">
-    Tap <strong style="color:#f5f5f5">Open</strong> on the prompt to return to DBrief.
-  </p>
+  <div class="status" id="st">
+    <div class="spinner" id="sp"></div>
+    <span id="st-text">Returning you to DBrief…</span>
+  </div>
+  <div class="hint" id="hint">
+    <p>Tap <strong>Done</strong> (top left) to return to DBrief — your Premium access will be waiting.</p>
+  </div>
   <script>
     (async function() {
       var sid = ${sessionId ? JSON.stringify(sessionId) : 'null'};
-      // 1. Immediately signal the server so subscription is premium in DB
-      //    before the app's polling tick fires — no webhook wait needed.
+      // 1. Signal server — marks subscription premium in DB before app polls.
       if (sid) {
         try { await fetch('/api/subscription/checkout-signal?session_id=' + encodeURIComponent(sid)); }
         catch(_) {}
       }
-      // 2. Attempt to return via the dbrief:// URL scheme. On iOS this triggers
-      //    a system prompt: "Open in DBrief?" — show a hint so users know
-      //    to tap Open. The hint appears just before the redirect so it's
-      //    visible behind the system dialog. If the scheme isn't registered yet
-      //    the redirect silently fails and the app's background polling closes
-      //    the window via Browser.close() instead.
+      // 2. Show the "tap Done" hint immediately — it's always visible since
+      //    the content is pinned to the top of the page, above any system dialogs.
       document.getElementById('sp').style.display = 'none';
-      document.getElementById('st').textContent = 'Almost there — tap Open to return';
+      document.getElementById('st-text').textContent = 'Payment confirmed.';
       document.getElementById('hint').style.display = 'block';
+      // 3. Attempt deep-link return. If the URL scheme is registered in Xcode,
+      //    iOS closes this view and fires appUrlOpen in the app automatically.
+      //    If not registered, this silently fails and the user taps Done instead.
       try {
         window.location.href = 'dbrief://checkout-done?result=${success ? 'success' : 'cancelled'}' +
           (sid ? '&session_id=' + encodeURIComponent(sid) : '');
