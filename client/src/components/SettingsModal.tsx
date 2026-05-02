@@ -1062,12 +1062,21 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     <p className="text-[11px] text-muted-foreground leading-relaxed">
                       Your data is never sold or shared with third parties for advertising. It is only shared with OpenAI to generate your AI responses.
                     </p>
-                    <button
-                      onClick={() => { onClose(); setLocation("/privacy"); }}
-                      className="inline-flex items-center gap-1 text-[11px] text-primary underline underline-offset-2"
-                    >
-                      Read our full privacy policy →
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => { onClose(); setLocation("/privacy"); }}
+                        className="inline-flex items-center gap-1 text-[11px] text-primary underline underline-offset-2"
+                      >
+                        Privacy policy →
+                      </button>
+                      <span className="text-[11px] text-muted-foreground/40">·</span>
+                      <button
+                        onClick={() => { onClose(); setLocation("/terms"); }}
+                        className="inline-flex items-center gap-1 text-[11px] text-primary underline underline-offset-2"
+                      >
+                        Terms of service →
+                      </button>
+                    </div>
                   </div>
                 </div>
               </SettingsSection>

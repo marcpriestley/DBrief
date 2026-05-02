@@ -374,7 +374,10 @@ export default function Welcome() {
         </Card>
 
         <p className="text-center text-[11px] text-muted-foreground/60 mt-5">
-          By continuing, you agree to our Terms and Privacy Policy
+          By continuing, you agree to our{" "}
+          <a href="/terms" className="underline underline-offset-2 hover:text-muted-foreground transition-colors">Terms</a>
+          {" "}and{" "}
+          <a href="/privacy" className="underline underline-offset-2 hover:text-muted-foreground transition-colors">Privacy Policy</a>
         </p>
       </div>
     </div>

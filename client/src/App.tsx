@@ -12,6 +12,7 @@ import Welcome from "@/pages/welcome";
 import OnboardingFlow from "@/components/OnboardingFlow";
 import NotFound from "@/pages/not-found";
 import PrivacyPolicy from "@/pages/privacy";
+import TermsOfService from "@/pages/terms";
 import BirthdayCelebration from "@/components/BirthdayCelebration";
 import MoodCheckinModal from "@/components/MoodCheckinModal";
 import GlobalPointsToast from "@/components/GlobalPointsToast";
@@ -424,6 +425,7 @@ function App() {
         <Toaster />
         <Switch>
           <Route path="/privacy" component={PrivacyPolicy} />
+          <Route path="/terms" component={TermsOfService} />
           <Route component={AuthenticatedRouter} />
         </Switch>
       </TooltipProvider>

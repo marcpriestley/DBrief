@@ -73,7 +73,7 @@ Depending on your location (including under UK GDPR and CCPA), you may have the 
 - Object to or restrict certain processing
 - Data portability — a copy of your data in a machine-readable format
 
-To exercise any of these rights, email us at **marcpriestley@gmail.com**. We will respond within 30 days.
+To exercise any of these rights, email us at **team@dbriefapp.uk**. We will respond within 30 days.
 
 ---
 
@@ -89,4 +89,4 @@ We may update this policy as the app evolves. Significant changes will be flagge
 
 ---
 
-© 2026 DBrief. Questions? [marcpriestley@gmail.com](mailto:marcpriestley@gmail.com)
+© 2026 DBrief. Questions? [team@dbriefapp.uk](mailto:team@dbriefapp.uk)

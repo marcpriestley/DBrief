@@ -11,7 +11,7 @@ Please read these Terms of Service ("Terms") carefully before using the DBrief a
 
 ## 1. Who We Are
 
-DBrief is a personal performance app operated by Marc Priestley ("we", "us", "our"). You can contact us at **marcpriestley@gmail.com**.
+DBrief is a personal performance app operated by Blue Suede Media Ltd ("we", "us", "our"). You can contact us at **team@dbriefapp.uk**.
 
 ---
 
@@ -42,7 +42,7 @@ Premium features are clearly labelled in the app. Access to Premium features req
 - Subscriptions are billed through the **Apple App Store** or directly via **Stripe**, depending on how you subscribe.
 - Subscriptions automatically renew at the end of each billing period unless cancelled before the renewal date.
 - **Cancellation:** You may cancel your subscription at any time via your Apple ID subscription settings or through the DBrief app (Settings → Manage Subscription). Cancellation takes effect at the end of the current billing period — you retain Premium access until that date and will not be charged again.
-- **Refunds:** We do not offer partial-period refunds. If you believe you have been charged in error, contact us at marcpriestley@gmail.com within 14 days and we will review your case. Refunds for App Store purchases are handled by Apple under their own refund policy.
+- **Refunds:** We do not offer partial-period refunds. If you believe you have been charged in error, contact us at team@dbriefapp.uk within 14 days and we will review your case. Refunds for App Store purchases are handled by Apple under their own refund policy.
 - Prices may change with reasonable notice. We will notify active subscribers before any price increase takes effect.
 
 ---
@@ -122,7 +122,7 @@ These Terms are governed by the laws of **England and Wales**. Any disputes aris
 
 For any questions about these Terms, contact us at:
 
-**Email:** marcpriestley@gmail.com
+**Email:** team@dbriefapp.uk
 
 ---
 
