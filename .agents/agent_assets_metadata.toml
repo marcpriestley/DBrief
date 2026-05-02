@@ -1,0 +1,14 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "QZ9mI-JPAGRbcWf_noOJ6"
+uri = "file://docs/privacy-policy.md"
+type = "text"
+title = "DBrief Privacy Policy"
+
+[[outputs]]
+id = "ZmE7K68uteyNAGRkckXBL"
+uri = "file://docs/terms-of-service.md"
+type = "text"
+title = "DBrief Terms of Service"
