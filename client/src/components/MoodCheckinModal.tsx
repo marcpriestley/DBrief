@@ -42,30 +42,25 @@ function getTimeOfDayLabel(): string {
 }
 
 function MoodSlider({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const [displayValue, setDisplayValue] = useState(value);
   const inputRef = useRef<HTMLInputElement>(null);
   const isDragging = useRef(false);
   const lastHapticVal = useRef<number | null>(null);
 
-  const updateFill = (v: number) => {
-    const el = inputRef.current;
-    if (!el) return;
-    const color = getMoodColor(v);
-    el.style.setProperty("--range-fill", `linear-gradient(to right, ${color} ${v}%, hsl(var(--muted)) ${v}%)`);
-    el.style.setProperty("--thumb-color", color);
-  };
+  const pct = Math.max(0, Math.min(100, displayValue));
+  const color = getMoodColor(displayValue);
 
-  useEffect(() => { updateFill(value); }, []);
   useEffect(() => {
     if (!isDragging.current) {
+      setDisplayValue(value);
       if (inputRef.current) inputRef.current.value = String(value);
-      updateFill(value);
     }
   }, [value]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = Number(e.target.value);
     isDragging.current = true;
-    updateFill(v);
+    setDisplayValue(v);
     onChange(v);
     if (lastHapticVal.current === null || Math.abs(v - lastHapticVal.current) >= 5) {
       haptic("light");
@@ -73,19 +68,26 @@ function MoodSlider({ value, onChange }: { value: number; onChange: (v: number) 
     }
   };
 
+  const handleCommit = () => { isDragging.current = false; lastHapticVal.current = null; };
+
   return (
-    <input
-      ref={inputRef}
-      type="range"
-      min={0}
-      max={100}
-      step={1}
-      defaultValue={value}
-      onChange={handleChange}
-      onMouseUp={() => { isDragging.current = false; lastHapticVal.current = null; }}
-      onTouchEnd={() => { isDragging.current = false; lastHapticVal.current = null; }}
-      className="native-range w-full"
-    />
+    <div className="relative w-full" style={{ height: 28 }}>
+      <div className="absolute pointer-events-none rounded-full" style={{ left: 14, right: 14, top: 10, height: 8, background: "var(--muted)" }} />
+      <div className="absolute pointer-events-none rounded-full" style={{ left: 14, top: 10, height: 8, width: `calc(${pct / 100} * (100% - 28px))`, background: color }} />
+      <div className="absolute pointer-events-none rounded-full" style={{ width: 28, height: 28, top: 0, left: `calc(${pct / 100} * (100% - 28px))`, background: color, border: "2px solid hsl(0,0%,8%)", boxShadow: "0 2px 6px rgba(0,0,0,0.35)" }} />
+      <input
+        ref={inputRef}
+        type="range"
+        min={0}
+        max={100}
+        step={1}
+        defaultValue={value}
+        onChange={handleChange}
+        onMouseUp={handleCommit}
+        onTouchEnd={handleCommit}
+        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer", margin: 0, padding: 0, WebkitAppearance: "none" }}
+      />
+    </div>
   );
 }
 

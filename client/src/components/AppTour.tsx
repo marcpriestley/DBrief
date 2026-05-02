@@ -20,7 +20,7 @@ const STEPS: TourStep[] = [
     iconColor: "text-primary",
     title: "Welcome to the garage.",
     subtitle: "Your mission briefing",
-    description: "DBrief is your personal race engineer — built to extract maximum performance from your days. Every day is a session. Every session gets debriefed.",
+    description: "DBrief is your personal performance engineer — built to extract maximum performance from your days. Every day is a session. Every session gets debriefed.",
     tip: "This tour covers the key tools at your disposal.",
   },
   {
@@ -43,7 +43,7 @@ const STEPS: TourStep[] = [
     icon: MessageSquare,
     iconColor: "text-blue-500",
     title: "The Debrief",
-    subtitle: "Your AI race engineer",
+    subtitle: "Your AI performance engineer",
     description: "After each session, sit down with your engineer. The AI reviews your telemetry, goals, and habits — then asks the right questions to help you extract the real lessons from the day. Speak or type, your choice.",
     tip: "Toggle the speaker icon in the debrief to turn AI voice readback on or off.",
   },

@@ -99,7 +99,7 @@ export async function generateWeeklyReport(userId: number): Promise<WeeklyReport
     ? allHabits.map(h => `${h.name}: ${h.last7Days?.filter(Boolean).length ?? 0}/7 days`).join(", ")
     : "No habits tracked.";
 
-  const prompt = `You are a world-class race engineer reviewing a driver's telemetry from the past 7 days. Your job is to give them a sharp, honest debrief — not therapy, not cheerleading. You see the data; you tell them what it means and what to focus on next.
+  const prompt = `You are a world-class performance engineer reviewing a driver's telemetry from the past 7 days. Your job is to give them a sharp, honest debrief — not therapy, not cheerleading. You see the data; you tell them what it means and what to focus on next.
 
 WEEK: ${weekStart} to ${weekEnd}
 

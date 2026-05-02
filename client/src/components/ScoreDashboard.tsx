@@ -65,31 +65,24 @@ function NativeOverlay({ open, onClose, title, description, children, scrollable
 function NativeSlider({ value, onChange, min = 0, max = 100, color = "hsl(40, 95%, 48%)" }: {
   value: number; onChange: (v: number) => void; min?: number; max?: number; color?: string;
 }) {
+  const [displayValue, setDisplayValue] = useState(value);
   const inputRef = useRef<HTMLInputElement>(null);
   const isDragging = useRef(false);
   const lastHapticVal = useRef<number | null>(null);
 
-  const updateFill = (v: number) => {
-    const el = inputRef.current;
-    if (!el) return;
-    const range = max - min;
-    const pct = range === 0 ? 0 : Math.max(0, Math.min(100, ((v - min) / range) * 100));
-    el.style.setProperty("--range-fill", `linear-gradient(to right, ${color} ${pct}%, hsl(var(--muted)) ${pct}%)`);
-    el.style.setProperty("--thumb-color", color);
-  };
+  const pct = max === min ? 0 : Math.max(0, Math.min(100, ((displayValue - min) / (max - min)) * 100));
 
-  useEffect(() => { updateFill(value); }, []);
   useEffect(() => {
     if (!isDragging.current) {
+      setDisplayValue(value);
       if (inputRef.current) inputRef.current.value = String(value);
-      updateFill(value);
     }
   }, [value]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = Number(e.target.value);
     isDragging.current = true;
-    updateFill(v);
+    setDisplayValue(v);
     onChange(v);
     if (lastHapticVal.current === null || Math.abs(v - lastHapticVal.current) >= 5) {
       haptic("light");
@@ -97,19 +90,26 @@ function NativeSlider({ value, onChange, min = 0, max = 100, color = "hsl(40, 95
     }
   };
 
+  const handleCommit = () => { isDragging.current = false; lastHapticVal.current = null; };
+
   return (
-    <input
-      ref={inputRef}
-      type="range"
-      min={min}
-      max={max}
-      step={1}
-      defaultValue={value}
-      onChange={handleChange}
-      onTouchEnd={() => { isDragging.current = false; lastHapticVal.current = null; }}
-      onMouseUp={() => { isDragging.current = false; }}
-      className="native-range"
-    />
+    <div className="relative" style={{ height: 28 }}>
+      <div className="absolute pointer-events-none rounded-full" style={{ left: 14, right: 14, top: 10, height: 8, background: "var(--muted)" }} />
+      <div className="absolute pointer-events-none rounded-full" style={{ left: 14, top: 10, height: 8, width: `calc(${pct / 100} * (100% - 28px))`, background: color }} />
+      <div className="absolute pointer-events-none rounded-full" style={{ width: 28, height: 28, top: 0, left: `calc(${pct / 100} * (100% - 28px))`, background: color, border: "2px solid hsl(0,0%,8%)", boxShadow: "0 2px 6px rgba(0,0,0,0.35)" }} />
+      <input
+        ref={inputRef}
+        type="range"
+        min={min}
+        max={max}
+        step={1}
+        defaultValue={value}
+        onChange={handleChange}
+        onTouchEnd={handleCommit}
+        onMouseUp={handleCommit}
+        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer", margin: 0, padding: 0, WebkitAppearance: "none" }}
+      />
+    </div>
   );
 }
 

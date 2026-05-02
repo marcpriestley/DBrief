@@ -224,69 +224,16 @@ html.dark #root {
 }
 
 /* ── Native range slider ──────────────────────────────────────────────────── */
-/* Uses native <input type="range"> for WKWebView reliability.                */
-/* The thumb colour is driven by a --thumb-color CSS variable set inline.     */
+/* The slider track and thumb are now rendered as plain <div> elements that   */
+/* sit behind a fully transparent <input type="range"> interaction layer.     */
+/* This completely eliminates the WebKit pseudo-element limitation that        */
+/* caused the recurring iOS slider freeze. No pseudo-element CSS needed here. */
 input[type="range"].native-range {
   -webkit-appearance: none;
   appearance: none;
-  width: 100%;
-  height: 44px;
   background: transparent;
   cursor: pointer;
   outline: none;
   padding: 0;
   border: none;
-}
-/* ── WebKit (Safari / iOS) track ─────────────────────────────────────────────
-   IMPORTANT: CSS custom properties do NOT reliably cascade from an element
-   into ::-webkit-slider-runnable-track in Safari/iOS (WebKit bug).
-   NativeSlider injects a per-element <style> rule that targets the track by ID
-   with a real gradient — that rule has !important and wins over this one.
-   This rule is the FALLBACK for raw <input type="range"> elements that have no
-   JS fill driver (e.g. ScoreDashboard, MoodCheckinModal).
-   Hardcoded colours are used here because CSS vars don't cascade reliably. */
-input[type="range"].native-range::-webkit-slider-runnable-track {
-  height: 8px;
-  border-radius: 4px;
-  background: hsl(0, 0%, 92%); /* light-mode --muted */
-}
-.dark input[type="range"].native-range::-webkit-slider-runnable-track {
-  background: hsl(0, 0%, 15%); /* dark-mode --muted */
-}
-input[type="range"].native-range::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: var(--thumb-color, hsl(40, 95%, 48%));
-  margin-top: -10px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.35);
-  border: 2px solid hsl(0, 0%, 8%); /* dark bg — matches dark mode --background */
-  transition: transform 0.1s;
-}
-input[type="range"].native-range:active::-webkit-slider-thumb {
-  transform: scale(1.15);
-}
-/* ── Firefox track / progress ─────────────────────────────────────────────── */
-input[type="range"].native-range::-moz-range-thumb {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: var(--thumb-color, hsl(40, 95%, 48%));
-  border: 2px solid hsl(0, 0%, 8%);
-  box-shadow: 0 2px 6px rgba(0,0,0,0.35);
-  cursor: pointer;
-}
-input[type="range"].native-range::-moz-range-track {
-  height: 8px;
-  border-radius: 4px;
-  background: hsl(0, 0%, 92%);
-}
-.dark input[type="range"].native-range::-moz-range-track {
-  background: hsl(0, 0%, 15%);
-}
-input[type="range"].native-range::-moz-range-progress {
-  height: 8px;
-  border-radius: 4px;
-  background: hsl(40, 95%, 48%);
 }

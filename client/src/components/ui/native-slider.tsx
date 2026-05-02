@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { haptic } from "@/lib/haptics";
 
 interface NativeSliderProps {
@@ -12,6 +12,19 @@ interface NativeSliderProps {
   className?: string;
 }
 
+// Permanent fix for WebKit/iOS Safari pseudo-element limitation.
+//
+// The root cause of the recurring "slider freeze" was that all previous
+// approaches relied on styling ::-webkit-slider-runnable-track via either:
+//   (a) CSS custom properties — don't cascade into pseudo-elements reliably
+//   (b) Injected <style> tags — Safari can stop honouring dynamic stylesheets
+//       after certain repaint/re-render cycles
+//
+// This implementation abandons pseudo-elements entirely.  The native
+// <input type="range"> is made fully transparent and acts only as the touch/
+// mouse interaction target (iOS respects it perfectly that way).  Three plain
+// <div> elements provide the visual track background, fill, and thumb — all
+// styled with normal inline styles that are 100% immune to pseudo-element bugs.
 export default function NativeSlider({
   value,
   onChange,
@@ -22,90 +35,103 @@ export default function NativeSlider({
   color,
   className = "",
 }: NativeSliderProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const fillColor = color ?? "hsl(40, 95%, 48%)";
+  const [displayValue, setDisplayValue] = useState(value);
   const isDragging = useRef(false);
   const lastHapticVal = useRef<number | null>(null);
-  const fillColor = color ?? "hsl(40, 95%, 48%)";
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  // Unique ID so we can target this specific input's pseudo-elements from an
-  // injected <style> tag. CSS custom properties don't reliably cascade into
-  // ::-webkit-slider-runnable-track in WebKit/iOS Safari — the only reliable
-  // solution is to emit a real CSS rule that targets the element by ID.
-  const sliderId = useRef(`ns-${Math.random().toString(36).slice(2, 8)}`);
-  const styleRef = useRef<HTMLStyleElement | null>(null);
-
-  useEffect(() => {
-    const style = document.createElement("style");
-    document.head.appendChild(style);
-    styleRef.current = style;
-    return () => { style.remove(); styleRef.current = null; };
-  }, []);
-
-  const updateFill = useCallback(
-    (v: number) => {
-      const el = inputRef.current;
-      const style = styleRef.current;
-      if (!el || !style) return;
-      const range = max - min;
-      const pct = range === 0 ? 0 : Math.max(0, Math.min(100, ((v - min) / range) * 100));
-      // Read the current computed muted colour from the root element via JS.
-      // This works even though var(--muted) in a pseudo-element stylesheet
-      // doesn't inherit reliably in WebKit.
-      const mutedColor =
-        getComputedStyle(document.documentElement).getPropertyValue("--muted").trim() ||
-        "hsl(0, 0%, 20%)";
-      const gradient = `linear-gradient(to right, ${fillColor} ${pct}%, ${mutedColor} ${pct}%)`;
-      style.textContent = `
-        #${sliderId.current}::-webkit-slider-runnable-track { background: ${gradient} !important; }
-        #${sliderId.current}::-moz-range-track { background: ${mutedColor}; }
-        #${sliderId.current}::-moz-range-progress { background: ${fillColor}; height: 8px; border-radius: 4px; }
-      `;
-      el.style.setProperty("--thumb-color", fillColor);
-    },
-    [min, max, fillColor]
-  );
-
-  useEffect(() => {
-    updateFill(value);
-  }, []);
+  const pct = max === min ? 0 : Math.max(0, Math.min(100, ((displayValue - min) / (max - min)) * 100));
 
   useEffect(() => {
     if (!isDragging.current) {
+      setDisplayValue(value);
       if (inputRef.current) inputRef.current.value = String(value);
-      updateFill(value);
     }
-  }, [value, updateFill]);
+  }, [value]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const v = Number(e.target.value);
     isDragging.current = true;
-    updateFill(v);
+    setDisplayValue(v);
     onChange(v);
     if (lastHapticVal.current === null || Math.abs(v - lastHapticVal.current) >= step * 5) {
       haptic("light");
       lastHapticVal.current = v;
     }
-  };
+  }, [onChange, step]);
 
-  const handleCommit = (e: React.SyntheticEvent<HTMLInputElement>) => {
+  const handleCommit = useCallback((e: React.SyntheticEvent<HTMLInputElement>) => {
     isDragging.current = false;
     lastHapticVal.current = null;
-    onCommit?.(Number((e.target as HTMLInputElement).value));
-  };
+    const v = Number((e.target as HTMLInputElement).value);
+    setDisplayValue(v);
+    onCommit?.(v);
+  }, [onCommit]);
 
   return (
-    <input
-      ref={inputRef}
-      id={sliderId.current}
-      type="range"
-      min={min}
-      max={max}
-      step={step}
-      defaultValue={value}
-      onChange={handleChange}
-      onMouseUp={handleCommit}
-      onTouchEnd={handleCommit}
-      className={`native-range ${className}`}
-    />
+    <div
+      className={`relative ${className}`}
+      style={{ height: 28 }}
+    >
+      {/* Background track — from thumb-min to thumb-max position */}
+      <div
+        className="absolute pointer-events-none rounded-full"
+        style={{
+          left: 14,
+          right: 14,
+          top: 10,
+          height: 8,
+          background: "var(--muted)",
+        }}
+      />
+      {/* Fill track */}
+      <div
+        className="absolute pointer-events-none rounded-full"
+        style={{
+          left: 14,
+          top: 10,
+          height: 8,
+          width: `calc(${pct / 100} * (100% - 28px))`,
+          background: fillColor,
+        }}
+      />
+      {/* Thumb */}
+      <div
+        className="absolute pointer-events-none rounded-full"
+        style={{
+          width: 28,
+          height: 28,
+          top: 0,
+          left: `calc(${pct / 100} * (100% - 28px))`,
+          background: fillColor,
+          border: "2px solid hsl(0, 0%, 8%)",
+          boxShadow: "0 2px 6px rgba(0,0,0,0.35)",
+        }}
+      />
+      {/* Transparent native input — handles all touch/mouse events */}
+      <input
+        ref={inputRef}
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        defaultValue={value}
+        onChange={handleChange}
+        onMouseUp={handleCommit}
+        onTouchEnd={handleCommit}
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          opacity: 0,
+          cursor: "pointer",
+          margin: 0,
+          padding: 0,
+          WebkitAppearance: "none",
+        }}
+      />
+    </div>
   );
 }

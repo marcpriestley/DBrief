@@ -233,7 +233,7 @@ export default function OnboardingFlow({ username }: OnboardingFlowProps) {
                   iconBg="bg-blue-500/10"
                   iconColor="text-blue-500"
                   title="Daily Debrief"
-                  description="Like a post-session debrief with your race engineer. Review your day's performance, find what worked, and spot where you left time on the table."
+                  description="Like a post-session debrief with your performance engineer. Review your day's performance, find what worked, and spot where you left time on the table."
                 />
                 <FeatureCard
                   icon={<BarChart3 className="h-4 w-4" />}
