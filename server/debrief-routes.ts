@@ -290,7 +290,6 @@ export function buildSystemPrompt(context: Awaited<ReturnType<typeof gatherDayCo
   const isYesterday = date === yesterdayStr;
   const debriefDate = new Date(date + "T12:00:00");
 
-  const phase = userMessageCount < 3 ? "core" : "extended";
 
   const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   const debriefDayName = context.dayName ?? DAY_NAMES[debriefDate.getDay()];
@@ -365,17 +364,14 @@ ${context.moodAvg}
 ${context.journalContent ? `Session notes: "${context.journalContent}"` : ""}${infiniteGoalSection}${ltGoalsSection}${habitsSection}${challengesSection}${recentHistorySection}
 
 CONVERSATION STRUCTURE:
-Exchange ${userMessageCount + 1} of the session. User has replied ${userMessageCount} time(s).
-${phase === "core" ? `
-- CORE phase (exchanges 1-3). One question per response — no exceptions.
-- Exchange 1: Read the telemetry. Compare each score to the driver's own 30-day average — flag anything that's meaningfully above or below their personal baseline. If there's recent session history, reference any threads that carry over from previous sessions (unresolved issues, stated intentions, stated goals). Don't just ask how it felt — you already have data. Start with what stands out relative to their baseline, then ask what's behind it.
-- Exchange 2: Dig into the answer they gave. Don't accept the first explanation. Ask the follow-up that gets one layer deeper. Push back if something doesn't add up.
-- Exchange 3: Synthesise. Connect what they've told you with what the telemetry shows. Surface the insight they probably haven't articulated yet — the real cause, the hidden pattern, or the assumption that's worth questioning. After their answer, the app offers the option to go deeper.
-` : `
-- EXTENDED phase — they chose to keep going. Continue naturally, one question at a time.
-- Pursue the most interesting thread with engineering precision. Look for causal links, recurring patterns, or untested assumptions.
-- Every 3 extended exchanges, connect back to their long-term targets if any are set.
-`}
+Every response you give is complete in itself — sharp, insightful, and worth ending on. The driver decides after each response whether to stop or go deeper. Design every response so that stopping there still leaves them with something genuinely useful.
+
+- Deliver your sharpest available insight based on the telemetry, what they've said, and the patterns you can see.
+- If this is the first exchange: read the telemetry, compare each score to the driver's 30-day average, and name what stands out relative to their personal baseline. If there's recent session history, reference any threads that carry over. Surface the most interesting signal.
+- If the conversation has been going: go one level deeper on the most interesting thread. Surface what hasn't been articulated yet — expose a causal link, challenge an assumption, or name a pattern hiding in the data.
+- You can raise a tension worth sitting with — but frame it as something to reflect on, not a question that demands a reply. "Worth asking whether this sleep drop is a pattern or a one-off" not "Do you think it's a pattern?"
+- Do NOT invite the driver to continue or go deeper — the app handles that.
+- 2-4 sentences. No lists. No headers. Every word earns its place.
 
 APP TOOLS — USE THESE STRATEGICALLY, NOT REFLEXIVELY:
 You have direct access to these actions. Use them only when the conversation naturally surfaces a clear need — never force them:
@@ -415,8 +411,8 @@ TONE AND STYLE — THIS IS CRITICAL:
 - No bullet points. No numbered lists. No emojis. Write in plain, natural sentences.
 - 2-3 sentences max. Shorter is almost always better. Cut everything that isn't essential.
 - Strong sessions deserve real recognition — don't manufacture problems where there aren't any. Tough sessions deserve honest analysis — don't paper over them with reassurance.
-- Ask ONE question and stop. Never stack questions.
-- Do NOT say "would you like to continue?" or offer to wrap up — the app handles that.`;
+- Do NOT ask multiple questions in a single response. If you raise something, raise one thing.
+- Do NOT say "would you like to continue?", "want to go deeper?", or offer to wrap up — the app handles all of that.`;
 }
 
 export function registerDebriefRoutes(app: Express): void {
@@ -1042,6 +1038,79 @@ export function registerDebriefRoutes(app: Express): void {
         res.end();
       } else {
         res.status(500).json({ error: "Failed to respond" });
+      }
+    }
+  });
+
+  // ── Go Deeper — trigger a follow-up AI response without requiring user input ─────────────────────
+  app.post("/api/debriefs/:debriefId/go-deeper", aiLimiter, async (req: Request, res: Response) => {
+    const userId = requireAuth(req, res);
+    if (!userId) return;
+
+    try {
+      const debriefId = parseInt(req.params.debriefId);
+      const [debrief] = await db.select().from(debriefs)
+        .where(and(eq(debriefs.id, debriefId), eq(debriefs.userId, userId)));
+
+      if (!debrief) return res.status(404).json({ error: "Debrief not found" });
+      if (debrief.isComplete) return res.status(400).json({ error: "Debrief already complete" });
+
+      const allMessages = await db.select().from(debriefMessages)
+        .where(eq(debriefMessages.debriefId, debriefId))
+        .orderBy(debriefMessages.createdAt);
+
+      const userMessageCount = allMessages.filter(m => m.role === "user").length;
+      const context = await gatherDayContext(userId, debrief.date);
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const systemPrompt = buildSystemPrompt(context, debrief.date, userMessageCount, user?.journalPreference || "evening", user?.userProfile, user?.displayName);
+
+      const chatMessages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+        { role: "system", content: systemPrompt },
+      ];
+      for (const msg of allMessages) {
+        chatMessages.push({ role: msg.role as "user" | "assistant", content: decrypt(msg.content) });
+      }
+      // Signal the AI to go one level deeper without user input
+      chatMessages.push({
+        role: "system",
+        content: "The driver has chosen to go deeper. Do NOT repeat anything already said. Pick up the most interesting thread from your last response and go one level further — expose a new layer of insight, surface a causal link, challenge an assumption, or name a pattern that hasn't been articulated yet. Make this response complete and valuable on its own, as if it could be the final thing said this session.",
+      });
+
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+
+      const stream = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: chatMessages,
+        stream: true,
+        max_tokens: 350,
+      });
+
+      let fullResponse = "";
+      for await (const chunk of stream) {
+        const content = chunk.choices[0]?.delta?.content;
+        if (content) {
+          fullResponse += content;
+          res.write(`data: ${JSON.stringify({ content })}\n\n`);
+        }
+      }
+
+      await db.insert(debriefMessages).values({
+        debriefId,
+        role: "assistant",
+        content: encrypt(fullResponse),
+      });
+
+      res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+      res.end();
+    } catch (error) {
+      console.error("Error in go-deeper:", error);
+      if (res.headersSent) {
+        res.write(`data: ${JSON.stringify({ error: "Failed to generate response" })}\n\n`);
+        res.end();
+      } else {
+        res.status(500).json({ error: "Failed to go deeper" });
       }
     }
   });

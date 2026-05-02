@@ -52,7 +52,6 @@ interface DebriefPanelProps {
   selectedDate: string;
 }
 
-const CORE_EXCHANGES = 3;
 
 function formatMsgTime(isoStr: string) {
   try {
@@ -449,7 +448,6 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   // Always up-to-date function for starting a conversation voice turn (ref avoids stale closures)
   const startConversationVoiceRef = useRef<() => void>(() => {});
   const bargeInRecognitionRef = useRef<any>(null);
-  const [continuedPastCheckpoint, setContinuedPastCheckpoint] = useState(false);
   const [actionNotifications, setActionNotifications] = useState<Array<{ type: string; message: string; success: boolean; id: number }>>([]);
   const [showAllMessages, setShowAllMessages] = useState(false);
   const [expandedSessions, setExpandedSessions] = useState<Set<number>>(new Set());
@@ -602,22 +600,13 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const userMessageCount = debrief?.messages?.filter(m => m.role === "user").length || 0;
   const assistantMessageCount = debrief?.messages?.filter(m => m.role === "assistant").length || 0;
 
-  const isAtCheckpoint =
-    !debrief?.isComplete &&
+  // Show End Session / Go Deeper after every completed AI response
+  const lastMsg = debrief?.messages?.[debrief.messages.length - 1];
+  const showCheckpoint =
+    !!debrief &&
+    !debrief.isComplete &&
     !isStreaming &&
-    userMessageCount >= CORE_EXCHANGES &&
-    assistantMessageCount > userMessageCount - 1 &&
-    !continuedPastCheckpoint;
-
-  const isAtExtendedCheckpoint =
-    !debrief?.isComplete &&
-    !isStreaming &&
-    continuedPastCheckpoint &&
-    userMessageCount > CORE_EXCHANGES &&
-    assistantMessageCount > userMessageCount - 1 &&
-    (userMessageCount - CORE_EXCHANGES) % 2 === 0;
-
-  const showCheckpoint = isAtCheckpoint || isAtExtendedCheckpoint;
+    lastMsg?.role === "assistant";
 
   // Keep activeDebriefId in sync so the realtime voice hook always knows which debrief to save to
   useEffect(() => {
@@ -721,7 +710,6 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
       return null;
     },
     onSuccess: async (data) => {
-      setContinuedPastCheckpoint(false);
       // User-led path returns the debrief JSON directly — track its ID so the panel
       // can show it as "active" even though it has no AI messages yet.
       if (data && (data as any).id) setUserLedDebriefId((data as any).id);
@@ -933,7 +921,6 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     haptic("medium");
     // Warm the AudioContext during this user gesture so auto-speak works after streaming
     warmAudioCtx();
-    if (showCheckpoint) setContinuedPastCheckpoint(true);
     const attachment = pendingAttachment;
     setPendingAttachment(null);
     sendMessage(textToSend, attachment ?? undefined);
@@ -996,9 +983,76 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     }
   };
 
-  const handleContinue = () => {
+  const handleGoDeeper = async () => {
+    if (!debrief || isStreaming) return;
     haptic("medium");
-    setContinuedPastCheckpoint(true);
+    warmAudioCtx();
+    setIsStreaming(true);
+    setStreamingContent("");
+    ttsFirstSentenceRef.current = 0;
+    hadTtsResponseRef.current = false;
+    tts.cancel();
+
+    try {
+      const response = await fetch(`/api/debriefs/${debrief.id}/go-deeper`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!response.ok || !response.body) throw new Error("Failed");
+
+      hasScrolledToStreamStart.current = false;
+      lockScrollAfterStreamRef.current = false;
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let accumulated = "";
+      let buffer = "";
+
+      outer: while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.error) { toast({ title: "Error", description: data.error, variant: "destructive" }); break outer; }
+            if (data.content) {
+              accumulated += data.content;
+              setStreamingContent(accumulated);
+              if (!hasScrolledToStreamStart.current) {
+                hasScrolledToStreamStart.current = true;
+                setTimeout(() => chatContainerRef.current?.scrollTo({ top: chatContainerRef.current.scrollHeight, behavior: "smooth" }), 50);
+              }
+              if (tts.enabled && !tts.speaking && !hadTtsResponseRef.current) {
+                const end = findFirstSentenceEnd(accumulated);
+                if (end > 0 && ttsFirstSentenceRef.current === 0) {
+                  ttsFirstSentenceRef.current = end;
+                  tts.speakNow(accumulated.slice(0, end).trim());
+                }
+              }
+            }
+            if (data.done) break outer;
+          } catch {}
+        }
+      }
+
+      if (accumulated) {
+        const remainder = ttsFirstSentenceRef.current ? accumulated.slice(ttsFirstSentenceRef.current).trim() : accumulated;
+        if (remainder && tts.enabled) tts.speakOrQueue(remainder);
+        if (!tts.enabled) tts.preFetchForButton(accumulated);
+        lastStreamedAiMsgRef.current = accumulated;
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ["/api/debriefs", selectedDate] });
+    } catch {
+      toast({ title: "Couldn't go deeper", description: "Please try again.", variant: "destructive" });
+    } finally {
+      setIsStreaming(false);
+      setStreamingContent("");
+    }
   };
 
   const handleWrapUp = () => {
@@ -1889,8 +1943,6 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     );
   };
 
-  const progressDots = Math.min(userMessageCount, CORE_EXCHANGES);
-
   return (
     <div className="space-y-3">
     {/* Active session card — viewport-height constrained so header + input always visible */}
@@ -1909,19 +1961,11 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
             <span className="text-sm font-medium text-foreground shrink-0">Debrief</span>
-            <div className="flex items-center gap-1 min-w-0">
-              {Array.from({ length: CORE_EXCHANGES }).map((_, i) => (
-                <div
-                  key={i}
-                  className={`w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${
-                    i < progressDots ? "bg-primary" : "bg-border"
-                  }`}
-                />
-              ))}
-              {userMessageCount > CORE_EXCHANGES && (
-                <span className="text-[10px] text-primary font-medium ml-0.5 shrink-0">+{userMessageCount - CORE_EXCHANGES}</span>
-              )}
-            </div>
+            {assistantMessageCount > 0 && (
+              <span className="text-[10px] text-muted-foreground shrink-0">
+                {assistantMessageCount} {assistantMessageCount === 1 ? "exchange" : "exchanges"}
+              </span>
+            )}
           </div>
           {/* Right: action buttons — icon-only to avoid overflow on narrow screens */}
           <div className="flex items-center gap-0.5 flex-shrink-0">
@@ -2143,42 +2187,35 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
 
           {showCheckpoint && (
             <motion.div
-              initial={{ opacity: 0, y: 12 }}
+              initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: 0.2 }}
-              className="pt-2"
+              transition={{ duration: 0.25, delay: 0.15 }}
+              className="pt-1 pb-1"
             >
-              <div className="text-center space-y-3 py-3">
-                <p className="text-xs text-muted-foreground">
-                  {isAtCheckpoint
-                    ? "That covers the essentials. Want to go deeper?"
-                    : "Want to keep going?"
-                  }
-                </p>
-                <div className="flex items-center justify-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleWrapUp}
-                    disabled={completeDebriefMutation.isPending}
-                    className="text-xs"
-                  >
-                    {completeDebriefMutation.isPending ? (
-                      <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                    ) : (
-                      <CheckCircle className="h-3 w-3 mr-1" />
-                    )}
-                    That's enough for now
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={handleContinue}
-                    className="text-xs"
-                  >
-                    Keep going
-                    <ArrowRight className="h-3 w-3 ml-1" />
-                  </Button>
-                </div>
+              <div className="flex items-center justify-center gap-2.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleWrapUp}
+                  disabled={completeDebriefMutation.isPending}
+                  className="h-8 px-4 text-xs font-medium border-border/60 text-muted-foreground hover:text-foreground"
+                >
+                  {completeDebriefMutation.isPending ? (
+                    <Loader2 className="h-3 w-3 animate-spin mr-1.5" />
+                  ) : (
+                    <CheckCircle className="h-3 w-3 mr-1.5" />
+                  )}
+                  End Session
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleGoDeeper}
+                  disabled={isStreaming}
+                  className="h-8 px-4 text-xs font-medium bg-primary hover:bg-primary/90 text-primary-foreground"
+                >
+                  Go Deeper
+                  <ArrowRight className="h-3 w-3 ml-1.5" />
+                </Button>
               </div>
             </motion.div>
           )}
