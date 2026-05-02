@@ -1,120 +1,170 @@
+import { useLocation } from "wouter";
+import { ArrowLeft, Lock, Shield, Eye, Server, Trash2 } from "lucide-react";
+
 export default function PrivacyPolicy() {
+  const [, setLocation] = useLocation();
+
   return (
-    <div className="min-h-screen bg-white">
-      <div className="max-w-3xl mx-auto px-6 py-12">
-        <div className="mb-10">
-          <h1 className="text-3xl font-black text-gray-900 mb-2">DBrief Privacy Policy</h1>
-          <p className="text-gray-500 text-sm">Last updated: March 2026</p>
+    <div className="min-h-screen bg-background text-foreground">
+      {/* Header */}
+      <div className="sticky top-0 z-10 bg-background/90 backdrop-blur border-b border-border/50 px-4 py-3 flex items-center gap-3">
+        <button
+          onClick={() => setLocation("/")}
+          className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4 text-foreground" />
+        </button>
+        <h1 className="text-base font-semibold text-foreground">Privacy Policy</h1>
+      </div>
+
+      <div className="max-w-2xl mx-auto px-5 py-8 space-y-8">
+
+        {/* Intro */}
+        <div className="space-y-1.5">
+          <p className="text-xs text-muted-foreground">Last updated: May 2026</p>
+          <p className="text-sm text-foreground/80 leading-relaxed">
+            DBrief is built around honest self-reflection. For that to work, you need to trust that
+            what you write stays private. This policy explains exactly what we collect, what we do
+            with it, and the technical measures we use to protect it.
+          </p>
         </div>
 
-        <div className="prose prose-gray max-w-none space-y-8 text-gray-700 leading-relaxed">
-
-          <section>
-            <h2 className="text-xl font-bold text-gray-900 mb-3">Overview</h2>
-            <p>
-              DBrief ("we", "our", or "us") is committed to protecting your personal information.
-              This policy explains what data we collect, how we use it, and what rights you have
-              over it. We collect only what is necessary to deliver the service and never sell
-              your data to third parties.
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-xl font-bold text-gray-900 mb-3">Data We Collect</h2>
-            <ul className="list-disc pl-6 space-y-2">
-              <li><strong>Account information:</strong> Your email address and password (stored as a secure hash) when you create an account.</li>
-              <li><strong>Performance data:</strong> Daily metric scores (0–100 scale) you choose to log, including sleep, energy, focus, and other custom metrics.</li>
-              <li><strong>Journal and debrief content:</strong> Text you write in your daily journal or during AI debrief sessions.</li>
-              <li><strong>Goals:</strong> Your infinite goal, long-term targets, and daily job list.</li>
-              <li><strong>Mood check-ins:</strong> Mood ratings you submit through the app.</li>
-              <li><strong>Usage data:</strong> Streak counts and activity timestamps used to power your streak tracking.</li>
-              <li><strong>Push notification tokens:</strong> Device tokens used to deliver your daily reminders, if you opt in.</li>
-            </ul>
-          </section>
-
-          <section>
-            <h2 className="text-xl font-bold text-gray-900 mb-3">Encryption</h2>
-            <p>
-              Sensitive content — including your journal entries, debrief conversations, AI summaries,
-              infinite goal, and long-term targets — is encrypted at rest using AES-256-GCM encryption
-              before being stored in our database. This means that even in the unlikely event of a
-              database breach, your personal writing cannot be read.
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-xl font-bold text-gray-900 mb-3">How We Use Your Data</h2>
-            <ul className="list-disc pl-6 space-y-2">
-              <li>To provide and personalise the DBrief service.</li>
-              <li>To generate AI-powered debrief conversations and performance insights using OpenAI's API. Your data is sent to OpenAI solely to generate your responses and is not used to train OpenAI models.</li>
-              <li>To send daily reminders if you have enabled push notifications.</li>
-              <li>To calculate your performance trends and streak data.</li>
-            </ul>
-          </section>
-
-          <section>
-            <h2 className="text-xl font-bold text-gray-900 mb-3">Third-Party Services</h2>
-            <ul className="list-disc pl-6 space-y-2">
-              <li><strong>OpenAI:</strong> Used to power AI debrief conversations and insights. Data shared is limited to what is needed to generate your response. See <a href="https://openai.com/privacy" className="text-amber-600 underline" target="_blank" rel="noreferrer">OpenAI's Privacy Policy</a>.</li>
-              <li><strong>Replit:</strong> Our hosting and infrastructure provider. See <a href="https://replit.com/privacy" className="text-amber-600 underline" target="_blank" rel="noreferrer">Replit's Privacy Policy</a>.</li>
-            </ul>
-          </section>
-
-          <section>
-            <h2 className="text-xl font-bold text-gray-900 mb-3">Data Retention</h2>
-            <p>
-              Your data is retained for as long as your account is active. You may request deletion
-              of your account and all associated data at any time by contacting us at the email below.
-              We will process deletion requests within 30 days.
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-xl font-bold text-gray-900 mb-3">Your Rights</h2>
-            <p>Depending on your location, you may have the right to:</p>
-            <ul className="list-disc pl-6 space-y-2">
-              <li>Access the personal data we hold about you.</li>
-              <li>Request correction of inaccurate data.</li>
-              <li>Request deletion of your account and data.</li>
-              <li>Object to or restrict certain processing of your data.</li>
-              <li>Data portability — receive a copy of your data in a machine-readable format.</li>
-            </ul>
-            <p className="mt-3">To exercise any of these rights, contact us at the email address below.</p>
-          </section>
-
-          <section>
-            <h2 className="text-xl font-bold text-gray-900 mb-3">Children's Privacy</h2>
-            <p>
-              DBrief is not directed at children under the age of 13. We do not knowingly collect
-              personal information from children under 13. If you believe a child has provided us
-              with personal information, please contact us and we will delete it promptly.
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-xl font-bold text-gray-900 mb-3">Changes to This Policy</h2>
-            <p>
-              We may update this policy from time to time. We will notify you of significant changes
-              by updating the date at the top of this page. Continued use of the app after changes
-              constitutes acceptance of the updated policy.
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-xl font-bold text-gray-900 mb-3">Contact</h2>
-            <p>
-              For any privacy-related questions or requests, contact us at:{" "}
-              <a href="mailto:marcpriestley@gmail.com" className="text-amber-600 underline">
-                marcpriestley@gmail.com
-              </a>
-            </p>
-          </section>
-
+        {/* Encryption callout */}
+        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <div className="h-6 w-6 rounded-full bg-emerald-500/15 flex items-center justify-center">
+              <Lock className="h-3 w-3 text-emerald-500" />
+            </div>
+            <span className="text-sm font-semibold text-emerald-500">AES-256-GCM Encryption</span>
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Your most personal content — journal entries, debrief conversations, AI summaries,
+            your infinite goal, and long-term targets — is encrypted at rest using AES-256-GCM
+            before being written to our database. This is the same standard used by banks and
+            governments. Even in the unlikely event of a database breach, your writing is
+            unreadable without your unique encryption key.
+          </p>
+          <div className="grid grid-cols-2 gap-2 pt-1">
+            {[
+              "Journal entries & voice notes",
+              "Debrief conversations",
+              "AI summaries & insights",
+              "Infinite goal & long-term targets",
+            ].map((item) => (
+              <div key={item} className="flex items-center gap-1.5">
+                <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
+                <span className="text-[11px] text-foreground/70">{item}</span>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <div className="mt-12 pt-8 border-t border-gray-200">
-          <p className="text-gray-400 text-xs text-center">© 2026 DBrief. All rights reserved.</p>
+        {/* Sections */}
+        <Section icon={<Eye className="h-4 w-4" />} title="What We Collect">
+          <ul className="space-y-2 text-sm text-foreground/75 leading-relaxed">
+            <li><strong className="text-foreground/90">Account:</strong> Your email address and a secure hash of your password. We never store your password in plain text.</li>
+            <li><strong className="text-foreground/90">Performance data:</strong> The metric scores (0–100) you log each day — sleep, energy, focus, and any custom metrics you add.</li>
+            <li><strong className="text-foreground/90">Journal & debrief content:</strong> Text you write in the journal or during AI debrief sessions. Stored encrypted.</li>
+            <li><strong className="text-foreground/90">Goals:</strong> Your infinite goal, long-term targets, and daily goals. Stored encrypted.</li>
+            <li><strong className="text-foreground/90">Mood check-ins:</strong> Mood ratings you submit through the app.</li>
+            <li><strong className="text-foreground/90">Streak & activity data:</strong> Timestamps of when you log, used to calculate streaks and consistency scores.</li>
+            <li><strong className="text-foreground/90">Push tokens:</strong> Device tokens used solely to send your daily reminders if you opt in. Never used for marketing.</li>
+            <li><strong className="text-foreground/90">Habits & squad data:</strong> Habit names, completion logs, and connection relationships for the Team feature.</li>
+          </ul>
+        </Section>
+
+        <Section icon={<Server className="h-4 w-4" />} title="How We Use It">
+          <ul className="space-y-2 text-sm text-foreground/75 leading-relaxed">
+            <li>To run the DBrief service and personalise it to you.</li>
+            <li>To generate AI debrief responses and insights via OpenAI. Only the content needed to generate your response is sent — it is not used to train AI models.</li>
+            <li>To send your daily reminders (morning and evening), if enabled.</li>
+            <li>To calculate your performance trends, streak, and consistency data.</li>
+            <li>To power the Team leaderboard and challenge features (streak, consistency %, and points only — journal and debrief content is never shared).</li>
+          </ul>
+        </Section>
+
+        <Section icon={<Shield className="h-4 w-4" />} title="Third-Party Services">
+          <ul className="space-y-2 text-sm text-foreground/75 leading-relaxed">
+            <li>
+              <strong className="text-foreground/90">OpenAI</strong> — powers AI conversations and insights. Data sent is limited to what is needed for your response.{" "}
+              <a href="https://openai.com/privacy" className="text-primary underline underline-offset-2" target="_blank" rel="noreferrer">OpenAI Privacy Policy →</a>
+            </li>
+            <li>
+              <strong className="text-foreground/90">Stripe</strong> — processes subscription payments. We never see or store your card details.{" "}
+              <a href="https://stripe.com/privacy" className="text-primary underline underline-offset-2" target="_blank" rel="noreferrer">Stripe Privacy Policy →</a>
+            </li>
+            <li>
+              <strong className="text-foreground/90">Replit</strong> — our hosting infrastructure.{" "}
+              <a href="https://replit.com/privacy" className="text-primary underline underline-offset-2" target="_blank" rel="noreferrer">Replit Privacy Policy →</a>
+            </li>
+            <li>
+              <strong className="text-foreground/90">Apple Push Notifications (APNs)</strong> — used only to deliver your daily reminders on iOS. No content is transmitted.
+            </li>
+          </ul>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Your data is never sold to or shared with any third party for advertising or analytics purposes.
+          </p>
+        </Section>
+
+        <Section icon={<Trash2 className="h-4 w-4" />} title="Data Retention & Deletion">
+          <div className="space-y-2 text-sm text-foreground/75 leading-relaxed">
+            <p>Your data is kept for as long as your account is active. You can delete your account at any time from <strong className="text-foreground/90">Settings → Danger Zone</strong>. This permanently and immediately removes your account, all journal entries, debriefs, goals, habits, and performance data.</p>
+            <p>You can also contact us to request a data export or to exercise any of the rights listed below.</p>
+          </div>
+        </Section>
+
+        <Section icon={<Shield className="h-4 w-4" />} title="Your Rights">
+          <p className="text-sm text-foreground/75 leading-relaxed mb-3">
+            Depending on your location (including under UK GDPR and CCPA), you may have the right to:
+          </p>
+          <ul className="space-y-1.5 text-sm text-foreground/75">
+            <li className="flex items-start gap-2"><div className="h-1.5 w-1.5 rounded-full bg-primary mt-1.5 shrink-0" /><span>Access the personal data we hold about you</span></li>
+            <li className="flex items-start gap-2"><div className="h-1.5 w-1.5 rounded-full bg-primary mt-1.5 shrink-0" /><span>Request correction of inaccurate data</span></li>
+            <li className="flex items-start gap-2"><div className="h-1.5 w-1.5 rounded-full bg-primary mt-1.5 shrink-0" /><span>Request deletion of your account and all data</span></li>
+            <li className="flex items-start gap-2"><div className="h-1.5 w-1.5 rounded-full bg-primary mt-1.5 shrink-0" /><span>Object to or restrict certain processing</span></li>
+            <li className="flex items-start gap-2"><div className="h-1.5 w-1.5 rounded-full bg-primary mt-1.5 shrink-0" /><span>Data portability — a copy of your data in a machine-readable format</span></li>
+          </ul>
+          <p className="mt-3 text-xs text-muted-foreground">
+            To exercise any of these rights, email us at{" "}
+            <a href="mailto:marcpriestley@gmail.com" className="text-primary underline underline-offset-2">marcpriestley@gmail.com</a>.
+            We will respond within 30 days.
+          </p>
+        </Section>
+
+        <Section icon={<Eye className="h-4 w-4" />} title="Children's Privacy">
+          <p className="text-sm text-foreground/75 leading-relaxed">
+            DBrief is not directed at anyone under the age of 13. We do not knowingly collect data from children under 13. If you believe a child has provided personal information, contact us and we will delete it promptly.
+          </p>
+        </Section>
+
+        <Section icon={<Shield className="h-4 w-4" />} title="Changes to This Policy">
+          <p className="text-sm text-foreground/75 leading-relaxed">
+            We may update this policy as the app evolves. Significant changes will be flagged by updating the date at the top of this page. Continued use after changes constitutes acceptance of the updated policy.
+          </p>
+        </Section>
+
+        {/* Footer */}
+        <div className="pt-4 border-t border-border/40 text-center space-y-1">
+          <p className="text-xs text-muted-foreground">© 2026 DBrief. All rights reserved.</p>
+          <p className="text-[11px] text-muted-foreground/60">Questions? <a href="mailto:marcpriestley@gmail.com" className="text-primary underline underline-offset-2">marcpriestley@gmail.com</a></p>
         </div>
+
+      </div>
+    </div>
+  );
+}
+
+function Section({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <div className="h-6 w-6 rounded-lg bg-muted flex items-center justify-center text-muted-foreground shrink-0">
+          {icon}
+        </div>
+        <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+      </div>
+      <div className="pl-8">
+        {children}
       </div>
     </div>
   );

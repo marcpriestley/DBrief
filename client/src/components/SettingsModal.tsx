@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { registerNativePush, isNativePlatform, openAppSettings } from "@/hooks/useNativeNotifications";
 import {
@@ -323,6 +324,7 @@ interface UserSettings {
 }
 
 export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const profileRef = useRef<ProfileQuestionsSettingsHandle>(null);
@@ -1060,12 +1062,12 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     <p className="text-[11px] text-muted-foreground leading-relaxed">
                       Your data is never sold or shared with third parties for advertising. It is only shared with OpenAI to generate your AI responses.
                     </p>
-                    <a
-                      href="/privacy"
+                    <button
+                      onClick={() => { onClose(); setLocation("/privacy"); }}
                       className="inline-flex items-center gap-1 text-[11px] text-primary underline underline-offset-2"
                     >
                       Read our full privacy policy →
-                    </a>
+                    </button>
                   </div>
                 </div>
               </SettingsSection>
