@@ -131,11 +131,11 @@ export default function OnboardingFlow({ username }: OnboardingFlowProps) {
               className="text-center space-y-6"
             >
               <div className="w-16 h-16 rounded-2xl overflow-hidden mx-auto shadow-lg shadow-primary/20">
-                <img src="/dbrief-logo.jpeg" alt="DBrief" className="w-full h-full object-cover" />
+                <img src="/dbrief-logo.jpeg" alt="DBrief App" className="w-full h-full object-cover" />
               </div>
 
               <div className="space-y-3">
-                <h1 className="text-2xl font-bold text-foreground">Welcome to DBrief</h1>
+                <h1 className="text-2xl font-bold text-foreground">Welcome to DBrief App</h1>
                 <p className="text-sm text-muted-foreground leading-relaxed max-w-xs mx-auto">
                   Your personal performance engineer. Like an F1 team debriefs every session to
                   find gains, you'll debrief your day to perform better tomorrow.

@@ -1700,7 +1700,7 @@ Respond in JSON: { "insight": "your trajectory analysis here", "tags": ["tag1", 
       const apnsSubs = subs.filter(s => !!s.apnsToken);
       const payload = {
         title: "🏁 Test Notification",
-        body: "DBrief notifications are working correctly!",
+        body: "DBrief App notifications are working correctly!",
         url: "/",
         tag: `test-${userId}-${Date.now()}`,
       };
@@ -2029,7 +2029,7 @@ Convert the habit to a natural English verb phrase. Return ONLY the sentence, no
       const senderName = myUser?.displayName || myUser?.username || "Someone";
       await notifyUser(target.id, {
         title: "New Connection Request",
-        body: `${senderName} wants to connect with you on DBrief`,
+        body: `${senderName} wants to connect with you on DBrief App`,
         url: "/squad?tab=crew",
         tag: `conn-request-${connection.id}`,
       });
@@ -2114,7 +2114,7 @@ Convert the habit to a natural English verb phrase. Return ONLY the sentence, no
       const senderName = myUser?.displayName || myUser?.username || "Someone";
       await notifyUser(conn.receiverId, {
         title: "Crew Request Reminder",
-        body: `${senderName} is still waiting for you to join their crew on DBrief`,
+        body: `${senderName} is still waiting for you to join their crew on DBrief App`,
         url: "/squad?tab=crew",
         tag: `conn-nudge-${connectionId}`,
       });
@@ -2181,7 +2181,7 @@ Convert the habit to a natural English verb phrase. Return ONLY the sentence, no
           await storage.inviteToChallenge(challenge.id, targetId, userId);
           await notifyUser(targetId, {
             title: "New Challenge Invite",
-            body: "You've been invited to a DBrief challenge",
+            body: "You've been invited to a DBrief App challenge",
             url: "/squad?tab=challenges",
             tag: `challenge-invite-${challenge.id}-${targetId}`,
           });
@@ -2198,7 +2198,7 @@ Convert the habit to a natural English verb phrase. Return ONLY the sentence, no
           await storage.inviteToChallenge(challenge.id, target.id, userId);
           await notifyUser(target.id, {
             title: "New Challenge Invite",
-            body: "You've been invited to a DBrief challenge",
+            body: "You've been invited to a DBrief App challenge",
             url: "/squad?tab=challenges",
             tag: `challenge-invite-${challenge.id}-${target.id}`,
           });
@@ -2405,7 +2405,7 @@ Convert the habit to a natural English verb phrase. Return ONLY the sentence, no
       const challengeTitle = challenge?.title || "a challenge";
       await notifyUser(target.id, {
         title: "New Challenge Invite",
-        body: "You've been invited to a DBrief challenge",
+        body: "You've been invited to a DBrief App challenge",
         url: "/squad?tab=challenges",
         tag: `challenge-invite-${challengeId}-${target.id}`,
       });

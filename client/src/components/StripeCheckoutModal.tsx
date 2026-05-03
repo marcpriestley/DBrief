@@ -50,7 +50,7 @@ export default function StripeCheckoutModal({ isOpen, onClose }: Props) {
     await fetch("/api/subscription/sync", { method: "POST" });
     queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
     toast({
-      title: "Welcome to DBrief Premium",
+      title: "Welcome to DBrief App Premium",
       description: "Your features are now unlocked. Full throttle.",
     });
     onClose();
@@ -87,7 +87,7 @@ export default function StripeCheckoutModal({ isOpen, onClose }: Props) {
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 flex-shrink-0">
               <div>
-                <p className="text-sm font-semibold text-gray-900">DBrief Premium</p>
+                <p className="text-sm font-semibold text-gray-900">DBrief App Premium</p>
                 <p className="text-xs text-gray-500">£5.99 / month</p>
               </div>
               <button

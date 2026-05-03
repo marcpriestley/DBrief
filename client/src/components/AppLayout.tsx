@@ -394,10 +394,10 @@ function AppLayoutInner({ children }: AppLayoutProps) {
               >
                 <img
                   src={logoSrc}
-                  alt="DBrief"
+                  alt="DBrief App"
                   className="w-9 h-9 rounded-xl object-cover shadow-sm"
                 />
-                <span className="text-xl font-black text-foreground tracking-tight">DBrief</span>
+                <span className="text-xl font-black text-foreground tracking-tight">DBrief App</span>
               </button>
             </Link>
             <div className="flex items-center gap-1">

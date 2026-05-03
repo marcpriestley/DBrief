@@ -131,7 +131,7 @@ function NotificationPermissionHelper() {
     return (
       <div className="flex items-start gap-2.5 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
         <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
-        <p className="text-xs text-emerald-700 dark:text-emerald-400">Notifications are active. DBrief will appear in your iPhone notification settings.</p>
+        <p className="text-xs text-emerald-700 dark:text-emerald-400">Notifications are active. DBrief App will appear in your iPhone notification settings.</p>
       </div>
     );
   }
@@ -142,7 +142,7 @@ function NotificationPermissionHelper() {
         <div className="text-xs text-amber-700 dark:text-amber-400 space-y-2 flex-1">
           <p>iOS notifications are blocked. You need to allow them in iPhone Settings.</p>
           <Button size="sm" variant="outline" className="h-7 text-xs border-amber-500/40 text-amber-700" onClick={openAppSettings}>
-            Open DBrief Settings →
+            Open DBrief App Settings →
           </Button>
         </div>
       </div>
@@ -500,13 +500,13 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         if (result === "granted") {
           toast({ title: "Notifications enabled", description: "You'll receive daily reminders." });
         } else if (result === "denied") {
-          toast({ title: "Notifications blocked by iOS", description: "Go to iPhone Settings → DBrief → Notifications and enable them.", variant: "destructive" });
+          toast({ title: "Notifications blocked by iOS", description: "Go to iPhone Settings → DBrief App → Notifications and enable them.", variant: "destructive" });
           openAppSettings();
         } else {
           const detail = typeof result === "string" && result.startsWith("error:") ? result.slice(6) : "unknown error";
           const isPluginMissing = detail.toLowerCase().includes("not implemented") || detail.toLowerCase().includes("not available");
           if (isPluginMissing) {
-            toast({ title: "Grant permission in iOS Settings", description: "Go to iPhone Settings → DBrief → Notifications and turn them on." });
+            toast({ title: "Grant permission in iOS Settings", description: "Go to iPhone Settings → DBrief App → Notifications and turn them on." });
           } else {
             toast({ title: "Notification setup failed", description: `Error: ${detail}`, variant: "destructive" });
             setNotificationsEnabled(false);
@@ -578,8 +578,8 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         }
       } else if (result === "denied") {
         const msg = onAndroid
-          ? "Open Android Settings → Apps → Health Connect → Permissions → DBrief and enable all categories."
-          : "Open iOS Settings → Privacy & Security → Health → DBrief and enable all categories.";
+          ? "Open Android Settings → Apps → Health Connect → Permissions → DBrief App and enable all categories."
+          : "Open iOS Settings → Privacy & Security → Health → DBrief App and enable all categories.";
         toast({ title: "Health access denied", description: msg, variant: "destructive" });
       } else {
         toast({ title: "Could not connect", description: "An unexpected error occurred. Try reinstalling the app.", variant: "destructive" });
@@ -611,8 +611,8 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       setHealthSyncResult(`Synced ${total} reading${total !== 1 ? "s" : ""}`);
       if (total === 0) {
         const hint = isNativeAndroid()
-          ? "No new data found. Check Health Connect → Permissions → DBrief has all categories enabled."
-          : "No new data found. Check that Apple Health permissions include Sleep Analysis: iPhone Settings → Privacy & Security → Health → DBrief.";
+          ? "No new data found. Check Health Connect → Permissions → DBrief App has all categories enabled."
+          : "No new data found. Check that Apple Health permissions include Sleep Analysis: iPhone Settings → Privacy & Security → Health → DBrief App.";
         toast({ title: "Nothing synced", description: hint, variant: "destructive" });
       } else {
         toast({ title: "Sync complete", description: `Updated ${total} health reading${total !== 1 ? "s" : ""}.` });
@@ -844,10 +844,10 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       {!healthSetupNeeded && (
                         <div className="space-y-1.5">
                           <p className="text-[11px] text-muted-foreground leading-relaxed">
-                            Grant access so DBrief can read your health data and auto-fill your metrics.
+                            Grant access so DBrief App can read your health data and auto-fill your metrics.
                           </p>
                           <p className="text-[11px] text-amber-600 dark:text-amber-400 leading-relaxed">
-                            <strong>Sleep not showing?</strong> iOS Settings → Privacy &amp; Security → Health → DBrief → turn on Sleep Analysis.
+                            <strong>Sleep not showing?</strong> iOS Settings → Privacy &amp; Security → Health → DBrief App → turn on Sleep Analysis.
                           </p>
                         </div>
                       )}
@@ -863,7 +863,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                           <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-400">Health Connect not installed</p>
                         </div>
                         <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed">
-                          DBrief uses Google Health Connect to sync your Android health data. Install it from the Play Store to get started.
+                          DBrief App uses Google Health Connect to sync your Android health data. Install it from the Play Store to get started.
                         </p>
                         <Button size="sm" className="w-full gap-2" onClick={() => showHealthConnectInPlayStore()}>
                           Install Health Connect
@@ -896,7 +896,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         {healthSyncing ? "Connecting…" : "Connect Health Connect"}
                       </Button>
                       <p className="text-[11px] text-muted-foreground leading-relaxed">
-                        Grant access so DBrief can read your health data from Google Health Connect and auto-fill your metrics.
+                        Grant access so DBrief App can read your health data from Google Health Connect and auto-fill your metrics.
                       </p>
                     </div>
                   )
@@ -1038,7 +1038,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               <SettingsSection title="Privacy & Security" icon={<Lock className="h-4 w-4" />}>
                 <div className="space-y-3">
                   <p className="text-[12px] text-muted-foreground leading-relaxed">
-                    Your most personal data is encrypted at rest using AES-256-GCM — the same standard used by banks and governments. Nobody at DBrief can read your entries.
+                    Your most personal data is encrypted at rest using AES-256-GCM — the same standard used by banks and governments. Nobody at DBrief App can read your entries.
                   </p>
                   <div className="space-y-2">
                     {[

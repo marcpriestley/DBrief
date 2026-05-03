@@ -144,7 +144,7 @@ export function registerSubscriptionRoutes(app: Express) {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DBrief</title>
+  <title>DBrief App</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -183,13 +183,13 @@ export function registerSubscriptionRoutes(app: Express) {
   <div class="icon">${success ? '🏁' : '👋'}</div>
   <h1>${success ? "You're on the grid." : 'No worries.'}</h1>
   <p>${success
-    ? 'DBrief Premium is now active. The app will detect your subscription automatically.'
+    ? 'DBrief App Premium is now active. The app will detect your subscription automatically.'
     : 'Your subscription was not completed.'
   }</p>
   ${success ? `
   <div class="status" id="st">
     <div class="spinner" id="sp"></div>
-    <span id="st-text">Returning you to DBrief…</span>
+    <span id="st-text">Returning you to DBrief App…</span>
   </div>
   <script>
     (async function() {

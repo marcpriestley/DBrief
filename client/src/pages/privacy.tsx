@@ -23,7 +23,7 @@ export default function PrivacyPolicy() {
         <div className="space-y-1.5">
           <p className="text-xs text-muted-foreground">Last updated: May 2026</p>
           <p className="text-sm text-foreground/80 leading-relaxed">
-            DBrief is built around honest self-reflection. For that to work, you need to trust that
+            DBrief App is built around honest self-reflection. For that to work, you need to trust that
             what you write stays private. This policy explains exactly what we collect, what we do
             with it, and the technical measures we use to protect it.
           </p>
@@ -75,7 +75,7 @@ export default function PrivacyPolicy() {
 
         <Section icon={<Server className="h-4 w-4" />} title="How We Use It">
           <ul className="space-y-2 text-sm text-foreground/75 leading-relaxed">
-            <li>To run the DBrief service and personalise it to you.</li>
+            <li>To run the DBrief App service and personalise it to you.</li>
             <li>To generate AI debrief responses and insights via OpenAI. Only the content needed to generate your response is sent — it is not used to train AI models.</li>
             <li>To send your daily reminders (morning and evening), if enabled.</li>
             <li>To calculate your performance trends, streak, and consistency data.</li>
@@ -133,7 +133,7 @@ export default function PrivacyPolicy() {
 
         <Section icon={<Eye className="h-4 w-4" />} title="Children's Privacy">
           <p className="text-sm text-foreground/75 leading-relaxed">
-            DBrief is not directed at anyone under the age of 13. We do not knowingly collect data from children under 13. If you believe a child has provided personal information, contact us and we will delete it promptly.
+            DBrief App is not directed at anyone under the age of 13. We do not knowingly collect data from children under 13. If you believe a child has provided personal information, contact us and we will delete it promptly.
           </p>
         </Section>
 
@@ -145,7 +145,7 @@ export default function PrivacyPolicy() {
 
         {/* Footer */}
         <div className="pt-4 border-t border-border/40 text-center space-y-1">
-          <p className="text-xs text-muted-foreground">© 2026 DBrief. All rights reserved.</p>
+          <p className="text-xs text-muted-foreground">© 2026 DBrief App. All rights reserved.</p>
           <p className="text-[11px] text-muted-foreground/60">Questions? <a href="mailto:marcpriestley@gmail.com" className="text-primary underline underline-offset-2">marcpriestley@gmail.com</a></p>
         </div>
 

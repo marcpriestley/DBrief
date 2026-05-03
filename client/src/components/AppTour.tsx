@@ -20,7 +20,7 @@ const STEPS: TourStep[] = [
     iconColor: "text-primary",
     title: "Welcome to the garage.",
     subtitle: "Your mission briefing",
-    description: "DBrief is your personal performance engineer — built to extract maximum performance from your days. Every day is a session. Every session gets debriefed.",
+    description: "DBrief App is your personal performance engineer — built to extract maximum performance from your days. Every day is a session. Every session gets debriefed.",
     tip: "This tour covers the key tools at your disposal.",
   },
   {

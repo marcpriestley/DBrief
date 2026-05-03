@@ -97,7 +97,7 @@ function AuthenticatedRouter() {
         }
         queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
         queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
-        toast({ title: "Welcome to DBrief Premium", description: "Your features are now unlocked. Full throttle." });
+        toast({ title: "Welcome to DBrief App Premium", description: "Your features are now unlocked. Full throttle." });
       } else if (sub === "cancelled") {
         toast({ title: "No changes made", description: "You can upgrade any time from the premium features." });
       }
@@ -114,7 +114,7 @@ function AuthenticatedRouter() {
         try {
           const me = await fetch("/api/auth/me").then(r => r.json());
           if (me.subscriptionStatus === "premium" || me.subscriptionStatus === "beta") {
-            toast({ title: "Welcome to DBrief Premium", description: "Your features are now unlocked. Full throttle." });
+            toast({ title: "Welcome to DBrief App Premium", description: "Your features are now unlocked. Full throttle." });
           }
         } catch (_) {}
       }, 1500);
@@ -151,7 +151,7 @@ function AuthenticatedRouter() {
         try {
           const me = await fetch("/api/auth/me").then(r => r.json());
           if (me.subscriptionStatus === "premium" || me.subscriptionStatus === "beta") {
-            toast({ title: "Welcome to DBrief Premium", description: "Your features are now unlocked. Full throttle." });
+            toast({ title: "Welcome to DBrief App Premium", description: "Your features are now unlocked. Full throttle." });
           }
         } catch (_) {}
       }
@@ -225,7 +225,7 @@ function AuthenticatedRouter() {
         setIsMoodOpen(true);
       } else {
         // Show an in-app toast for all other notifications
-        toast({ title: title || "DBrief", description: body });
+        toast({ title: title || "DBrief App", description: body });
       }
     };
 
@@ -256,7 +256,7 @@ function AuthenticatedRouter() {
           try {
             const me = await fetch("/api/auth/me").then(r => r.json());
             if (me.subscriptionStatus === "premium" || me.subscriptionStatus === "beta") {
-              toast({ title: "Welcome to DBrief Premium", description: "Your features are now unlocked. Full throttle." });
+              toast({ title: "Welcome to DBrief App Premium", description: "Your features are now unlocked. Full throttle." });
             }
           } catch (_) {}
         }, 2500);

@@ -2426,7 +2426,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                 <div className="flex items-start gap-2 mb-2 px-2 py-1.5 bg-destructive/10 rounded-lg">
                   {voice.micError === "SETTINGS_NEEDED" ? (
                     <div className="flex-1 space-y-1.5">
-                      <span className="text-xs text-destructive block">Microphone access denied. Enable it in iPhone Settings → DBrief → Microphone.</span>
+                      <span className="text-xs text-destructive block">Microphone access denied. Enable it in iPhone Settings → DBrief App → Microphone.</span>
                       <button
                         onClick={() => { openAppSettings(); voice.clearMicError(); }}
                         className="text-[11px] font-medium text-destructive underline underline-offset-2"

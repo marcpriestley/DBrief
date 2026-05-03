@@ -92,7 +92,7 @@ export default function CallsignPromptModal({ open, onClose }: { open: boolean; 
             </div>
             <div>
               <h2 className="font-bold text-foreground text-base leading-tight">Choose your Driver Callsign</h2>
-              <p className="text-xs text-muted-foreground">Your unique identity on DBrief</p>
+              <p className="text-xs text-muted-foreground">Your unique identity on DBrief App</p>
             </div>
           </div>
         </div>

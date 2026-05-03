@@ -215,7 +215,7 @@ export const ProfileQuestionsSettings = forwardRef<ProfileQuestionsSettingsHandl
           />
           {dateOfBirth && (
             <p className="text-[11px] text-muted-foreground">
-              DBrief will celebrate your birthday each year 🎂
+              DBrief App will celebrate your birthday each year 🎂
             </p>
           )}
         </div>

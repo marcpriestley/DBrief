@@ -79,7 +79,7 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
     queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
     queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
     toast({
-      title: "Welcome to DBrief Premium",
+      title: "Welcome to DBrief App Premium",
       description: "Your features are now unlocked. Full throttle.",
     });
   }
@@ -296,10 +296,10 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
                 </button>
 
                 <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-white/15 backdrop-blur mb-3 overflow-hidden">
-                  <img src="/app-icon.png" alt="DBrief" className="w-14 h-14 object-contain rounded-xl" />
+                  <img src="/app-icon.png" alt="DBrief App" className="w-14 h-14 object-contain rounded-xl" />
                 </div>
 
-                <h2 className="text-2xl font-black text-white tracking-tight">DBrief Premium</h2>
+                <h2 className="text-2xl font-black text-white tracking-tight">DBrief App Premium</h2>
 
                 {featureName && (
                   <p className="mt-1 text-sm text-amber-200/90">

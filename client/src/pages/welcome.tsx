@@ -221,9 +221,9 @@ export default function Welcome() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="w-14 h-14 rounded-2xl overflow-hidden mx-auto mb-4 shadow-lg shadow-primary/20">
-            <img src="/dbrief-logo.jpeg" alt="DBrief" className="w-full h-full object-cover" />
+            <img src="/dbrief-logo.jpeg" alt="DBrief App" className="w-full h-full object-cover" />
           </div>
-          <h1 className="text-2xl font-bold text-foreground mb-1">DBrief</h1>
+          <h1 className="text-2xl font-bold text-foreground mb-1">DBrief App</h1>
           <p className="text-sm text-muted-foreground">Your daily debrief. Track, reflect, grow.</p>
         </div>
 
