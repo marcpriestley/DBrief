@@ -191,9 +191,6 @@ export function registerSubscriptionRoutes(app: Express) {
     <div class="spinner" id="sp"></div>
     <span id="st-text">Returning you to DBrief…</span>
   </div>
-  <div class="hint" id="hint">
-    <p>Tap <strong>Done</strong> (top left) to return to DBrief — your Premium access will be waiting.</p>
-  </div>
   <script>
     (async function() {
       var sid = ${sessionId ? JSON.stringify(sessionId) : 'null'};
@@ -202,14 +199,13 @@ export function registerSubscriptionRoutes(app: Express) {
         try { await fetch('/api/subscription/checkout-signal?session_id=' + encodeURIComponent(sid)); }
         catch(_) {}
       }
-      // 2. Show the "tap Done" hint immediately — it's always visible since
-      //    the content is pinned to the top of the page, above any system dialogs.
+      // 2. Update status text.
       document.getElementById('sp').style.display = 'none';
       document.getElementById('st-text').textContent = 'Payment confirmed.';
-      document.getElementById('hint').style.display = 'block';
-      // 3. Attempt deep-link return. If the URL scheme is registered in Xcode,
-      //    iOS closes this view and fires appUrlOpen in the app automatically.
-      //    If not registered, this silently fails and the user taps Done instead.
+      // 3. Attempt deep-link return. iOS will show its own "Open in DBrief?"
+      //    confirmation dialog — no on-page instruction needed.
+      //    If the URL scheme is not registered, the user closes this view
+      //    with the native Done button in the browser toolbar.
       try {
         window.location.href = 'dbrief://checkout-done?result=${success ? 'success' : 'cancelled'}' +
           (sid ? '&session_id=' + encodeURIComponent(sid) : '');

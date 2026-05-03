@@ -326,6 +326,12 @@ function AuthenticatedRouter() {
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [user]);
 
+  // contentReady: keeps React content invisible (opacity:0) while the HTML
+  // splash is still fading out, so the user never sees two logos at different
+  // sizes/positions at the same time.  Becomes true ~20ms after the splash
+  // has fully cleared (transition duration 350ms + 20ms buffer).
+  const [contentReady, setContentReady] = useState(false);
+
   // Dismiss both the HTML splash and the native Capacitor splash together
   // so their fade animations are in sync.  The native splash has a 2000ms
   // auto-hide timer that fires independently of auth — calling hide() here
@@ -341,9 +347,12 @@ function AuthenticatedRouter() {
     } catch (_) {}
     // 2. CSS fade on the HTML overlay (350ms transition defined in index.html).
     const splash = document.getElementById("dbrief-splash");
-    if (!splash) return;
-    splash.classList.add("fade-out");
-    const t = setTimeout(() => splash.remove(), 400);
+    if (splash) {
+      splash.classList.add("fade-out");
+      setTimeout(() => splash.remove(), 400);
+    }
+    // 3. Reveal React content only after splash has fully cleared.
+    const t = setTimeout(() => setContentReady(true), 370);
     return () => clearTimeout(t);
   }, [isLoading]);
 
@@ -359,31 +368,40 @@ function AuthenticatedRouter() {
 
   if (isLoading) return null;
 
+  // Hold content invisible while the splash is fading out (370ms).
+  // This prevents the user seeing two different-sized logos overlapping.
+  const revealStyle: React.CSSProperties = {
+    opacity: contentReady ? 1 : 0,
+    transition: contentReady ? "opacity 0.18s ease" : "none",
+  };
+
   if (!user) {
-    return <Welcome />;
+    return <div style={revealStyle}><Welcome /></div>;
   }
 
   if (!user.hasCompletedOnboarding) {
-    return <OnboardingFlow username={user.username} />;
+    return <div style={revealStyle}><OnboardingFlow username={user.username} /></div>;
   }
 
   const dateOfBirth = user?.userProfile?.dateOfBirth ?? null;
 
   return (
-    <MoodProvider value={{ openMood: () => setIsMoodOpen(true) }}>
-      <Switch>
-        <Route path="/" component={Dashboard} />
-        <Route path="/dashboard" component={Dashboard} />
-        <Route path="/calendar" component={CalendarPage} />
-        <Route path="/trends" component={Trends} />
-        <Route path="/squad" component={SquadPage} />
-        <Route component={NotFound} />
-      </Switch>
-      <BirthdayCelebration displayName={user?.displayName} dateOfBirth={dateOfBirth} />
-      <MoodCheckinModal open={isMoodOpen} onClose={() => setIsMoodOpen(false)} />
-      <GlobalPointsToast />
-      <CallsignPromptModal open={showCallsignPrompt} onClose={() => setCallsignDismissed(true)} />
-    </MoodProvider>
+    <div style={revealStyle}>
+      <MoodProvider value={{ openMood: () => setIsMoodOpen(true) }}>
+        <Switch>
+          <Route path="/" component={Dashboard} />
+          <Route path="/dashboard" component={Dashboard} />
+          <Route path="/calendar" component={CalendarPage} />
+          <Route path="/trends" component={Trends} />
+          <Route path="/squad" component={SquadPage} />
+          <Route component={NotFound} />
+        </Switch>
+        <BirthdayCelebration displayName={user?.displayName} dateOfBirth={dateOfBirth} />
+        <MoodCheckinModal open={isMoodOpen} onClose={() => setIsMoodOpen(false)} />
+        <GlobalPointsToast />
+        <CallsignPromptModal open={showCallsignPrompt} onClose={() => setCallsignDismissed(true)} />
+      </MoodProvider>
+    </div>
   );
 }
 
