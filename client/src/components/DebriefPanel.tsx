@@ -889,14 +889,13 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
           tts.preFetchForButton(accumulated);
         }
       }
-      // Only scroll to bottom if we never successfully locked onto the stream start.
-      // If lockScrollAfterStreamRef is true, the user is already reading from the
-      // top of the response — don't yank them down to the end.
-      if (!lockScrollAfterStreamRef.current) {
-        setTimeout(() => {
-          messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-        }, 100);
-      }
+      // After streaming ends, always scroll to bottom — this reveals the
+      // End Session / Go Deeper buttons that appear after the response.
+      // Reset the lock first so the useEffect doesn't suppress it.
+      lockScrollAfterStreamRef.current = false;
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }, 120);
     } catch {
       toast({ title: "Error", description: "Failed to send message. Try again.", variant: "destructive" });
     } finally {
@@ -1046,7 +1045,12 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
         lastStreamedAiMsgRef.current = accumulated;
       }
 
+      // After Go Deeper streaming ends, scroll to show the End Session / Go Deeper buttons.
+      lockScrollAfterStreamRef.current = false;
       await queryClient.invalidateQueries({ queryKey: ["/api/debriefs", selectedDate] });
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }, 200);
     } catch {
       toast({ title: "Couldn't go deeper", description: "Please try again.", variant: "destructive" });
     } finally {

@@ -12,13 +12,13 @@ interface NativeSliderProps {
   className?: string;
 }
 
-// Uses Pointer Events API (mouse + touch unified) with setPointerCapture so
-// that drag works correctly even when the slider sits inside a scroll container.
-// The previous approach relied on <input type="range"> native touch handling —
-// on iOS WebKit inside overflow:auto containers the browser intercepts the
-// touch for scrolling before the range input sees it, so only taps registered.
-// Pointer Events + setPointerCapture hands exclusive ownership of the gesture
-// to this element for the lifetime of the drag, regardless of the parent scroll.
+// Custom slider that works reliably on iOS WebKit inside scroll containers.
+// Strategy:
+//   - Pointer Events + setPointerCapture for desktop / mouse input
+//   - Imperative addEventListener('touchstart', { passive: false }) to call
+//     preventDefault() on the raw touch event, which stops iOS from interpreting
+//     the gesture as a scroll and issuing a pointercancel that kills the drag.
+//     React synthetic onTouchStart is passive in React 17+ and cannot preventDefault.
 export default function NativeSlider({
   value,
   onChange,
@@ -32,16 +32,14 @@ export default function NativeSlider({
   const fillColor = color ?? "hsl(40, 95%, 48%)";
   const [displayValue, setDisplayValue] = useState(value);
   const isDragging = useRef(false);
+  const activePtrId = useRef<number | null>(null);
   const lastHapticVal = useRef<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  // Keep a ref so pointer-event callbacks always see the latest value
   const displayValueRef = useRef(displayValue);
   useEffect(() => { displayValueRef.current = displayValue; }, [displayValue]);
 
   useEffect(() => {
-    if (!isDragging.current) {
-      setDisplayValue(value);
-    }
+    if (!isDragging.current) setDisplayValue(value);
   }, [value]);
 
   const pct = max === min ? 0 : Math.max(0, Math.min(100, ((displayValue - min) / (max - min)) * 100));
@@ -49,7 +47,6 @@ export default function NativeSlider({
   const updateFromX = useCallback((clientX: number) => {
     if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
-    // Thumb is 28px wide — track starts at 14px and ends 14px before right edge
     const x = clientX - rect.left - 14;
     const trackWidth = Math.max(1, rect.width - 28);
     const fraction = Math.max(0, Math.min(1, x / trackWidth));
@@ -64,27 +61,78 @@ export default function NativeSlider({
     }
   }, [min, max, step, onChange]);
 
+  // Pointer events for desktop/mouse — setPointerCapture keeps move working outside element
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === "touch") return; // handled by touch path below
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
+    activePtrId.current = e.pointerId;
     isDragging.current = true;
     updateFromX(e.clientX);
   }, [updateFromX]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === "touch") return;
     if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
     updateFromX(e.clientX);
   }, [updateFromX]);
 
   const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === "touch") return;
     if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
     e.currentTarget.releasePointerCapture(e.pointerId);
     isDragging.current = false;
+    activePtrId.current = null;
     lastHapticVal.current = null;
     onCommit?.(displayValueRef.current);
   }, [onCommit]);
 
-  // Keyboard accessibility via a hidden native range input
+  // Touch events — imperative listener with passive:false so preventDefault() works,
+  // which stops iOS from cancelling the touch for scroll mid-drag.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const onTouchStart = (e: TouchEvent) => {
+      e.preventDefault(); // Block scroll — must be non-passive
+      const touch = e.changedTouches[0];
+      if (!touch) return;
+      isDragging.current = true;
+      activePtrId.current = touch.identifier;
+      lastHapticVal.current = null;
+      updateFromX(touch.clientX);
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
+      if (!isDragging.current) return;
+      const touch = Array.from(e.changedTouches).find(t => t.identifier === activePtrId.current);
+      if (!touch) return;
+      updateFromX(touch.clientX);
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (!isDragging.current) return;
+      const touch = Array.from(e.changedTouches).find(t => t.identifier === activePtrId.current);
+      isDragging.current = false;
+      activePtrId.current = null;
+      lastHapticVal.current = null;
+      onCommit?.(displayValueRef.current);
+    };
+
+    el.addEventListener("touchstart", onTouchStart, { passive: false });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", onTouchEnd, { passive: false });
+    el.addEventListener("touchcancel", onTouchEnd, { passive: false });
+
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", onTouchEnd);
+      el.removeEventListener("touchcancel", onTouchEnd);
+    };
+  }, [updateFromX, onCommit]);
+
   const handleKeyChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const v = Number(e.target.value);
     setDisplayValue(v);
@@ -107,12 +155,10 @@ export default function NativeSlider({
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
     >
-      {/* Background track */}
       <div
         className="absolute pointer-events-none rounded-full"
         style={{ left: 14, right: 14, top: 10, height: 8, background: "var(--muted)" }}
       />
-      {/* Fill track */}
       <div
         className="absolute pointer-events-none rounded-full"
         style={{
@@ -123,7 +169,6 @@ export default function NativeSlider({
           background: fillColor,
         }}
       />
-      {/* Thumb */}
       <div
         className="absolute pointer-events-none rounded-full"
         style={{
@@ -136,7 +181,6 @@ export default function NativeSlider({
           boxShadow: "0 2px 6px rgba(0,0,0,0.35)",
         }}
       />
-      {/* Hidden native input — keyboard / VoiceOver accessibility only */}
       <input
         type="range"
         min={min}

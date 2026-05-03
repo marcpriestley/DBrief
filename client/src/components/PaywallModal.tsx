@@ -171,16 +171,30 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
         // User closed the in-app browser (tapped native "Done" button, or the
         // deep-link wasn't registered so auto-return didn't fire).
         // checkout-return page calls checkout-signal BEFORE showing the "Done"
-        // hint, so the DB is already updated. Do one final authoritative check.
-        try {
-          // First try a Stripe-side sync for maximum reliability.
-          await fetch("/api/subscription/sync", { method: "POST" }).catch(() => {});
-          const me = await fetch("/api/auth/me").then(r => r.json());
-          if (me.subscriptionStatus === "premium" || me.subscriptionStatus === "beta") {
-            try { localStorage.removeItem("dbrief_sub_pending"); } catch (_) {}
-            handlePremiumDetected();
+        // hint, so the DB should already be updated. Retry up to 4 times
+        // (0 s, 2 s, 4 s, 8 s) to handle the race where Done is tapped before
+        // checkout-signal has finished writing to the DB.
+        const checkPremium = async (): Promise<boolean> => {
+          try {
+            await fetch("/api/subscription/sync", { method: "POST" }).catch(() => {});
+            const me = await fetch("/api/auth/me").then(r => r.json());
+            if (me.subscriptionStatus === "premium" || me.subscriptionStatus === "beta") {
+              try { localStorage.removeItem("dbrief_sub_pending"); } catch (_) {}
+              handlePremiumDetected();
+              return true;
+            }
+          } catch (_) {}
+          return false;
+        };
+        if (!(await checkPremium())) {
+          // Retry with back-off — covers the race where Done fires before
+          // the checkout-signal API call has finished updating the DB.
+          const delays = [2000, 4000, 8000];
+          for (const delay of delays) {
+            await new Promise(r => setTimeout(r, delay));
+            if (await checkPremium()) break;
           }
-        } catch (_) {}
+        }
       });
       browserListenerRef.current = listener;
       await Browser.open({ url: checkoutUrl, presentationStyle: "fullscreen" });

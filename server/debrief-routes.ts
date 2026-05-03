@@ -738,12 +738,13 @@ export function registerDebriefRoutes(app: Express): void {
           type: "function",
           function: {
             name: "add_habit",
-            description: "Add a new habit to the user's Habit Lab. Only call after confirming the habit name and what counts as completing it.",
+            description: "Add a new habit to the user's Habit Lab. Only call after confirming the habit name. If the user specifies a schedule (alternate days, every other day, weekly, etc.), set frequency accordingly.",
             parameters: {
               type: "object",
               properties: {
                 name: { type: "string", description: "Short habit name (e.g. 'Cold shower', 'Read 20 pages')" },
                 emoji: { type: "string", description: "A single relevant emoji for the habit" },
+                frequency: { type: "string", enum: ["daily", "alternate", "weekly"], description: "How often: 'daily' (default, every day), 'alternate' (every other day), 'weekly' (once a week)" },
               },
               required: ["name"],
             },
@@ -936,6 +937,7 @@ export function registerDebriefRoutes(app: Express): void {
                 name: params.name,
                 emoji: params.emoji || "⭐",
                 category: "general",
+                frequency: (params.frequency as string) || "daily",
                 isArchived: false,
               });
               actions.push({ type: "add_habit", params, success: true, message: `Added habit: ${params.name}` });

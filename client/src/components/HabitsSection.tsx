@@ -359,7 +359,7 @@ export default function HabitsSection() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm p-4"
+            className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 backdrop-blur-sm p-4"
             onClick={() => setConfirmDeleteId(null)}
           >
             <motion.div
@@ -619,7 +619,7 @@ function SetupModal({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60 backdrop-blur-sm p-4"
       onClick={onClose}
     >
       <motion.div
@@ -1050,7 +1050,8 @@ function EditModal({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60 backdrop-blur-sm p-4 pb-safe"
+      style={{ paddingBottom: "max(1rem, calc(env(safe-area-inset-bottom) + 1rem))" }}
       onClick={onClose}
     >
       <motion.div
@@ -1059,7 +1060,7 @@ function EditModal({
         exit={{ y: 40, opacity: 0 }}
         onClick={e => e.stopPropagation()}
         className="bg-card rounded-2xl border border-border/50 w-full max-w-md overflow-y-auto space-y-4"
-        style={{ maxHeight: "82dvh" }}
+        style={{ maxHeight: "80dvh" }}
       >
         <div className="p-5 space-y-4">
           <div className="flex items-center justify-between">
