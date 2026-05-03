@@ -830,6 +830,17 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
               if (data.content) {
                 accumulated += data.content;
                 setStreamingContent(accumulated);
+                // On the very first token: scroll chat container so the start
+                // of the streaming response is visible at the top of the chat area.
+                // Done here (in the streaming loop) rather than relying on the
+                // streamingMsgRef useEffect, because framer-motion may not have
+                // attached that ref yet when the effect fires on the first token.
+                if (!hasScrolledToStreamStart.current) {
+                  hasScrolledToStreamStart.current = true;
+                  lockScrollAfterStreamRef.current = true;
+                  const c = chatContainerRef.current;
+                  if (c) c.scrollTop = c.scrollHeight;
+                }
                 // Speak the first complete sentence immediately (minimum latency TTS)
                 if (tts.enabled && ttsFirstSentenceRef.current === 0) {
                   const sentMatch = /[^.!?\n]{15,}[.!?][\s\n]/.exec(accumulated);
@@ -1023,7 +1034,9 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
               setStreamingContent(accumulated);
               if (!hasScrolledToStreamStart.current) {
                 hasScrolledToStreamStart.current = true;
-                setTimeout(() => chatContainerRef.current?.scrollTo({ top: chatContainerRef.current.scrollHeight, behavior: "smooth" }), 50);
+                lockScrollAfterStreamRef.current = true;
+                const c = chatContainerRef.current;
+                if (c) c.scrollTop = c.scrollHeight;
               }
               if (tts.enabled && !tts.speaking && !hadTtsResponseRef.current) {
                 const end = findFirstSentenceEnd(accumulated);

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import { haptic } from "@/lib/haptics";
 
 interface NativeSliderProps {
@@ -13,12 +13,17 @@ interface NativeSliderProps {
 }
 
 // Custom slider that works reliably on iOS WebKit inside scroll containers.
-// Strategy:
-//   - Pointer Events + setPointerCapture for desktop / mouse input
-//   - Imperative addEventListener('touchstart', { passive: false }) to call
-//     preventDefault() on the raw touch event, which stops iOS from interpreting
-//     the gesture as a scroll and issuing a pointercancel that kills the drag.
-//     React synthetic onTouchStart is passive in React 17+ and cannot preventDefault.
+//
+// Key design decisions:
+// 1. Touch events registered imperatively with { passive: false } so
+//    preventDefault() actually works — this stops iOS from cancelling the
+//    touch gesture for scroll mid-drag.
+// 2. onChange / onCommit stored in refs so the touch-event useEffect has
+//    NO changing dependencies and therefore NEVER tears down & re-registers
+//    listeners during an active drag.  The previous version had updateFromX
+//    in the dep array — every state update from the parent caused a new
+//    onChange ref → new updateFromX → effect cleanup → listeners removed
+//    mid-drag → slider froze.
 export default function NativeSlider({
   value,
   onChange,
@@ -31,119 +36,125 @@ export default function NativeSlider({
 }: NativeSliderProps) {
   const fillColor = color ?? "hsl(40, 95%, 48%)";
   const [displayValue, setDisplayValue] = useState(value);
-  const isDragging = useRef(false);
-  const activePtrId = useRef<number | null>(null);
-  const lastHapticVal = useRef<number | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const displayValueRef = useRef(displayValue);
-  useEffect(() => { displayValueRef.current = displayValue; }, [displayValue]);
 
+  // ── Stable refs — never go stale, never trigger re-registration ──────────
+  const containerRef      = useRef<HTMLDivElement>(null);
+  const isDragging        = useRef(false);
+  const activeTouchId     = useRef<number | null>(null);
+  const lastHapticVal     = useRef<number | null>(null);
+  const displayValueRef   = useRef(displayValue);
+  const minRef            = useRef(min);
+  const maxRef            = useRef(max);
+  const stepRef           = useRef(step);
+  const onChangeRef       = useRef(onChange);
+  const onCommitRef       = useRef(onCommit);
+
+  // Keep refs in sync on every render — safe because refs never trigger effects
+  displayValueRef.current = displayValue;
+  minRef.current          = min;
+  maxRef.current          = max;
+  stepRef.current         = step;
+  onChangeRef.current     = onChange;
+  onCommitRef.current     = onCommit;
+
+  // Sync display value from outside only when not dragging
   useEffect(() => {
     if (!isDragging.current) setDisplayValue(value);
   }, [value]);
 
-  const pct = max === min ? 0 : Math.max(0, Math.min(100, ((displayValue - min) / (max - min)) * 100));
+  const pct = max === min ? 0 : Math.max(0, Math.min(100,
+    ((displayValue - min) / (max - min)) * 100
+  ));
 
-  const updateFromX = useCallback((clientX: number) => {
-    if (!containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    const x = clientX - rect.left - 14;
-    const trackWidth = Math.max(1, rect.width - 28);
-    const fraction = Math.max(0, Math.min(1, x / trackWidth));
-    const raw = min + fraction * (max - min);
-    const stepped = Math.round(raw / step) * step;
-    const clamped = Math.max(min, Math.min(max, stepped));
+  // Stable helper — reads everything from refs so it never changes identity
+  const updateFromX = (clientX: number) => {
+    const el = containerRef.current;
+    if (!el) return;
+    const rect  = el.getBoundingClientRect();
+    const x     = clientX - rect.left - 14;
+    const track = Math.max(1, rect.width - 28);
+    const frac  = Math.max(0, Math.min(1, x / track));
+    const raw   = minRef.current + frac * (maxRef.current - minRef.current);
+    const stepped = Math.round(raw / stepRef.current) * stepRef.current;
+    const clamped = Math.max(minRef.current, Math.min(maxRef.current, stepped));
     setDisplayValue(clamped);
-    onChange(clamped);
-    if (lastHapticVal.current === null || Math.abs(clamped - lastHapticVal.current) >= step * 5) {
+    displayValueRef.current = clamped;
+    onChangeRef.current(clamped);
+    if (lastHapticVal.current === null ||
+        Math.abs(clamped - lastHapticVal.current) >= stepRef.current * 5) {
       haptic("light");
       lastHapticVal.current = clamped;
     }
-  }, [min, max, step, onChange]);
+  };
 
-  // Pointer events for desktop/mouse — setPointerCapture keeps move working outside element
-  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.pointerType === "touch") return; // handled by touch path below
-    e.preventDefault();
-    e.currentTarget.setPointerCapture(e.pointerId);
-    activePtrId.current = e.pointerId;
-    isDragging.current = true;
-    updateFromX(e.clientX);
-  }, [updateFromX]);
-
-  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.pointerType === "touch") return;
-    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
-    updateFromX(e.clientX);
-  }, [updateFromX]);
-
-  const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.pointerType === "touch") return;
-    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
-    e.currentTarget.releasePointerCapture(e.pointerId);
-    isDragging.current = false;
-    activePtrId.current = null;
-    lastHapticVal.current = null;
-    onCommit?.(displayValueRef.current);
-  }, [onCommit]);
-
-  // Touch events — imperative listener with passive:false so preventDefault() works,
-  // which stops iOS from cancelling the touch for scroll mid-drag.
+  // ── Touch events — registered once, never re-registered ──────────────────
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
 
     const onTouchStart = (e: TouchEvent) => {
-      e.preventDefault(); // Block scroll — must be non-passive
-      const touch = e.changedTouches[0];
-      if (!touch) return;
-      isDragging.current = true;
-      activePtrId.current = touch.identifier;
+      e.preventDefault();
+      const t = e.changedTouches[0];
+      if (!t) return;
+      isDragging.current    = true;
+      activeTouchId.current = t.identifier;
       lastHapticVal.current = null;
-      updateFromX(touch.clientX);
+      updateFromX(t.clientX);
     };
 
     const onTouchMove = (e: TouchEvent) => {
       e.preventDefault();
       if (!isDragging.current) return;
-      const touch = Array.from(e.changedTouches).find(t => t.identifier === activePtrId.current);
-      if (!touch) return;
-      updateFromX(touch.clientX);
+      const t = Array.from(e.changedTouches)
+        .find(x => x.identifier === activeTouchId.current);
+      if (t) updateFromX(t.clientX);
     };
 
     const onTouchEnd = (e: TouchEvent) => {
       if (!isDragging.current) return;
-      const touch = Array.from(e.changedTouches).find(t => t.identifier === activePtrId.current);
-      isDragging.current = false;
-      activePtrId.current = null;
+      isDragging.current    = false;
+      activeTouchId.current = null;
       lastHapticVal.current = null;
-      onCommit?.(displayValueRef.current);
+      onCommitRef.current?.(displayValueRef.current);
     };
 
-    el.addEventListener("touchstart", onTouchStart, { passive: false });
-    el.addEventListener("touchmove", onTouchMove, { passive: false });
-    el.addEventListener("touchend", onTouchEnd, { passive: false });
-    el.addEventListener("touchcancel", onTouchEnd, { passive: false });
+    el.addEventListener("touchstart",  onTouchStart, { passive: false });
+    el.addEventListener("touchmove",   onTouchMove,  { passive: false });
+    el.addEventListener("touchend",    onTouchEnd,   { passive: false });
+    el.addEventListener("touchcancel", onTouchEnd,   { passive: false });
 
     return () => {
-      el.removeEventListener("touchstart", onTouchStart);
-      el.removeEventListener("touchmove", onTouchMove);
-      el.removeEventListener("touchend", onTouchEnd);
+      el.removeEventListener("touchstart",  onTouchStart);
+      el.removeEventListener("touchmove",   onTouchMove);
+      el.removeEventListener("touchend",    onTouchEnd);
       el.removeEventListener("touchcancel", onTouchEnd);
     };
-  }, [updateFromX, onCommit]);
+  }, []); // ← empty: runs once, never tears down during a drag
 
-  const handleKeyChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = Number(e.target.value);
-    setDisplayValue(v);
-    onChange(v);
-  }, [onChange]);
+  // ── Pointer events for mouse / stylus ────────────────────────────────────
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === "touch") return;
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    isDragging.current = true;
+    lastHapticVal.current = null;
+    updateFromX(e.clientX);
+  };
 
-  const handleKeyCommit = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "Home" || e.key === "End") {
-      onCommit?.(Number((e.target as HTMLInputElement).value));
-    }
-  }, [onCommit]);
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === "touch") return;
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+    updateFromX(e.clientX);
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === "touch") return;
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+    e.currentTarget.releasePointerCapture(e.pointerId);
+    isDragging.current = false;
+    lastHapticVal.current = null;
+    onCommitRef.current?.(displayValueRef.current);
+  };
 
   return (
     <div
@@ -155,10 +166,12 @@ export default function NativeSlider({
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
     >
+      {/* Track background */}
       <div
         className="absolute pointer-events-none rounded-full"
         style={{ left: 14, right: 14, top: 10, height: 8, background: "var(--muted)" }}
       />
+      {/* Track fill */}
       <div
         className="absolute pointer-events-none rounded-full"
         style={{
@@ -169,6 +182,7 @@ export default function NativeSlider({
           background: fillColor,
         }}
       />
+      {/* Thumb */}
       <div
         className="absolute pointer-events-none rounded-full"
         style={{
@@ -181,14 +195,23 @@ export default function NativeSlider({
           boxShadow: "0 2px 6px rgba(0,0,0,0.35)",
         }}
       />
+      {/* Hidden native range for keyboard a11y */}
       <input
         type="range"
         min={min}
         max={max}
         step={step}
         value={displayValue}
-        onChange={handleKeyChange}
-        onKeyUp={handleKeyCommit}
+        onChange={e => {
+          const v = Number(e.target.value);
+          setDisplayValue(v);
+          onChangeRef.current(v);
+        }}
+        onKeyUp={e => {
+          const keys = ["ArrowLeft","ArrowRight","Home","End"];
+          if (keys.includes(e.key))
+            onCommitRef.current?.(Number((e.target as HTMLInputElement).value));
+        }}
         tabIndex={0}
         style={{
           position: "absolute",
@@ -196,7 +219,6 @@ export default function NativeSlider({
           width: "100%",
           height: "100%",
           opacity: 0,
-          cursor: "pointer",
           margin: 0,
           padding: 0,
           pointerEvents: "none",
