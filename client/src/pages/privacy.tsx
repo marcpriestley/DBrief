@@ -145,7 +145,7 @@ export default function PrivacyPolicy() {
 
         {/* Footer */}
         <div className="pt-4 border-t border-border/40 text-center space-y-1">
-          <p className="text-xs text-muted-foreground">© 2026 DBrief App. All rights reserved.</p>
+          <p className="text-xs text-muted-foreground">© 2026 Blue Suede Media Ltd. All rights reserved.</p>
           <p className="text-[11px] text-muted-foreground/60">Questions? <a href="mailto:marcpriestley@gmail.com" className="text-primary underline underline-offset-2">marcpriestley@gmail.com</a></p>
         </div>
 
