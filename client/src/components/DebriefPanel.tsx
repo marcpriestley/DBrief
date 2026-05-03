@@ -838,8 +838,20 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                 if (!hasScrolledToStreamStart.current) {
                   hasScrolledToStreamStart.current = true;
                   lockScrollAfterStreamRef.current = true;
-                  const c = chatContainerRef.current;
-                  if (c) c.scrollTop = c.scrollHeight;
+                  // Double-rAF: first frame = React commit (streaming bubble in DOM),
+                  // second frame = browser paint (framer-motion ref attached).
+                  // We can then scroll to the exact top of the streaming bubble.
+                  requestAnimationFrame(() => requestAnimationFrame(() => {
+                    const c = chatContainerRef.current;
+                    const el = streamingMsgRef.current;
+                    if (!c) return;
+                    if (el) {
+                      const targetScrollTop = c.scrollTop + (el.getBoundingClientRect().top - c.getBoundingClientRect().top) - 8;
+                      c.scrollTop = Math.max(0, Math.min(targetScrollTop, c.scrollHeight - c.clientHeight));
+                    } else {
+                      c.scrollTop = c.scrollHeight;
+                    }
+                  }));
                 }
                 // Speak the first complete sentence immediately (minimum latency TTS)
                 if (tts.enabled && ttsFirstSentenceRef.current === 0) {
@@ -894,11 +906,10 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
           tts.speakOrQueue(remainder);
           hadTtsResponseRef.current = tts.enabled;
         }
-        // When TTS is off, speculatively pre-fetch the full response audio so the
-        // speaker button plays instantly instead of waiting for an API round-trip.
-        if (!tts.enabled) {
-          tts.preFetchForButton(accumulated);
-        }
+        // Always speculatively pre-fetch the full response audio so the speaker
+        // button plays instantly — whether TTS auto-played or not. The user may
+        // want to replay, and the cache hit eliminates the API round-trip delay.
+        tts.preFetchForButton(accumulated);
       }
       // After streaming ends, always scroll to bottom — this reveals the
       // End Session / Go Deeper buttons that appear after the response.
@@ -1035,8 +1046,17 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
               if (!hasScrolledToStreamStart.current) {
                 hasScrolledToStreamStart.current = true;
                 lockScrollAfterStreamRef.current = true;
-                const c = chatContainerRef.current;
-                if (c) c.scrollTop = c.scrollHeight;
+                requestAnimationFrame(() => requestAnimationFrame(() => {
+                  const c = chatContainerRef.current;
+                  const el = streamingMsgRef.current;
+                  if (!c) return;
+                  if (el) {
+                    const targetScrollTop = c.scrollTop + (el.getBoundingClientRect().top - c.getBoundingClientRect().top) - 8;
+                    c.scrollTop = Math.max(0, Math.min(targetScrollTop, c.scrollHeight - c.clientHeight));
+                  } else {
+                    c.scrollTop = c.scrollHeight;
+                  }
+                }));
               }
               if (tts.enabled && !tts.speaking && !hadTtsResponseRef.current) {
                 const end = findFirstSentenceEnd(accumulated);
@@ -1054,7 +1074,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
       if (accumulated) {
         const remainder = ttsFirstSentenceRef.current ? accumulated.slice(ttsFirstSentenceRef.current).trim() : accumulated;
         if (remainder && tts.enabled) tts.speakOrQueue(remainder);
-        if (!tts.enabled) tts.preFetchForButton(accumulated);
+        tts.preFetchForButton(accumulated);
         lastStreamedAiMsgRef.current = accumulated;
       }
 

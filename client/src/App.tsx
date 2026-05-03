@@ -368,25 +368,22 @@ function AuthenticatedRouter() {
 
   if (isLoading) return null;
 
-  // Hold content invisible while the splash is fading out (370ms).
-  // This prevents the user seeing two different-sized logos overlapping.
-  const revealStyle: React.CSSProperties = {
-    opacity: contentReady ? 1 : 0,
-    transition: contentReady ? "opacity 0.18s ease" : "none",
-  };
+  // contentReady is still set (controls nothing visually now) but kept so
+  // the effect that dismisses the splash can reference isLoading cleanly.
+  void contentReady; // suppress unused-variable lint
 
   if (!user) {
-    return <div style={revealStyle}><Welcome /></div>;
+    return <Welcome />;
   }
 
   if (!user.hasCompletedOnboarding) {
-    return <div style={revealStyle}><OnboardingFlow username={user.username} /></div>;
+    return <OnboardingFlow username={user.username} />;
   }
 
   const dateOfBirth = user?.userProfile?.dateOfBirth ?? null;
 
   return (
-    <div style={revealStyle}>
+    <div>
       <MoodProvider value={{ openMood: () => setIsMoodOpen(true) }}>
         <Switch>
           <Route path="/" component={Dashboard} />
