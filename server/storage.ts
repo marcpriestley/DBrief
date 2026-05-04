@@ -1235,13 +1235,19 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(habitLogs.userId, userId), gte(habitLogs.date, weekStart), lte(habitLogs.date, weekEnd)));
     const todayCompletedSet = new Set(weekLogs.filter(l => l.date === date).map(l => l.habitId));
     // Return ALL non-archived habits — dueToday=false means it's a rest/future day, not hidden
-    return allHabits.map(h => ({
-      ...h,
-      dueToday: isHabitDueToday(h, date),
-      todayCompleted: todayCompletedSet.has(h.id),
-      last7Days: weekDates.map(d => weekLogs.some(l => l.habitId === h.id && l.date === d)),
-      last7Scheduled: weekDates.map(d => isHabitDueToday(h, d)),
-    }));
+    return allHabits.map(h => {
+      const effStart: string | null =
+        (h as any).startDate ||
+        (h.createdAt ? new Date(h.createdAt).toISOString().split('T')[0] : null);
+      return {
+        ...h,
+        dueToday: isHabitDueToday(h, date),
+        todayCompleted: todayCompletedSet.has(h.id),
+        last7Days: weekDates.map(d => weekLogs.some(l => l.habitId === h.id && l.date === d)),
+        last7Scheduled: weekDates.map(d => isHabitDueToday(h, d)),
+        last7BeforeStart: weekDates.map(d => !!(effStart && d < effStart)),
+      };
+    });
   }
 
   async toggleHabitCompletion(habitId: number, userId: number, date: string): Promise<{ habit: Habit; completed: boolean }> {

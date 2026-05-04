@@ -10,7 +10,7 @@ import { normalizeAnchor, normalizeHabitName, stackingSentence, habitNotificatio
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-type HabitWithStatus = Habit & { todayCompleted: boolean; dueToday?: boolean; last7Days: boolean[]; last7Scheduled?: boolean[] };
+type HabitWithStatus = Habit & { todayCompleted: boolean; dueToday?: boolean; last7Days: boolean[]; last7Scheduled?: boolean[]; last7BeforeStart?: boolean[] };
 
 // ─── Emoji + category options ────────────────────────────────────────────────
 
@@ -425,7 +425,7 @@ export default function HabitsSection() {
 
 // ─── 7-day dots ──────────────────────────────────────────────────────────────
 
-function WeekDots({ days, scheduled }: { days: boolean[]; scheduled?: boolean[] }) {
+function WeekDots({ days, scheduled, beforeStart }: { days: boolean[]; scheduled?: boolean[]; beforeStart?: boolean[] }) {
   // days[0] = Monday … days[6] = Sunday of the current week
   const DAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
   const todayDow = new Date().getDay();
@@ -434,21 +434,26 @@ function WeekDots({ days, scheduled }: { days: boolean[]; scheduled?: boolean[] 
   return (
     <div className="flex items-center gap-2 mt-1.5">
       {days.map((done, i) => {
+        const isBefore    = beforeStart?.[i] ?? false;
         const isScheduled = !scheduled || scheduled[i];
-        const isToday = i === todayIndex;
+        const isToday     = i === todayIndex;
+
+        // Three distinct states:
+        // 1. Before the habit's start date — just faint, no strikethrough
+        // 2. Off-day in the pattern (after start) — strikethrough
+        // 3. Active scheduled day — normal / done / today highlight
+        const cls = isBefore
+          ? "text-muted-foreground/15"
+          : !isScheduled
+            ? "line-through text-muted-foreground/25"
+            : done
+              ? "text-primary"
+              : isToday
+                ? "text-primary/80"
+                : "text-muted-foreground/60";
+
         return (
-          <span
-            key={i}
-            className={`text-[10px] font-semibold leading-none ${
-              isScheduled
-                ? done
-                  ? "text-primary"
-                  : isToday
-                    ? "text-primary/80"
-                    : "text-muted-foreground/60"
-                : "line-through text-muted-foreground/25"
-            }`}
-          >
+          <span key={i} className={`text-[10px] font-semibold leading-none ${cls}`}>
             {DAY_LABELS[i]}
           </span>
         );
@@ -537,7 +542,7 @@ function HabitCard({
             </p>
           )}
           {/* 7-day completion dots */}
-          <WeekDots days={habit.last7Days ?? []} scheduled={habit.last7Scheduled} />
+          <WeekDots days={habit.last7Days ?? []} scheduled={habit.last7Scheduled} beforeStart={habit.last7BeforeStart} />
           {/* Progress bar to next milestone */}
           <div className="flex items-center gap-2 mt-1.5">
             <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
