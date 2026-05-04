@@ -442,11 +442,9 @@ function WeekDots({ days, scheduled, beforeStart }: { days: boolean[]; scheduled
         // 1. Before the habit's start date — just faint, no strikethrough
         // 2. Off-day in the pattern (after start) — strikethrough
         // 3. Active scheduled day — normal / done / today highlight
-        const cls = isBefore
+        const cls = isBefore || !isScheduled
           ? "text-muted-foreground/15"
-          : !isScheduled
-            ? "line-through text-muted-foreground/25"
-            : done
+          : done
               ? "text-primary"
               : isToday
                 ? "text-primary/80"
