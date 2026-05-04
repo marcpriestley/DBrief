@@ -20,6 +20,11 @@ const config: CapacitorConfig = {
     // iPhone models.  With real env() values, a single CSS rule covers every
     // device perfectly.
   },
+  android: {
+    // Match the iOS dark background so no white flash appears behind the
+    // WebView before the app CSS loads.
+    backgroundColor: '#141414',
+  },
   plugins: {
     // Native-layer StatusBar config — applied before any JS runs so keyboard
     // transitions can't catch us in a "not yet overlaid" state.
