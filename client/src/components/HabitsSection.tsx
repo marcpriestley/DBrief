@@ -443,12 +443,12 @@ function WeekDots({ days, scheduled, beforeStart }: { days: boolean[]; scheduled
         // 2. Off-day in the pattern (after start) — strikethrough
         // 3. Active scheduled day — normal / done / today highlight
         const cls = isBefore || !isScheduled
-          ? "text-muted-foreground/15"
+          ? "opacity-20 text-muted-foreground"
           : done
               ? "text-primary"
               : isToday
-                ? "text-primary/80"
-                : "text-muted-foreground/60";
+                ? "text-primary opacity-75"
+                : "text-muted-foreground";
 
         return (
           <span key={i} className={`text-[10px] font-semibold leading-none ${cls}`}>
