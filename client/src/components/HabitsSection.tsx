@@ -10,7 +10,7 @@ import { normalizeAnchor, normalizeHabitName, stackingSentence, habitNotificatio
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-type HabitWithStatus = Habit & { todayCompleted: boolean; last7Days: boolean[]; last7Scheduled?: boolean[] };
+type HabitWithStatus = Habit & { todayCompleted: boolean; dueToday?: boolean; last7Days: boolean[]; last7Scheduled?: boolean[] };
 
 // ─── Emoji + category options ────────────────────────────────────────────────
 
@@ -129,8 +129,9 @@ export default function HabitsSection() {
     queryFn: () => fetch(`/api/habits?date=${selectedDate}`, { credentials: "include" }).then(r => r.json()),
   });
 
-  const completedToday = habits.filter(h => h.todayCompleted).length;
-  const totalHabits = habits.length;
+  const dueHabits = habits.filter(h => h.dueToday !== false);
+  const completedToday = dueHabits.filter(h => h.todayCompleted).length;
+  const totalHabits = dueHabits.length;
 
   const toggleMutation = useMutation({
     mutationFn: ({ id, date }: { id: number; date: string }) =>
@@ -173,6 +174,7 @@ export default function HabitsSection() {
   const MILESTONE_THRESHOLDS = [7, 21, 66, 100, 365];
 
   const handleToggle = useCallback((habit: HabitWithStatus) => {
+    if (habit.dueToday === false) return; // can't complete a rest day
     const isCompleting = !habit.todayCompleted;
     if (isCompleting && habit.motivation) {
       setMotivationFlash(habit.motivation);
@@ -482,33 +484,43 @@ function HabitCard({
   const progress = Math.min(100, (total / milestone) * 100);
   const streak = habit.currentStreak || 0;
 
+  const isRestDay = habit.dueToday === false;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
       className={`relative rounded-xl border transition-all ${
-        habit.todayCompleted
-          ? "border-primary/30 bg-primary/5"
-          : "border-border/50 bg-muted/20"
+        isRestDay
+          ? "border-border/30 bg-muted/10 opacity-60"
+          : habit.todayCompleted
+            ? "border-primary/30 bg-primary/5"
+            : "border-border/50 bg-muted/20"
       }`}
     >
       <div className="flex items-center gap-3 p-4">
-        {/* Completion toggle */}
-        <button
-          onClick={() => onToggle(habit)}
-          className={`shrink-0 w-9 h-9 rounded-full border-2 flex items-center justify-center transition-all text-lg ${
-            habit.todayCompleted
-              ? "border-primary bg-primary text-white"
-              : "border-border/60 bg-transparent text-muted-foreground/30 hover:border-primary/50"
-          }`}
-        >
-          {habit.todayCompleted ? (
-            <Check className="h-4 w-4 text-white" />
-          ) : (
-            <span className="text-base leading-none">{habit.emoji}</span>
-          )}
-        </button>
+        {/* Completion toggle / rest day indicator */}
+        {isRestDay ? (
+          <div className="shrink-0 w-9 h-9 rounded-full border-2 border-border/30 bg-transparent flex items-center justify-center">
+            <span className="text-base leading-none opacity-40">—</span>
+          </div>
+        ) : (
+          <button
+            onClick={() => onToggle(habit)}
+            className={`shrink-0 w-9 h-9 rounded-full border-2 flex items-center justify-center transition-all text-lg ${
+              habit.todayCompleted
+                ? "border-primary bg-primary text-white"
+                : "border-border/60 bg-transparent text-muted-foreground/30 hover:border-primary/50"
+            }`}
+          >
+            {habit.todayCompleted ? (
+              <Check className="h-4 w-4 text-white" />
+            ) : (
+              <span className="text-base leading-none">{habit.emoji}</span>
+            )}
+          </button>
+        )}
 
         {/* Info */}
         <div className="flex-1 min-w-0">
@@ -517,6 +529,9 @@ function HabitCard({
             <span className={`text-sm font-medium truncate ${habit.todayCompleted ? "text-primary line-through opacity-60" : "text-foreground"}`}>
               {habit.name}
             </span>
+            {isRestDay && (
+              <span className="text-[10px] text-muted-foreground/50 border border-border/30 rounded px-1 py-0.5 shrink-0">rest</span>
+            )}
           </div>
           {habit.anchorHabit && (
             <p className="text-xs text-muted-foreground truncate mt-0.5">After {normalizeAnchor(habit.anchorHabit)}</p>
@@ -544,8 +559,9 @@ function HabitCard({
 
         {/* Streak — tap 🌱 to log today's completion */}
         <button
-          onClick={() => onToggle(habit)}
-          className="flex flex-col items-center shrink-0 min-w-[40px] active:scale-95 transition-transform"
+          onClick={() => !isRestDay && onToggle(habit)}
+          disabled={isRestDay}
+          className={`flex flex-col items-center shrink-0 min-w-[40px] transition-transform ${isRestDay ? "opacity-30 cursor-default" : "active:scale-95"}`}
         >
           {streak > 0 ? (
             <>
@@ -895,53 +911,74 @@ function Step1({ setup, setSetup }: { setup: SetupState; setSetup: (s: SetupStat
       </div>
 
       {/* Start date */}
-      <StartDatePicker setup={setup} setSetup={setSetup} />
+      <StartDatePicker setup={setup} setSetup={setSetup} frequency={setup.frequency} />
     </div>
   );
 }
 
-function StartDatePicker({ setup, setSetup }: { setup: SetupState; setSetup: (s: SetupState) => void }) {
-  const todayStr = (() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  })();
-  const tomorrowStr = (() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  })();
+function dateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
-  const isTomorrow = setup.startDate === tomorrowStr;
-  const isToday = !isTomorrow;
+function nextWeekday(targetDow: number): Date {
+  const d = new Date();
+  d.setHours(12, 0, 0, 0);
+  const diff = (targetDow - d.getDay() + 7) % 7;
+  d.setDate(d.getDate() + (diff === 0 ? 0 : diff));
+  return d;
+}
+
+function StartDatePicker({ setup, setSetup, frequency }: { setup: SetupState; setSetup: (s: SetupState) => void; frequency: string }) {
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(today.getDate() + 1);
+
+  const todayStr = dateStr(today);
+  const tomorrowStr = dateStr(tomorrow);
+
+  // For weekend habits, offer Saturday and Sunday
+  const isWeekendFreq = frequency === "weekends";
+  const satDate = nextWeekday(6); // Saturday
+  const sunDate = nextWeekday(0); // Sunday
+  const satStr = dateStr(satDate);
+  const sunStr = dateStr(sunDate);
+
+  const options: { label: string; value: string; hint?: string }[] = isWeekendFreq
+    ? [
+        { label: "Saturday", value: satStr, hint: satStr === todayStr ? "today" : undefined },
+        { label: "Sunday",   value: sunStr, hint: sunStr === todayStr ? "today" : undefined },
+      ]
+    : [
+        { label: "Today",    value: todayStr },
+        { label: "Tomorrow", value: tomorrowStr },
+      ];
+
+  const selected = setup.startDate;
+  const isDeferred = selected !== todayStr;
 
   return (
     <div>
       <label className="text-xs text-muted-foreground block mb-2">When do you want to start?</label>
       <div className="flex gap-2">
-        <button
-          onClick={() => setSetup({ ...setup, startDate: todayStr })}
-          className={`flex-1 text-xs py-2 rounded-xl border font-medium transition-all ${
-            isToday
-              ? "border-primary/60 bg-primary/15 text-primary"
-              : "border-border/50 bg-muted/30 text-muted-foreground"
-          }`}
-        >
-          Today
-        </button>
-        <button
-          onClick={() => setSetup({ ...setup, startDate: tomorrowStr })}
-          className={`flex-1 text-xs py-2 rounded-xl border font-medium transition-all ${
-            isTomorrow
-              ? "border-primary/60 bg-primary/15 text-primary"
-              : "border-border/50 bg-muted/30 text-muted-foreground"
-          }`}
-        >
-          Tomorrow
-        </button>
+        {options.map(opt => (
+          <button
+            key={opt.value}
+            onClick={() => setSetup({ ...setup, startDate: opt.value })}
+            className={`flex-1 text-xs py-2 rounded-xl border font-medium transition-all ${
+              selected === opt.value
+                ? "border-primary/60 bg-primary/15 text-primary"
+                : "border-border/50 bg-muted/30 text-muted-foreground"
+            }`}
+          >
+            {opt.label}
+            {opt.hint && <span className="ml-1 opacity-60">({opt.hint})</span>}
+          </button>
+        ))}
       </div>
-      {isTomorrow && (
+      {isDeferred && (
         <p className="text-[11px] text-muted-foreground/60 mt-1.5">
-          Today will show as a rest day. Your streak starts tomorrow.
+          Today will show as a rest day. Your streak starts on your first active day.
         </p>
       )}
     </div>

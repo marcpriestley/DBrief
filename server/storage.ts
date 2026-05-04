@@ -1216,9 +1216,7 @@ export class DatabaseStorage implements IStorage {
 
   async getHabitWithTodayStatus(userId: number, date: string): Promise<Array<Habit & { todayCompleted: boolean; last7Days: boolean[] }>> {
     const allHabits = await this.getHabits(userId);
-    // Filter to only habits that are scheduled for this date
     const { isHabitDueToday } = await import("@shared/habitUtils");
-    const userHabits = allHabits.filter(h => isHabitDueToday(h, date));
     // Compute last 7 real calendar days (oldest → newest, ending today).
     const today = new Date();
     today.setHours(12, 0, 0, 0);
@@ -1233,8 +1231,10 @@ export class DatabaseStorage implements IStorage {
     const weekLogs = await db.select().from(habitLogs)
       .where(and(eq(habitLogs.userId, userId), gte(habitLogs.date, weekStart), lte(habitLogs.date, weekEnd)));
     const todayCompletedSet = new Set(weekLogs.filter(l => l.date === date).map(l => l.habitId));
-    return userHabits.map(h => ({
+    // Return ALL non-archived habits — dueToday=false means it's a rest/future day, not hidden
+    return allHabits.map(h => ({
       ...h,
+      dueToday: isHabitDueToday(h, date),
       todayCompleted: todayCompletedSet.has(h.id),
       last7Days: last7Dates.map(d => weekLogs.some(l => l.habitId === h.id && l.date === d)),
       last7Scheduled: last7Dates.map(d => isHabitDueToday(h, d)),
