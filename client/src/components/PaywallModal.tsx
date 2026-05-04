@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Mic, Users, BarChart2, Flag, Target, Zap, CheckCircle2 } from "lucide-react";
+import { X, Mic, Users, BarChart2, Flag, Target, Zap, CheckCircle2, CircleDot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { haptic } from "@/lib/haptics";
@@ -16,6 +16,7 @@ interface PaywallModalProps {
 }
 
 const PREMIUM_FEATURES = [
+  { icon: CircleDot, label: "Unlimited Metric Tracking", desc: "Track as many performance metrics as you need — free accounts are capped at 3" },
   { icon: Mic,       label: "Voice Notes",               desc: "Record unlimited audio debriefs" },
   { icon: Users,     label: "Team — Squad & Challenges", desc: "Connect with friends for accountability, leaderboards & group challenges" },
   { icon: Flag,      label: "Weekly Race Report",        desc: "AI-generated 7-day narrative debrief" },

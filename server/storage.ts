@@ -1237,6 +1237,7 @@ export class DatabaseStorage implements IStorage {
       ...h,
       todayCompleted: todayCompletedSet.has(h.id),
       last7Days: last7Dates.map(d => weekLogs.some(l => l.habitId === h.id && l.date === d)),
+      last7Scheduled: last7Dates.map(d => isHabitDueToday(h, d)),
     }));
   }
 

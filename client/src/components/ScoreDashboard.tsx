@@ -8,8 +8,12 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { DailyScore, UserMetric } from "@shared/schema";
-import { Heart, Edit, Plus, Settings, Trash2, X } from "lucide-react";
+import { Heart, Edit, Plus, Settings, Trash2, X, Lock } from "lucide-react";
 import MetricTrendChart from "./MetricTrendChart";
+import { useSubscription } from "@/hooks/useSubscription";
+import { usePaywall } from "@/contexts/PaywallContext";
+
+const FREE_METRIC_LIMIT = 3;
 
 function NativeOverlay({ open, onClose, title, description, children, scrollable = false }: {
   open: boolean; onClose: () => void; title: string; description?: string; children: React.ReactNode; scrollable?: boolean;
@@ -136,6 +140,8 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { isPremium } = useSubscription();
+  const { openPaywall } = usePaywall();
   
   const today = (() => {
     const now = new Date();
@@ -277,6 +283,10 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
   };
 
   const handleOpenAddMetric = () => {
+    if (!isPremium && activeMetrics.length >= FREE_METRIC_LIMIT) {
+      openPaywall("Unlimited Metric Tracking");
+      return;
+    }
     const usedColors = new Set(metrics.map(m => m.color));
     const nextColor = METRIC_COLORS.find(c => !usedColors.has(c)) || METRIC_COLORS[0];
     setNewMetricColor(nextColor);
@@ -318,11 +328,13 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => { setNewMetricName(""); setNewMetricColor(METRIC_COLORS[0]); setDialogMode('addMetric'); }}
+              onClick={handleOpenAddMetric}
               className="h-7 w-7 text-muted-foreground hover:text-foreground"
               title="Add metric"
             >
-              <Plus className="w-3.5 h-3.5" />
+              {!isPremium && activeMetrics.length >= FREE_METRIC_LIMIT
+                ? <Lock className="w-3.5 h-3.5" />
+                : <Plus className="w-3.5 h-3.5" />}
             </Button>
             <Button
               variant="ghost"
@@ -529,9 +541,19 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
                 )}
               </div>
             ))}
-            <Button variant="outline" className="w-full mt-2 h-9 text-xs" onClick={handleOpenAddMetric}>
-              <Plus className="w-3.5 h-3.5 mr-1.5" />
-              Add Metric
+            {!isPremium && (
+              <div className="flex items-center justify-between px-1 py-1.5 text-[11px] text-muted-foreground">
+                <span>{activeMetrics.length} of {FREE_METRIC_LIMIT} free metrics used</span>
+                {activeMetrics.length >= FREE_METRIC_LIMIT && (
+                  <span className="text-primary font-medium">Upgrade for unlimited</span>
+                )}
+              </div>
+            )}
+            <Button variant="outline" className="w-full mt-1 h-9 text-xs" onClick={handleOpenAddMetric}>
+              {!isPremium && activeMetrics.length >= FREE_METRIC_LIMIT
+                ? <><Lock className="w-3.5 h-3.5 mr-1.5" />Unlock More Metrics</>
+                : <><Plus className="w-3.5 h-3.5 mr-1.5" />Add Metric</>
+              }
             </Button>
           </div>
         )}

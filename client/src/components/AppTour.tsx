@@ -36,8 +36,8 @@ const STEPS: TourStep[] = [
     iconColor: "text-amber-500",
     title: "Telemetry Circles",
     subtitle: "Daily performance metrics",
-    description: "Each circle tracks a performance metric on a 0–100 scale. Tap any circle to log today's score and pull up your trend chart. You choose which metrics matter — add or remove them in Settings.",
-    tip: "Apple Health metrics like Steps and Sleep can be added from Settings too.",
+    description: "Each circle tracks a performance metric on a 0–100 scale. Tap any circle to log today's score and pull up your trend chart. Free accounts can track up to 3 metrics — Premium unlocks unlimited.",
+    tip: "Add or remove metrics in Settings. Apple Health metrics like Steps and Sleep are available too.",
   },
   {
     icon: MessageSquare,

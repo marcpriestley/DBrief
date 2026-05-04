@@ -10,7 +10,7 @@ import { normalizeAnchor, normalizeHabitName, stackingSentence, habitNotificatio
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-type HabitWithStatus = Habit & { todayCompleted: boolean; last7Days: boolean[] };
+type HabitWithStatus = Habit & { todayCompleted: boolean; last7Days: boolean[]; last7Scheduled?: boolean[] };
 
 // ─── Emoji + category options ────────────────────────────────────────────────
 
@@ -419,28 +419,37 @@ export default function HabitsSection() {
 
 // ─── 7-day dots ──────────────────────────────────────────────────────────────
 
-function WeekDots({ days }: { days: boolean[] }) {
+function WeekDots({ days, scheduled }: { days: boolean[]; scheduled?: boolean[] }) {
   // days[0] = 6 days ago, days[6] = today
   const today = new Date();
-  // Work out which weekday index (0=Mon) corresponds to days[0]
   const dotDays = days.map((done, i) => {
     const d = new Date(today);
     d.setDate(d.getDate() - (6 - i));
     const dayLabel = ["S","M","T","W","T","F","S"][d.getDay()];
-    return { done, dayLabel };
+    const isScheduled = !scheduled || scheduled[i];
+    return { done, dayLabel, isScheduled };
   });
 
   return (
     <div className="flex items-center gap-1 mt-1.5">
-      {dotDays.map(({ done, dayLabel }, i) => (
+      {dotDays.map(({ done, dayLabel, isScheduled }, i) => (
         <div key={i} className="flex flex-col items-center gap-0.5">
-          <motion.div
-            className={`w-4 h-4 rounded-full ${done ? "bg-primary" : "bg-muted/60"}`}
-            initial={false}
-            animate={{ scale: done ? [1, 1.3, 1] : 1 }}
-            transition={{ duration: 0.3 }}
-          />
-          <span className="text-[8px] text-muted-foreground/50 leading-none">{dayLabel}</span>
+          {isScheduled ? (
+            <motion.div
+              className={`w-4 h-4 rounded-full ${done ? "bg-primary" : "bg-muted/60"}`}
+              initial={false}
+              animate={{ scale: done ? [1, 1.3, 1] : 1 }}
+              transition={{ duration: 0.3 }}
+            />
+          ) : (
+            <div className="relative w-4 h-4 flex items-center justify-center">
+              <div className="w-2.5 h-2.5 rounded-full bg-muted/25" />
+              <div className="absolute w-[14px] h-px bg-muted-foreground/30 rotate-45" />
+            </div>
+          )}
+          <span className={`text-[8px] leading-none ${isScheduled ? "text-muted-foreground/50" : "text-muted-foreground/20"}`}>
+            {dayLabel}
+          </span>
         </div>
       ))}
     </div>
@@ -514,7 +523,7 @@ function HabitCard({
             </p>
           )}
           {/* 7-day completion dots */}
-          <WeekDots days={habit.last7Days ?? []} />
+          <WeekDots days={habit.last7Days ?? []} scheduled={habit.last7Scheduled} />
           {/* Progress bar to next milestone */}
           <div className="flex items-center gap-2 mt-1.5">
             <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">

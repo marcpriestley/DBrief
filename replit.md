@@ -60,8 +60,8 @@ The application uses a **React with TypeScript** frontend, styled with **Shadcn/
 ## Monetization (Stripe)
 - **Stripe integration** connected via Replit. Packages: `stripe@20`, `stripe-replit-sync@1`.
 - **Product**: "DBrief Premium" — £5.99/month (introductory), created via `scripts/seed-products.ts`.
-- **Free tier**: Debriefs (text), daily scores, goals, habits, mood, history, trends (basic), streaks, journal.
-- **Premium tier** (`subscriptionStatus = 'premium'`): Voice Notes in Debriefs, Team section (Squad/Leaderboard/Challenges), Weekly Race Report, Data Pattern Analysis, Mission Intelligence.
+- **Free tier**: Debriefs (text), up to 3 daily score metrics, goals, habits, mood, history, trends (basic), streaks, journal.
+- **Premium tier** (`subscriptionStatus = 'premium'`): Unlimited metric tracking, Voice Notes in Debriefs, Team section (Squad/Leaderboard/Challenges), Weekly Race Report, Data Pattern Analysis, Mission Intelligence.
 - **Beta tier** (`subscriptionStatus = 'beta'`): Full premium access without payment — granted manually via `POST /api/admin/grant-beta` with `{ username, grant: true, adminCode }`. Admin code stored in `ADMIN_CODE` env var (value: `dbrief-beta-2025`).
 - **Webhook**: `POST /api/stripe/webhook` — registered BEFORE `express.json()` in `server/index.ts`. Handles `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted` to update `users.subscriptionStatus`.
 - **Schema columns added**: `stripe_customer_id`, `subscription_status` (default 'free'), `subscription_current_period_end` on `users` table.
