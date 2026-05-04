@@ -1217,17 +1217,20 @@ export class DatabaseStorage implements IStorage {
   async getHabitWithTodayStatus(userId: number, date: string): Promise<Array<Habit & { todayCompleted: boolean; last7Days: boolean[] }>> {
     const allHabits = await this.getHabits(userId);
     const { isHabitDueToday } = await import("@shared/habitUtils");
-    // Compute last 7 real calendar days (oldest → newest, ending today).
+    // Compute Mon–Sun of the current calendar week
     const today = new Date();
     today.setHours(12, 0, 0, 0);
-    const last7Dates: string[] = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(today);
-      d.setDate(d.getDate() - i);
-      last7Dates.push(d.toISOString().split('T')[0]);
+    const dow = today.getDay(); // 0=Sun … 6=Sat
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1));
+    const weekDates: string[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      weekDates.push(d.toISOString().split('T')[0]);
     }
-    const weekStart = last7Dates[0];
-    const weekEnd = last7Dates[6];
+    const weekStart = weekDates[0]; // Monday
+    const weekEnd   = weekDates[6]; // Sunday
     const weekLogs = await db.select().from(habitLogs)
       .where(and(eq(habitLogs.userId, userId), gte(habitLogs.date, weekStart), lte(habitLogs.date, weekEnd)));
     const todayCompletedSet = new Set(weekLogs.filter(l => l.date === date).map(l => l.habitId));
@@ -1236,8 +1239,8 @@ export class DatabaseStorage implements IStorage {
       ...h,
       dueToday: isHabitDueToday(h, date),
       todayCompleted: todayCompletedSet.has(h.id),
-      last7Days: last7Dates.map(d => weekLogs.some(l => l.habitId === h.id && l.date === d)),
-      last7Scheduled: last7Dates.map(d => isHabitDueToday(h, d)),
+      last7Days: weekDates.map(d => weekLogs.some(l => l.habitId === h.id && l.date === d)),
+      last7Scheduled: weekDates.map(d => isHabitDueToday(h, d)),
     }));
   }
 

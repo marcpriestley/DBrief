@@ -426,38 +426,50 @@ export default function HabitsSection() {
 // ─── 7-day dots ──────────────────────────────────────────────────────────────
 
 function WeekDots({ days, scheduled }: { days: boolean[]; scheduled?: boolean[] }) {
-  // days[0] = 6 days ago, days[6] = today
-  const today = new Date();
-  const dotDays = days.map((done, i) => {
-    const d = new Date(today);
-    d.setDate(d.getDate() - (6 - i));
-    const dayLabel = ["S","M","T","W","T","F","S"][d.getDay()];
-    const isScheduled = !scheduled || scheduled[i];
-    return { done, dayLabel, isScheduled };
-  });
+  // days[0] = Monday … days[6] = Sunday of the current week
+  const DAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"]; // Mon–Sun
+  const todayDow = new Date().getDay(); // 0=Sun … 6=Sat
+  const todayIndex = todayDow === 0 ? 6 : todayDow - 1; // convert to Mon=0 … Sun=6
 
   return (
     <div className="flex items-center gap-1 mt-1.5">
-      {dotDays.map(({ done, dayLabel, isScheduled }, i) => (
-        <div key={i} className="flex flex-col items-center gap-0.5">
-          {isScheduled ? (
-            <motion.div
-              className={`w-4 h-4 rounded-full ${done ? "bg-primary" : "bg-muted/60"}`}
-              initial={false}
-              animate={{ scale: done ? [1, 1.3, 1] : 1 }}
-              transition={{ duration: 0.3 }}
-            />
-          ) : (
-            <div className="relative w-4 h-4 flex items-center justify-center">
-              <div className="w-2.5 h-2.5 rounded-full bg-muted/25" />
-              <div className="absolute w-[14px] h-px bg-muted-foreground/30 rotate-45" />
-            </div>
-          )}
-          <span className={`text-[8px] leading-none ${isScheduled ? "text-muted-foreground/50" : "text-muted-foreground/20"}`}>
-            {dayLabel}
-          </span>
-        </div>
-      ))}
+      {days.map((done, i) => {
+        const isScheduled = !scheduled || scheduled[i];
+        const isToday = i === todayIndex;
+        const label = DAY_LABELS[i];
+        return (
+          <div key={i} className="flex flex-col items-center gap-0.5">
+            {isScheduled ? (
+              <motion.div
+                className={`w-4 h-4 rounded-full ${
+                  done
+                    ? "bg-primary"
+                    : isToday
+                      ? "bg-muted/70 ring-1 ring-primary/50"
+                      : "bg-muted/60"
+                }`}
+                initial={false}
+                animate={{ scale: done ? [1, 1.3, 1] : 1 }}
+                transition={{ duration: 0.3 }}
+              />
+            ) : (
+              <div className="relative w-4 h-4 flex items-center justify-center">
+                <div className="w-2.5 h-2.5 rounded-full bg-muted/25" />
+                <div className="absolute w-[14px] h-px bg-muted-foreground/30 rotate-45" />
+              </div>
+            )}
+            <span className={`text-[8px] leading-none font-medium ${
+              isToday && isScheduled
+                ? "text-primary/70"
+                : isScheduled
+                  ? "text-muted-foreground/50"
+                  : "text-muted-foreground/20"
+            }`}>
+              {label}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
