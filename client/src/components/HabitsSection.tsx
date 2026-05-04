@@ -427,47 +427,30 @@ export default function HabitsSection() {
 
 function WeekDots({ days, scheduled }: { days: boolean[]; scheduled?: boolean[] }) {
   // days[0] = Monday … days[6] = Sunday of the current week
-  const DAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"]; // Mon–Sun
-  const todayDow = new Date().getDay(); // 0=Sun … 6=Sat
-  const todayIndex = todayDow === 0 ? 6 : todayDow - 1; // convert to Mon=0 … Sun=6
+  const DAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
+  const todayDow = new Date().getDay();
+  const todayIndex = todayDow === 0 ? 6 : todayDow - 1;
 
   return (
-    <div className="flex items-center gap-1 mt-1.5">
+    <div className="flex items-center gap-2 mt-1.5">
       {days.map((done, i) => {
         const isScheduled = !scheduled || scheduled[i];
         const isToday = i === todayIndex;
-        const label = DAY_LABELS[i];
         return (
-          <div key={i} className="flex flex-col items-center gap-0.5">
-            {isScheduled ? (
-              <motion.div
-                className={`w-4 h-4 rounded-full ${
-                  done
-                    ? "bg-primary"
-                    : isToday
-                      ? "bg-muted/70 ring-1 ring-primary/50"
-                      : "bg-muted/60"
-                }`}
-                initial={false}
-                animate={{ scale: done ? [1, 1.3, 1] : 1 }}
-                transition={{ duration: 0.3 }}
-              />
-            ) : (
-              <div className="relative w-4 h-4 flex items-center justify-center">
-                <div className="w-2.5 h-2.5 rounded-full bg-muted/25" />
-                <div className="absolute w-[14px] h-px bg-muted-foreground/30 rotate-45" />
-              </div>
-            )}
-            <span className={`text-[8px] leading-none font-medium ${
-              isToday && isScheduled
-                ? "text-primary/70"
-                : isScheduled
-                  ? "text-muted-foreground/50"
-                  : "text-muted-foreground/20"
-            }`}>
-              {label}
-            </span>
-          </div>
+          <span
+            key={i}
+            className={`text-[10px] font-semibold leading-none ${
+              isScheduled
+                ? done
+                  ? "text-primary"
+                  : isToday
+                    ? "text-primary/80"
+                    : "text-muted-foreground/60"
+                : "line-through text-muted-foreground/25"
+            }`}
+          >
+            {DAY_LABELS[i]}
+          </span>
         );
       })}
     </div>
