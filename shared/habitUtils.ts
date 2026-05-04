@@ -66,6 +66,58 @@ export function habitNotificationBody(anchor: string | null | undefined, habitNa
   return intro + streakSuffix;
 }
 
+// ─── Frequency / scheduling helpers ──────────────────────────────────────────
+
+/**
+ * Returns true if a habit should appear on the given date based on its frequency.
+ * date: YYYY-MM-DD string
+ */
+export function isHabitDueToday(
+  habit: {
+    frequency?: string | null;
+    specificDays?: string | null;
+    createdAt?: Date | string | null;
+  },
+  date: string
+): boolean {
+  const freq = habit.frequency || "daily";
+
+  // Always visible
+  if (freq === "daily" || freq === "multiple_daily") return true;
+
+  const d = new Date(date + "T12:00:00");
+  const dow = d.getDay(); // 0=Sun … 6=Sat
+
+  if (freq === "weekdays") return dow >= 1 && dow <= 5;
+  if (freq === "weekends") return dow === 0 || dow === 6;
+
+  if (freq === "specific_days") {
+    const days = (habit.specificDays || "")
+      .split(",")
+      .map(s => parseInt(s.trim(), 10))
+      .filter(n => !isNaN(n));
+    return days.includes(dow);
+  }
+
+  if (freq === "alternate") {
+    const anchor = habit.createdAt ? new Date(habit.createdAt) : new Date();
+    const anchorDate = new Date(
+      anchor.toISOString().split("T")[0] + "T12:00:00"
+    );
+    const diff = Math.round(
+      (d.getTime() - anchorDate.getTime()) / (1000 * 60 * 60 * 24)
+    );
+    return diff >= 0 && diff % 2 === 0;
+  }
+
+  if (freq === "weekly") {
+    const anchor = habit.createdAt ? new Date(habit.createdAt) : new Date();
+    return dow === anchor.getDay();
+  }
+
+  return true;
+}
+
 // ─── Interval reminder helpers ───────────────────────────────────────────────
 
 /**

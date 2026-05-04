@@ -1215,7 +1215,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getHabitWithTodayStatus(userId: number, date: string): Promise<Array<Habit & { todayCompleted: boolean; last7Days: boolean[] }>> {
-    const userHabits = await this.getHabits(userId);
+    const allHabits = await this.getHabits(userId);
+    // Filter to only habits that are scheduled for this date
+    const { isHabitDueToday } = await import("@shared/habitUtils");
+    const userHabits = allHabits.filter(h => isHabitDueToday(h, date));
     // Compute last 7 real calendar days (oldest → newest, ending today).
     const today = new Date();
     today.setHours(12, 0, 0, 0);

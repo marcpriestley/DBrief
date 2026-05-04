@@ -58,7 +58,28 @@ const FREQUENCY_OPTIONS = [
   { value: "weekends", label: "Weekends" },
   { value: "alternate", label: "Every other day" },
   { value: "weekly", label: "Once a week" },
+  { value: "specific_days", label: "Specific days" },
 ];
+
+const DAYS_OF_WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function frequencyLabel(frequency: string, specificDays?: string | null): string {
+  switch (frequency) {
+    case "daily": return "Every day";
+    case "multiple_daily": return "Multiple daily";
+    case "weekdays": return "Weekdays";
+    case "weekends": return "Weekends";
+    case "alternate": return "Every other day";
+    case "weekly": return "Once a week";
+    case "specific_days": {
+      const days = (specificDays || "")
+        .split(",").map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n))
+        .map(n => DAYS_OF_WEEK[n]).filter(Boolean);
+      return days.length > 0 ? days.join(", ") : "Specific days";
+    }
+    default: return frequency;
+  }
+}
 
 type SetupState = {
   name: string;
@@ -71,6 +92,7 @@ type SetupState = {
   reminderInterval: number | null; // null = once, or minutes between reminders
   reminderEndTime: string;         // end time for interval reminders
   frequency: string;
+  specificDays: string[];          // for "specific_days" frequency: ["0","2","4"] = Sun,Tue,Thu
 };
 
 const DEFAULT_SETUP: SetupState = {
@@ -84,6 +106,7 @@ const DEFAULT_SETUP: SetupState = {
   reminderInterval: null,
   reminderEndTime: "20:00",
   frequency: "daily",
+  specificDays: [],
 };
 
 // ─── Main component ──────────────────────────────────────────────────────────
@@ -181,10 +204,11 @@ export default function HabitsSection() {
 
   const handleCreate = useCallback(() => {
     if (!setup.name.trim()) return;
-    const { categories, ...rest } = setup;
+    const { categories, specificDays, ...rest } = setup;
     createMutation.mutate({
       ...rest,
       category: categories.length > 0 ? categories.join(",") : "general",
+      specificDays: specificDays.length > 0 ? specificDays.join(",") : null,
       reminderInterval: setup.reminderEnabled ? setup.reminderInterval : null,
       reminderEndTime: setup.reminderEnabled && setup.reminderInterval ? setup.reminderEndTime : null,
     } as any);
@@ -483,6 +507,11 @@ function HabitCard({
           </div>
           {habit.anchorHabit && (
             <p className="text-xs text-muted-foreground truncate mt-0.5">After {normalizeAnchor(habit.anchorHabit)}</p>
+          )}
+          {(habit as any).frequency && !["daily", "multiple_daily"].includes((habit as any).frequency) && (
+            <p className="text-[10px] text-primary/70 mt-0.5 truncate">
+              {frequencyLabel((habit as any).frequency, (habit as any).specificDays)}
+            </p>
           )}
           {/* 7-day completion dots */}
           <WeekDots days={habit.last7Days ?? []} />
@@ -804,6 +833,8 @@ function Step1({ setup, setSetup }: { setup: SetupState; setSetup: (s: SetupStat
                   ...(!isMultiple && setup.frequency === "multiple_daily" && {
                     reminderInterval: null,
                   }),
+                  // Clear specific days if switching away
+                  ...(f.value !== "specific_days" && { specificDays: [] }),
                 });
               }}
               className={`text-xs px-2.5 py-1 rounded-lg border transition-all ${
@@ -818,6 +849,35 @@ function Step1({ setup, setSetup }: { setup: SetupState; setSetup: (s: SetupStat
         </div>
         {setup.frequency === "multiple_daily" && (
           <p className="text-[11px] text-primary mt-1.5">Interval reminders will be set up in the next steps.</p>
+        )}
+        {setup.frequency === "specific_days" && (
+          <div className="mt-2.5">
+            <label className="text-xs text-muted-foreground block mb-1.5">Which days?</label>
+            <div className="flex gap-1">
+              {DAYS_OF_WEEK.map((day, i) => {
+                const key = String(i);
+                const selected = setup.specificDays.includes(key);
+                return (
+                  <button
+                    key={i}
+                    onClick={() => {
+                      const next = selected
+                        ? setup.specificDays.filter(d => d !== key)
+                        : [...setup.specificDays, key];
+                      setSetup({ ...setup, specificDays: next });
+                    }}
+                    className={`flex-1 text-[11px] py-1.5 rounded-lg border transition-all font-medium ${
+                      selected
+                        ? "border-primary/60 bg-primary/15 text-primary"
+                        : "border-border/50 bg-muted/30 text-muted-foreground"
+                    }`}
+                  >
+                    {day}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         )}
       </div>
     </div>
@@ -1040,6 +1100,9 @@ function EditModal({
   );
   const [anchorHabit, setAnchorHabit] = useState(habit.anchorHabit || "");
   const [frequency, setFrequency] = useState((habit as any).frequency || "daily");
+  const [specificDays, setSpecificDays] = useState<string[]>(
+    (habit as any).specificDays ? (habit as any).specificDays.split(",").filter(Boolean) : []
+  );
   const [reminderTime, setReminderTime] = useState(habit.reminderTime || "08:00");
   const [reminderEnabled, setReminderEnabled] = useState(habit.reminderEnabled ?? false);
   const [reminderInterval, setReminderInterval] = useState<number | null>((habit as any).reminderInterval ?? null);
@@ -1122,7 +1185,10 @@ function EditModal({
               {FREQUENCY_OPTIONS.map(f => (
                 <button
                   key={f.value}
-                  onClick={() => setFrequency(f.value)}
+                  onClick={() => {
+                    setFrequency(f.value);
+                    if (f.value !== "specific_days") setSpecificDays([]);
+                  }}
                   className={`text-xs px-2.5 py-1 rounded-lg border transition-all ${
                     frequency === f.value ? "border-primary/60 bg-primary/15 text-primary font-medium" : "border-border/50 bg-muted/30 text-muted-foreground"
                   }`}
@@ -1131,6 +1197,34 @@ function EditModal({
                 </button>
               ))}
             </div>
+            {frequency === "specific_days" && (
+              <div className="mt-2.5">
+                <label className="text-xs text-muted-foreground block mb-1.5">Which days?</label>
+                <div className="flex gap-1">
+                  {DAYS_OF_WEEK.map((day, i) => {
+                    const key = String(i);
+                    const selected = specificDays.includes(key);
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => {
+                          setSpecificDays(prev =>
+                            selected ? prev.filter(d => d !== key) : [...prev, key]
+                          );
+                        }}
+                        className={`flex-1 text-[11px] py-1.5 rounded-lg border transition-all font-medium ${
+                          selected
+                            ? "border-primary/60 bg-primary/15 text-primary"
+                            : "border-border/50 bg-muted/30 text-muted-foreground"
+                        }`}
+                      >
+                        {day}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Motivation */}
@@ -1247,6 +1341,7 @@ function EditModal({
               name, emoji, motivation,
               category: categories.length > 0 ? categories.join(",") : "general",
               frequency, anchorHabit, reminderTime, reminderEnabled,
+              specificDays: frequency === "specific_days" && specificDays.length > 0 ? specificDays.join(",") : null,
               reminderInterval: reminderEnabled ? reminderInterval : null,
               reminderEndTime: reminderEnabled && reminderInterval ? reminderEndTime : null,
             } as any)}

@@ -1709,7 +1709,9 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
           background: 'linear-gradient(145deg, hsl(0,0%,11%) 0%, hsl(0,0%,9%) 60%, hsl(38,92%,6%) 100%)',
           border: '1px solid rgba(245,158,11,0.35)',
           boxShadow: '0 0 0 1px rgba(245,158,11,0.08), 0 8px 32px rgba(245,158,11,0.10)',
+          cursor: 'pointer',
         }}
+        onClick={() => {}}
       >
         {/* Subtle top amber strip */}
         <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ background: 'linear-gradient(90deg, transparent, rgba(245,158,11,0.7) 30%, rgba(245,158,11,0.9) 50%, rgba(245,158,11,0.7) 70%, transparent)' }} />
@@ -1744,7 +1746,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
               onClick={() => { haptic("medium"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: false, userLed: true }); }}
               disabled={startDebriefMutation.isPending}
               className="h-12 text-sm font-bold rounded-xl"
-              style={{ background: 'hsl(38,92%,50%)', color: '#0a0a0a' }}
+              style={{ background: 'hsl(38,92%,50%)', color: '#0a0a0a', touchAction: 'manipulation' }}
             >
               {startDebriefMutation.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -1756,6 +1758,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
               onClick={() => { haptic("light"); setShowQuickLog(true); }}
               variant="outline"
               className="h-12 text-sm font-medium rounded-xl border-white/10 text-foreground"
+              style={{ touchAction: 'manipulation' }}
             >
               <BookOpen className="h-4 w-4 mr-1.5" />Log a moment
             </Button>
@@ -1764,6 +1767,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
             onClick={() => { haptic("light"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: false, userLed: false }); }}
             disabled={startDebriefMutation.isPending}
             className="w-full text-center text-[11px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+            style={{ touchAction: 'manipulation' }}
           >
             Let your engineer start you off with a prompt →
           </button>
@@ -1785,7 +1789,9 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
             background: 'linear-gradient(145deg, hsl(0,0%,11%) 0%, hsl(0,0%,9%) 60%, hsl(38,92%,6%) 100%)',
             border: '1px solid rgba(245,158,11,0.35)',
             boxShadow: '0 0 0 1px rgba(245,158,11,0.08), 0 8px 32px rgba(245,158,11,0.10)',
+            cursor: 'pointer',
           }}
+          onClick={() => {}}
         >
           <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ background: 'linear-gradient(90deg, transparent, rgba(245,158,11,0.7) 30%, rgba(245,158,11,0.9) 50%, rgba(245,158,11,0.7) 70%, transparent)' }} />
           <div className="px-5 pt-5 pb-6 space-y-5">
@@ -1808,7 +1814,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                 onClick={() => { haptic("medium"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: true, userLed: true }); }}
                 disabled={startDebriefMutation.isPending}
                 className="h-12 text-sm font-bold rounded-xl"
-                style={{ background: 'hsl(38,92%,50%)', color: '#0a0a0a' }}
+                style={{ background: 'hsl(38,92%,50%)', color: '#0a0a0a', touchAction: 'manipulation' }}
               >
                 {startDebriefMutation.isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -1820,6 +1826,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                 onClick={() => { haptic("light"); setShowQuickLog(true); }}
                 variant="outline"
                 className="h-12 text-sm font-medium rounded-xl border-white/10 text-foreground"
+                style={{ touchAction: 'manipulation' }}
               >
                 <BookOpen className="h-4 w-4 mr-1.5" />Log a moment
               </Button>
@@ -1828,6 +1835,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
               onClick={() => { haptic("light"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: true, userLed: false }); }}
               disabled={startDebriefMutation.isPending}
               className="w-full text-center text-[11px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+              style={{ touchAction: 'manipulation' }}
             >
               Let your engineer start you off with a prompt →
             </button>

@@ -12,18 +12,14 @@ interface NativeSliderProps {
   className?: string;
 }
 
-// Custom slider that works reliably on iOS WebKit inside scroll containers.
+// Custom slider built for iOS WebKit inside scroll containers.
 //
-// Key design decisions:
-// 1. Touch events registered imperatively with { passive: false } so
-//    preventDefault() actually works — this stops iOS from cancelling the
-//    touch gesture for scroll mid-drag.
-// 2. onChange / onCommit stored in refs so the touch-event useEffect has
-//    NO changing dependencies and therefore NEVER tears down & re-registers
-//    listeners during an active drag.  The previous version had updateFromX
-//    in the dep array — every state update from the parent caused a new
-//    onChange ref → new updateFromX → effect cleanup → listeners removed
-//    mid-drag → slider froze.
+// Design:
+// - touchstart registered on the element (passive:false → preventDefault stops scroll)
+// - touchmove / touchend registered on DOCUMENT during active drag
+//   so they can never be stolen by a parent scroll container
+// - All props stored in refs so the once-registered handlers never go stale
+// - updateFromX stored in a ref so handlers always call the latest version
 export default function NativeSlider({
   value,
   onChange,
@@ -37,7 +33,6 @@ export default function NativeSlider({
   const fillColor = color ?? "hsl(40, 95%, 48%)";
   const [displayValue, setDisplayValue] = useState(value);
 
-  // ── Stable refs — never go stale, never trigger re-registration ──────────
   const containerRef      = useRef<HTMLDivElement>(null);
   const isDragging        = useRef(false);
   const activeTouchId     = useRef<number | null>(null);
@@ -49,7 +44,7 @@ export default function NativeSlider({
   const onChangeRef       = useRef(onChange);
   const onCommitRef       = useRef(onCommit);
 
-  // Keep refs in sync on every render — safe because refs never trigger effects
+  // Keep refs fresh on every render — never trigger effects
   displayValueRef.current = displayValue;
   minRef.current          = min;
   maxRef.current          = max;
@@ -57,17 +52,9 @@ export default function NativeSlider({
   onChangeRef.current     = onChange;
   onCommitRef.current     = onCommit;
 
-  // Sync display value from outside only when not dragging
-  useEffect(() => {
-    if (!isDragging.current) setDisplayValue(value);
-  }, [value]);
-
-  const pct = max === min ? 0 : Math.max(0, Math.min(100,
-    ((displayValue - min) / (max - min)) * 100
-  ));
-
-  // Stable helper — reads everything from refs so it never changes identity
-  const updateFromX = (clientX: number) => {
+  // updateFromX in a ref so document handlers always call the latest version
+  const updateFromXRef = useRef<(clientX: number) => void>(() => {});
+  updateFromXRef.current = (clientX: number) => {
     const el = containerRef.current;
     if (!el) return;
     const rect  = el.getBoundingClientRect();
@@ -87,10 +74,38 @@ export default function NativeSlider({
     }
   };
 
-  // ── Touch events — registered once, never re-registered ──────────────────
+  // Sync display value from outside only when not dragging
+  useEffect(() => {
+    if (!isDragging.current) setDisplayValue(value);
+  }, [value]);
+
+  const pct = max === min ? 0 : Math.max(0, Math.min(100,
+    ((displayValue - min) / (max - min)) * 100
+  ));
+
+  // Registered once at mount. Document listeners are added/removed per-drag.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
+
+    const onDocMove = (e: TouchEvent) => {
+      e.preventDefault();
+      if (!isDragging.current) return;
+      const t = Array.from(e.changedTouches)
+        .find(x => x.identifier === activeTouchId.current);
+      if (t) updateFromXRef.current(t.clientX);
+    };
+
+    const onDocEnd = () => {
+      if (!isDragging.current) return;
+      isDragging.current    = false;
+      activeTouchId.current = null;
+      lastHapticVal.current = null;
+      onCommitRef.current?.(displayValueRef.current);
+      document.removeEventListener("touchmove",   onDocMove);
+      document.removeEventListener("touchend",    onDocEnd);
+      document.removeEventListener("touchcancel", onDocEnd);
+    };
 
     const onTouchStart = (e: TouchEvent) => {
       e.preventDefault();
@@ -99,52 +114,38 @@ export default function NativeSlider({
       isDragging.current    = true;
       activeTouchId.current = t.identifier;
       lastHapticVal.current = null;
-      updateFromX(t.clientX);
+      updateFromXRef.current(t.clientX);
+      // Capture move/end on document so parent scroll can never steal the gesture
+      document.addEventListener("touchmove",   onDocMove,  { passive: false });
+      document.addEventListener("touchend",    onDocEnd,   { passive: false });
+      document.addEventListener("touchcancel", onDocEnd,   { passive: false });
     };
 
-    const onTouchMove = (e: TouchEvent) => {
-      e.preventDefault();
-      if (!isDragging.current) return;
-      const t = Array.from(e.changedTouches)
-        .find(x => x.identifier === activeTouchId.current);
-      if (t) updateFromX(t.clientX);
-    };
-
-    const onTouchEnd = (e: TouchEvent) => {
-      if (!isDragging.current) return;
-      isDragging.current    = false;
-      activeTouchId.current = null;
-      lastHapticVal.current = null;
-      onCommitRef.current?.(displayValueRef.current);
-    };
-
-    el.addEventListener("touchstart",  onTouchStart, { passive: false });
-    el.addEventListener("touchmove",   onTouchMove,  { passive: false });
-    el.addEventListener("touchend",    onTouchEnd,   { passive: false });
-    el.addEventListener("touchcancel", onTouchEnd,   { passive: false });
+    el.addEventListener("touchstart", onTouchStart, { passive: false });
 
     return () => {
-      el.removeEventListener("touchstart",  onTouchStart);
-      el.removeEventListener("touchmove",   onTouchMove);
-      el.removeEventListener("touchend",    onTouchEnd);
-      el.removeEventListener("touchcancel", onTouchEnd);
+      el.removeEventListener("touchstart", onTouchStart);
+      // Clean up doc listeners in case we unmount during an active drag
+      document.removeEventListener("touchmove",   onDocMove);
+      document.removeEventListener("touchend",    onDocEnd);
+      document.removeEventListener("touchcancel", onDocEnd);
     };
-  }, []); // ← empty: runs once, never tears down during a drag
+  }, []); // runs once — handlers read everything from refs
 
-  // ── Pointer events for mouse / stylus ────────────────────────────────────
+  // Pointer events for mouse / stylus
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.pointerType === "touch") return;
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
     isDragging.current = true;
     lastHapticVal.current = null;
-    updateFromX(e.clientX);
+    updateFromXRef.current(e.clientX);
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.pointerType === "touch") return;
     if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
-    updateFromX(e.clientX);
+    updateFromXRef.current(e.clientX);
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
