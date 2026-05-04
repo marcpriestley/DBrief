@@ -202,6 +202,7 @@ export const habits = pgTable("habits", {
   lastCompletedDate: text("last_completed_date"),
   frequency: text("frequency").default("daily"),
   specificDays: text("specific_days"),
+  startDate: text("start_date"),
   isArchived: boolean("is_archived").default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });

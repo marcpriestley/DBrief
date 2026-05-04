@@ -93,6 +93,7 @@ type SetupState = {
   reminderEndTime: string;         // end time for interval reminders
   frequency: string;
   specificDays: string[];          // for "specific_days" frequency: ["0","2","4"] = Sun,Tue,Thu
+  startDate: string;               // YYYY-MM-DD — when the habit should first appear
 };
 
 const DEFAULT_SETUP: SetupState = {
@@ -107,6 +108,7 @@ const DEFAULT_SETUP: SetupState = {
   reminderEndTime: "20:00",
   frequency: "daily",
   specificDays: [],
+  startDate: "",  // populated dynamically in openSetup
 };
 
 // ─── Main component ──────────────────────────────────────────────────────────
@@ -204,18 +206,20 @@ export default function HabitsSection() {
 
   const handleCreate = useCallback(() => {
     if (!setup.name.trim()) return;
-    const { categories, specificDays, ...rest } = setup;
+    const { categories, specificDays, startDate, ...rest } = setup;
     createMutation.mutate({
       ...rest,
       category: categories.length > 0 ? categories.join(",") : "general",
       specificDays: specificDays.length > 0 ? specificDays.join(",") : null,
+      startDate: startDate || new Date().toISOString().split("T")[0],
       reminderInterval: setup.reminderEnabled ? setup.reminderInterval : null,
       reminderEndTime: setup.reminderEnabled && setup.reminderInterval ? setup.reminderEndTime : null,
     } as any);
   }, [createMutation, setup]);
 
   const openSetup = () => {
-    setSetup(DEFAULT_SETUP);
+    const todayStr = new Date().toISOString().split("T")[0];
+    setSetup({ ...DEFAULT_SETUP, startDate: todayStr });
     setSetupStep(0);
     setShowSetup(true);
   };
@@ -889,6 +893,57 @@ function Step1({ setup, setSetup }: { setup: SetupState; setSetup: (s: SetupStat
           </div>
         )}
       </div>
+
+      {/* Start date */}
+      <StartDatePicker setup={setup} setSetup={setSetup} />
+    </div>
+  );
+}
+
+function StartDatePicker({ setup, setSetup }: { setup: SetupState; setSetup: (s: SetupState) => void }) {
+  const todayStr = (() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  })();
+  const tomorrowStr = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  })();
+
+  const isTomorrow = setup.startDate === tomorrowStr;
+  const isToday = !isTomorrow;
+
+  return (
+    <div>
+      <label className="text-xs text-muted-foreground block mb-2">When do you want to start?</label>
+      <div className="flex gap-2">
+        <button
+          onClick={() => setSetup({ ...setup, startDate: todayStr })}
+          className={`flex-1 text-xs py-2 rounded-xl border font-medium transition-all ${
+            isToday
+              ? "border-primary/60 bg-primary/15 text-primary"
+              : "border-border/50 bg-muted/30 text-muted-foreground"
+          }`}
+        >
+          Today
+        </button>
+        <button
+          onClick={() => setSetup({ ...setup, startDate: tomorrowStr })}
+          className={`flex-1 text-xs py-2 rounded-xl border font-medium transition-all ${
+            isTomorrow
+              ? "border-primary/60 bg-primary/15 text-primary"
+              : "border-border/50 bg-muted/30 text-muted-foreground"
+          }`}
+        >
+          Tomorrow
+        </button>
+      </div>
+      {isTomorrow && (
+        <p className="text-[11px] text-muted-foreground/60 mt-1.5">
+          Today will show as a rest day. Your streak starts tomorrow.
+        </p>
+      )}
     </div>
   );
 }

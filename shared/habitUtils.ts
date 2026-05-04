@@ -71,18 +71,32 @@ export function habitNotificationBody(anchor: string | null | undefined, habitNa
 /**
  * Returns true if a habit should appear on the given date based on its frequency.
  * date: YYYY-MM-DD string
+ *
+ * startDate (if set) gates visibility — days before startDate are never due.
+ * startDate also serves as the anchor for `alternate` and `weekly` patterns so
+ * that "start tomorrow" shifts the entire cycle correctly.
  */
 export function isHabitDueToday(
   habit: {
     frequency?: string | null;
     specificDays?: string | null;
+    startDate?: string | null;
     createdAt?: Date | string | null;
   },
   date: string
 ): boolean {
+  // ── Start-date gate ──────────────────────────────────────────────────────
+  // Prefer explicit startDate; fall back to the createdAt calendar date.
+  const effectiveStartDate =
+    habit.startDate ||
+    (habit.createdAt
+      ? new Date(habit.createdAt).toISOString().split("T")[0]
+      : null);
+  if (effectiveStartDate && date < effectiveStartDate) return false;
+
   const freq = habit.frequency || "daily";
 
-  // Always visible
+  // Always visible once past start date
   if (freq === "daily" || freq === "multiple_daily") return true;
 
   const d = new Date(date + "T12:00:00");
@@ -99,11 +113,16 @@ export function isHabitDueToday(
     return days.includes(dow);
   }
 
+  // For `alternate` and `weekly`, use startDate as the cycle anchor so that
+  // "start tomorrow" shifts the pattern correctly. Fall back to createdAt.
+  const anchorStr =
+    habit.startDate ||
+    (habit.createdAt
+      ? new Date(habit.createdAt).toISOString().split("T")[0]
+      : new Date().toISOString().split("T")[0]);
+  const anchorDate = new Date(anchorStr + "T12:00:00");
+
   if (freq === "alternate") {
-    const anchor = habit.createdAt ? new Date(habit.createdAt) : new Date();
-    const anchorDate = new Date(
-      anchor.toISOString().split("T")[0] + "T12:00:00"
-    );
     const diff = Math.round(
       (d.getTime() - anchorDate.getTime()) / (1000 * 60 * 60 * 24)
     );
@@ -111,8 +130,7 @@ export function isHabitDueToday(
   }
 
   if (freq === "weekly") {
-    const anchor = habit.createdAt ? new Date(habit.createdAt) : new Date();
-    return dow === anchor.getDay();
+    return dow === anchorDate.getDay();
   }
 
   return true;
