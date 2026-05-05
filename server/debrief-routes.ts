@@ -26,8 +26,16 @@ function requireAuth(req: Request, res: Response): number | null {
   return userId;
 }
 
-/** Returns the org's custom AI persona name for the given user, or null. */
+const CORPORATE_ENABLED = process.env.CORPORATE_TIER_ENABLED === "true";
+
+/**
+ * Returns the org's custom AI persona name for the given user, or null.
+ * Short-circuits when the corporate feature flag is off so the debrief
+ * flow never queries corporate tables in non-corporate environments.
+ */
 async function getOrgPersonaName(userId: number): Promise<string | null> {
+  if (!CORPORATE_ENABLED) return null;
+
   const adminOrg = await db
     .select({ aiPersonaName: organisations.aiPersonaName })
     .from(organisations)

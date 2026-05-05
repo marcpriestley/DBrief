@@ -12,6 +12,7 @@ import {
   habits, habitLogs, dailyGoals,
 } from "@shared/schema";
 import { orgChallenges } from "@shared/corporate-schema";
+const CORPORATE_ENABLED = process.env.CORPORATE_TIER_ENABLED === "true";
 import OpenAI from "openai";
 import type { HealthData } from "./oura";
 import { sendPushNotification, getVapidPublicKey } from "./notifications";
@@ -2172,6 +2173,10 @@ Convert the habit to a natural English verb phrase. Return ONLY the sentence, no
       if (!["habit", "score"].includes(type)) {
         return res.status(400).json({ message: "type must be habit or score" });
       }
+      // Org-scoped challenges may only be created via the corporate admin route
+      if (visibility === "org") {
+        return res.status(400).json({ message: "visibility 'org' is only available through corporate admin routes" });
+      }
       if (type === "habit" && !habitName) {
         return res.status(400).json({ message: "habitName is required for habit challenges" });
       }
@@ -2239,19 +2244,23 @@ Convert the habit to a natural English verb phrase. Return ONLY the sentence, no
       const userId = getUserId(req);
       const challengeId = parseInt(req.params.id);
 
-      // Org-scoped challenges: only active members of the owning org may view
-      const challenge = await storage.getChallengeById(challengeId);
-      if (challenge?.visibility === "org") {
-        const orgChalRows = await db
-          .select({ orgId: orgChallenges.orgId })
-          .from(orgChallenges)
-          .where(eq(orgChallenges.challengeId, challengeId));
-        if (orgChalRows.length > 0) {
-          const owningOrgId = orgChalRows[0].orgId;
-          const membership = await storage.getOrgMembershipByUser(userId);
-          const isOrgAdmin = (await storage.getOrganisationByAdmin(userId))?.id === owningOrgId;
-          if (!isOrgAdmin && (!membership || membership.orgId !== owningOrgId)) {
-            return res.status(403).json({ message: "This leaderboard is restricted to organisation members" });
+      // Org-scoped challenges: only active members of the owning org may view.
+      // Guard is skipped entirely when CORPORATE_TIER_ENABLED is off so that
+      // the org_challenges table is never queried in non-corporate environments.
+      if (CORPORATE_ENABLED) {
+        const challenge = await storage.getChallengeById(challengeId);
+        if (challenge?.visibility === "org") {
+          const orgChalRows = await db
+            .select({ orgId: orgChallenges.orgId })
+            .from(orgChallenges)
+            .where(eq(orgChallenges.challengeId, challengeId));
+          if (orgChalRows.length > 0) {
+            const owningOrgId = orgChalRows[0].orgId;
+            const membership = await storage.getOrgMembershipByUser(userId);
+            const isOrgAdmin = (await storage.getOrganisationByAdmin(userId))?.id === owningOrgId;
+            if (!isOrgAdmin && (!membership || membership.orgId !== owningOrgId)) {
+              return res.status(403).json({ message: "This leaderboard is restricted to organisation members" });
+            }
           }
         }
       }
@@ -2272,8 +2281,10 @@ Convert the habit to a natural English verb phrase. Return ONLY the sentence, no
       const challenge = await storage.getChallengeById(challengeId);
       if (!challenge) return res.status(404).json({ message: "This challenge no longer exists" });
 
-      // Org-scoped challenges: only active members of the owning org may join
-      if (challenge.visibility === "org") {
+      // Org-scoped challenges: only active members of the owning org may join.
+      // Skipped entirely when CORPORATE_TIER_ENABLED is off to avoid querying
+      // corporate tables in non-corporate environments.
+      if (CORPORATE_ENABLED && challenge.visibility === "org") {
         const orgChalRows = await db
           .select({ orgId: orgChallenges.orgId })
           .from(orgChallenges)
@@ -2441,19 +2452,22 @@ Convert the habit to a natural English verb phrase. Return ONLY the sentence, no
       const target = await storage.getUserByUsername(username);
       if (!target) return res.status(404).json({ message: "User not found" });
 
-      // Org-scoped challenges cannot be used to invite arbitrary users
-      const inviteChallenge = await storage.getChallengeById(challengeId);
-      if (inviteChallenge?.visibility === "org") {
-        const orgChalRows = await db
-          .select({ orgId: orgChallenges.orgId })
-          .from(orgChallenges)
-          .where(eq(orgChallenges.challengeId, challengeId));
-        if (orgChalRows.length > 0) {
-          const owningOrgId = orgChalRows[0].orgId;
-          const targetMembership = await storage.getOrgMembershipByUser(target.id);
-          const isTargetAdmin = (await storage.getOrganisationByAdmin(target.id))?.id === owningOrgId;
-          if (!isTargetAdmin && (!targetMembership || targetMembership.orgId !== owningOrgId)) {
-            return res.status(403).json({ message: "You can only invite organisation members to this challenge" });
+      // Org-scoped challenges cannot be used to invite arbitrary users.
+      // Skipped entirely when CORPORATE_TIER_ENABLED is off.
+      if (CORPORATE_ENABLED) {
+        const inviteChallenge = await storage.getChallengeById(challengeId);
+        if (inviteChallenge?.visibility === "org") {
+          const orgChalRows = await db
+            .select({ orgId: orgChallenges.orgId })
+            .from(orgChallenges)
+            .where(eq(orgChallenges.challengeId, challengeId));
+          if (orgChalRows.length > 0) {
+            const owningOrgId = orgChalRows[0].orgId;
+            const targetMembership = await storage.getOrgMembershipByUser(target.id);
+            const isTargetAdmin = (await storage.getOrganisationByAdmin(target.id))?.id === owningOrgId;
+            if (!isTargetAdmin && (!targetMembership || targetMembership.orgId !== owningOrgId)) {
+              return res.status(403).json({ message: "You can only invite organisation members to this challenge" });
+            }
           }
         }
       }
