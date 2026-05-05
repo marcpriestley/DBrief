@@ -52,3 +52,7 @@ GOOGLE_IOS_CLIENT_ID = "866760999351-ot0m67ptebm03r7ob42qdc5h2q8qste7.apps.googl
 STRIPE_PRICE_ID = "price_1TRbzGDEG5ZI5MfFaybx6d0C"
 
 [userenv.production]
+
+[userenv.development]
+CORPORATE_TIER_ENABLED = "true"
+VITE_CORPORATE_TIER_ENABLED = "true"
