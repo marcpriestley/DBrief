@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Flame, Zap, Snowflake, ShieldCheck, X } from "lucide-react";
+import { Flame, Zap, ShieldCheck, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { haptic, hapticSequence } from "@/lib/haptics";
@@ -291,13 +291,13 @@ function MilestoneCelebration({
                   transition={{ delay: 0.75 }}
                   className="rounded-xl bg-blue-500/10 border border-blue-400/25 p-3 mb-4 flex items-center gap-3"
                 >
-                  <Snowflake className="h-5 w-5 text-blue-400 shrink-0" />
+                  <ShieldCheck className="h-5 w-5 text-blue-400 shrink-0" />
                   <div className="text-left">
                     <p className="text-xs font-bold text-blue-300">
-                      Pit Stop Shield{freezeAwarded > 1 ? "s" : ""} Earned
+                      Streak Save{freezeAwarded > 1 ? "s" : ""} Earned
                     </p>
                     <p className="text-[11px] text-blue-400/70">
-                      +{freezeAwarded} streak freeze{freezeAwarded > 1 ? "s" : ""} added to your reserves
+                      +{freezeAwarded} Streak Save{freezeAwarded > 1 ? "s" : ""} added to your reserves
                     </p>
                   </div>
                 </motion.div>
@@ -341,7 +341,7 @@ function FreezeProtectedToast({ onDone }: { onDone: () => void }) {
       className="fixed bottom-24 left-1/2 z-50 flex items-center gap-2.5 px-5 py-3 rounded-full bg-blue-600 shadow-lg shadow-blue-600/30 cursor-grab active:cursor-grabbing touch-none"
     >
       <ShieldCheck className="h-4 w-4 text-white" />
-      <span className="text-sm font-bold text-white">Pit Stop Shield used — streak protected</span>
+      <span className="text-sm font-bold text-white">Streak Save used — streak protected</span>
     </motion.div>
   );
 }
@@ -404,8 +404,8 @@ function FreezePopover({
       >
         <div className="flex items-center justify-between px-4 pt-4 pb-2">
           <div className="flex items-center gap-2">
-            <Snowflake className="h-4 w-4 text-blue-400" />
-            <span className="text-sm font-bold text-white">Pit Stop Shields</span>
+            <ShieldCheck className="h-4 w-4 text-blue-400" />
+            <span className="text-sm font-bold text-white">Streak Saves</span>
           </div>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-300 transition-colors">
             <X className="h-4 w-4" />
@@ -415,11 +415,11 @@ function FreezePopover({
         <div className="px-4 pb-4">
           <div className="flex items-center gap-3 bg-white/5 rounded-xl p-3 mb-3">
             <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0">
-              <Snowflake className="h-5 w-5 text-blue-400" />
+              <ShieldCheck className="h-5 w-5 text-blue-400" />
             </div>
             <div>
               <p className="text-xl font-black text-white">{freezeBalance}<span className="text-sm font-medium text-gray-500"> / 5</span></p>
-              <p className="text-[11px] text-gray-400">shields in reserve</p>
+              <p className="text-[11px] text-gray-400">saves in reserve</p>
             </div>
           </div>
 
@@ -431,7 +431,7 @@ function FreezePopover({
           )}
 
           <p className="text-[11px] text-gray-500 leading-relaxed mb-3">
-            Shields absorb one missed day to keep your streak alive. Earn them at 7-day intervals and activity point milestones, with bonus drops at 30, 90, and 365 days.
+            Streak Saves absorb one missed day to keep your streak alive. Earn them at 7-day intervals and activity point milestones, with bonus drops at 30, 90, and 365 days.
           </p>
 
           {recentEvents.length > 0 && (
@@ -442,9 +442,7 @@ function FreezePopover({
                   <span className={`font-bold ${ev.eventType === "earned" ? "text-blue-400" : "text-amber-400"}`}>
                     {ev.eventType === "earned" ? `+${ev.amount}` : `-${ev.amount}`}
                   </span>
-                  <span className={ev.eventType === "earned" ? "text-blue-400" : "text-amber-400"}>
-                    {ev.eventType === "earned" ? "❄️" : "🛡️"}
-                  </span>
+                  <ShieldCheck className={`h-3 w-3 ${ev.eventType === "earned" ? "text-blue-400" : "text-amber-400"}`} />
                   <span className="text-gray-400 truncate">{humanReason(ev.reason)}</span>
                 </div>
               ))}
@@ -538,47 +536,30 @@ export default function StreakDisplay({ streak }: StreakDisplayProps) {
 
   return (
     <>
-      <div className="flex items-center gap-1.5">
-        {/* Streak pill */}
-        <motion.div
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 cursor-pointer"
-          whileTap={{ scale: 0.92 }}
-          title={`${getStreakMessage(currentStreak)}${nextMilestone ? ` · Next: ${nextMilestone.sublabel}` : " · Full season complete!"}`}
-        >
-          <Flame className={`h-3.5 w-3.5 ${currentStreak > 0 ? "text-amber-500" : "text-muted-foreground"}`} />
-          <span className={`text-xs font-semibold ${currentStreak > 0 ? "text-amber-600" : "text-muted-foreground"}`}>
-            {currentStreak}
+      {/* Streak pill — tap to open Streak Saves popover */}
+      <motion.div
+        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full cursor-pointer transition-colors ${
+          streakWasProtected
+            ? "bg-blue-500/15 border border-blue-400/25"
+            : "bg-amber-500/10"
+        }`}
+        whileTap={{ scale: 0.92 }}
+        onClick={() => { haptic("light"); setShowFreezePopover(true); }}
+        title={`${getStreakMessage(currentStreak)}${nextMilestone ? ` · Next: ${nextMilestone.sublabel}` : " · Full season complete!"} · Tap for Streak Saves`}
+      >
+        {streakWasProtected
+          ? <ShieldCheck className="h-3.5 w-3.5 text-blue-400" />
+          : <Flame className={`h-3.5 w-3.5 ${currentStreak > 0 ? "text-amber-500" : "text-muted-foreground"}`} />
+        }
+        <span className={`text-xs font-semibold ${streakWasProtected ? "text-blue-400" : currentStreak > 0 ? "text-amber-600" : "text-muted-foreground"}`}>
+          {currentStreak}
+        </span>
+        {nextMilestone && currentStreak > 0 && !streakWasProtected && (
+          <span className="text-[10px] text-amber-500/60 font-medium">
+            /{nextMilestone.days}
           </span>
-          {nextMilestone && currentStreak > 0 && (
-            <span className="text-[10px] text-amber-500/60 font-medium">
-              /{nextMilestone.days}
-            </span>
-          )}
-        </motion.div>
-
-        {/* Freeze pill — tap for popover */}
-        <motion.div
-          className={`flex items-center gap-1 px-2 py-1 rounded-full cursor-pointer transition-colors ${
-            streakWasProtected
-              ? "bg-blue-500/20 border border-blue-400/30"
-              : freezeBalance > 0
-              ? "bg-blue-500/10"
-              : "bg-muted/30"
-          }`}
-          whileTap={{ scale: 0.92 }}
-          onClick={() => { haptic("light"); setShowFreezePopover(true); }}
-          title={`${freezeBalance} Pit Stop Shield${freezeBalance !== 1 ? "s" : ""}`}
-        >
-          {streakWasProtected ? (
-            <ShieldCheck className="h-3.5 w-3.5 text-blue-400" />
-          ) : (
-            <Snowflake className={`h-3.5 w-3.5 ${freezeBalance > 0 ? "text-blue-400" : "text-muted-foreground"}`} />
-          )}
-          <span className={`text-xs font-semibold ${freezeBalance > 0 ? "text-blue-400" : "text-muted-foreground"}`}>
-            {freezeBalance}
-          </span>
-        </motion.div>
-      </div>
+        )}
+      </motion.div>
 
       <AnimatePresence>
         {showIncrement && (

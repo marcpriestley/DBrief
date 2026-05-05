@@ -40,11 +40,11 @@ The application uses a **React with TypeScript** frontend, styled with **Shadcn/
 - **Goal Systems**: "Infinite Goal," up to three "Long-Term Targets," and "Daily Goals."
 - **Habit Lab**: Supports habit formation with streak tracking, milestones, habit stacking, and AI guidance.
 - **Performance Telemetry**: Daily metric tracking on a 0-100 scale.
-- **Streak Tracking**: Duolingo-style system with milestone celebrations and Pit Stop Shields (streak freezes). Freezes auto-consume when exactly one day is missed. Earned at 7-day intervals, 30/90/365-day bonuses, and every 500 activity-point threshold. Max 5 shields. Tracked in `streak_freeze_events` table.
+- **Streak Tracking**: Duolingo-style system with milestone celebrations and Streak Saves (streak freezes). Freezes auto-consume when exactly one day is missed. Earned at 7-day intervals, 30/90/365-day bonuses, and every 500 activity-point threshold. Max 5 saves. Tracked in `streak_freeze_events` table. Streak pill in header taps to open Streak Saves popover (freeze pill removed from header).
 - **Three-tier AI intelligence**: Includes Weekly Race Report (7-day debrief), Data Pattern Analysis (30-day correlations), and Mission Intelligence (90-day goal alignment).
 - **Retrospective Editing**: Allows input of scores and journal entries for past dates.
 - **Mood Check-in**: Slider-based daily mood tracking.
-- **Color Theme**: Grey and amber color scheme with dark mode support.
+- **Color Theme**: Neutral cool-grey light mode (hsl 220°, 90% lightness base) with dark mode unchanged. All panels use the same unified grey surface — no contrast difference between page bg and cards. Amber accent (#F59E0B) unchanged.
 - **Team Functionality**: Users can connect with others via unique "Driver Callsigns" for accountability. Features shared streak, consistency, points, leaderboards, and challenges (habit and score-based).
 - **Activity Points**: A system rewarding daily engagement, habit completion, and goal achievement, displayed on a dashboard banner and in Trends.
 - **Navigation**: Fixed bottom navigation bar with swipe gestures for page transitions, optimized for iOS safe areas.

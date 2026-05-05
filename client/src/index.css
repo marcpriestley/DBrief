@@ -3,20 +3,20 @@
 @tailwind utilities;
 
 :root {
-  --background: hsl(40, 8%, 82%);
-  --foreground: hsl(0, 0%, 7%);
-  --muted: hsl(40, 8%, 76%);
-  --muted-foreground: hsl(0, 0%, 30%);
-  --popover: hsl(40, 8%, 87%);
-  --popover-foreground: hsl(0, 0%, 7%);
-  --card: hsl(40, 8%, 87%);
-  --card-foreground: hsl(0, 0%, 7%);
-  --border: hsl(40, 6%, 55%);
-  --input: hsl(40, 6%, 57%);
+  --background: hsl(220, 8%, 90%);
+  --foreground: hsl(220, 15%, 12%);
+  --muted: hsl(220, 8%, 85%);
+  --muted-foreground: hsl(220, 8%, 38%);
+  --popover: hsl(220, 7%, 93%);
+  --popover-foreground: hsl(220, 15%, 12%);
+  --card: hsl(220, 7%, 93%);
+  --card-foreground: hsl(220, 15%, 12%);
+  --border: hsl(220, 7%, 74%);
+  --input: hsl(220, 7%, 76%);
   --primary: hsl(40, 95%, 48%);
   --primary-foreground: hsl(0, 0%, 8%);
-  --secondary: hsl(40, 6%, 83%);
-  --secondary-foreground: hsl(0, 0%, 9%);
+  --secondary: hsl(220, 7%, 88%);
+  --secondary-foreground: hsl(220, 15%, 12%);
   --accent: hsl(40, 95%, 48%);
   --accent-foreground: hsl(0, 0%, 8%);
   --destructive: hsl(0, 72%, 51%);
@@ -69,7 +69,7 @@ html {
 }
 html.light {
   color-scheme: light;
-  background-color: hsl(40, 8%, 82%);
+  background-color: hsl(220, 8%, 90%);
 }
 html.dark {
   color-scheme: dark;
@@ -108,7 +108,7 @@ html.dark body {
   overscroll-behavior-y: none;
   /* Hardcoded rather than var() so the safe-area zones are always painted the
      correct colour even before CSS vars (which depend on html.dark) resolve. */
-  background-color: hsl(40, 8%, 82%);
+  background-color: hsl(220, 8%, 90%);
   /* Do NOT use -webkit-overflow-scrolling:touch — it creates a new stacking
      context that breaks position:fixed children on some WKWebView versions. */
 }
@@ -119,13 +119,13 @@ html.dark #root {
 
 /* ── Debrief hero card ───────────────────────────────────────────────────────
    In dark mode: premium dark cockpit panel with amber glow.
-   In light mode: matches the card palette — same grey as other panels. */
+   In light mode: same card surface as every other panel — unified grey. */
 .debrief-hero-card {
   background: var(--card);
-  border: 1px solid rgba(245, 158, 11, 0.35);
-  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.08), 0 4px 16px rgba(245, 158, 11, 0.06);
-  --foreground: hsl(0, 0%, 7%);
-  --muted-foreground: hsl(0, 0%, 30%);
+  border: 1px solid rgba(245, 158, 11, 0.30);
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.06), 0 1px 6px rgba(0, 0, 0, 0.07), 0 0 0 1px rgba(0, 0, 0, 0.03);
+  --foreground: hsl(220, 15%, 12%);
+  --muted-foreground: hsl(220, 8%, 38%);
 }
 .dark .debrief-hero-card {
   background: linear-gradient(145deg, hsl(0, 0%, 11%) 0%, hsl(0, 0%, 9%) 60%, hsl(38, 92%, 6%) 100%);
