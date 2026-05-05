@@ -437,18 +437,26 @@ function WeekDots({ days, scheduled, beforeStart }: { days: boolean[]; scheduled
         const isBefore    = beforeStart?.[i] ?? false;
         const isScheduled = !scheduled || scheduled[i];
         const isToday     = i === todayIndex;
+        const faded       = isBefore || !isScheduled;
 
-        // Three distinct states:
-        // 1. Before the habit's start date — just faint, no strikethrough
-        // 2. Off-day in the pattern (after start) — strikethrough
-        // 3. Active scheduled day — normal / done / today highlight
-        const cls = isBefore || !isScheduled
+        const cls = faded
           ? "opacity-20 text-muted-foreground"
           : done
               ? "text-primary"
               : isToday
                 ? "text-primary opacity-75"
                 : "text-muted-foreground";
+
+        if (isToday && !faded) {
+          return (
+            <span
+              key={i}
+              className={`text-[10px] font-semibold leading-none w-4 h-4 flex items-center justify-center rounded-full border border-current ${cls}`}
+            >
+              {DAY_LABELS[i]}
+            </span>
+          );
+        }
 
         return (
           <span key={i} className={`text-[10px] font-semibold leading-none ${cls}`}>
@@ -500,7 +508,7 @@ function HabitCard({
       <div className="flex items-center gap-3 p-4">
         {/* Completion toggle / rest day indicator */}
         {isRestDay ? (
-          <div className="shrink-0 w-9 h-9 rounded-full border-2 border-border/30 bg-transparent flex items-center justify-center">
+          <div className="shrink-0 w-9 h-9 rounded-full border-2 border-red-500/50 bg-transparent flex items-center justify-center">
             <span className="text-base leading-none opacity-40">—</span>
           </div>
         ) : (
@@ -528,7 +536,7 @@ function HabitCard({
               {habit.name}
             </span>
             {isRestDay && (
-              <span className="text-[10px] text-muted-foreground/50 border border-border/30 rounded px-1 py-0.5 shrink-0">rest</span>
+              <span className="text-[10px] text-red-400/70 border border-red-500/30 rounded px-1 py-0.5 shrink-0">Rest Day</span>
             )}
           </div>
           {habit.anchorHabit && (
