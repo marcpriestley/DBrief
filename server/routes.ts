@@ -2487,7 +2487,6 @@ Convert the habit to a natural English verb phrase. Return ONLY the sentence, no
         storage.getUser(userId),
       ]);
       const inviterName = inviter?.displayName || inviter?.username || "Someone";
-      const challengeTitle = inviteChallenge?.title || "a challenge";
       await notifyUser(target.id, {
         title: "New Challenge Invite",
         body: "You've been invited to a DBrief App challenge",

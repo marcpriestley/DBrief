@@ -402,11 +402,6 @@ function AuthenticatedRouter() {
             <Route path="/squad" component={SquadPage} />
             {CORPORATE_ENABLED && <Route path="/corporate/onboarding" component={CorporateOnboarding} />}
             {CORPORATE_ENABLED && <Route path="/corporate/dashboard" component={CorporateDashboard} />}
-            {CORPORATE_ENABLED && (
-              <Route path="/join/:token">
-                {(params: { token: string }) => <JoinOrg token={params.token} />}
-              </Route>
-            )}
             <Route component={NotFound} />
           </Switch>
           <BirthdayCelebration displayName={user?.displayName} dateOfBirth={dateOfBirth} />
@@ -458,6 +453,11 @@ function App() {
         <Switch>
           <Route path="/privacy" component={PrivacyPolicy} />
           <Route path="/terms" component={TermsOfService} />
+          {CORPORATE_ENABLED && (
+            <Route path="/join/:token">
+              {(params: { token: string }) => <JoinOrg token={params.token} />}
+            </Route>
+          )}
           <Route component={AuthenticatedRouter} />
         </Switch>
       </TooltipProvider>

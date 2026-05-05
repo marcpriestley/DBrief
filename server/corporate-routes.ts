@@ -17,11 +17,20 @@ const CORPORATE_ENABLED = process.env.CORPORATE_TIER_ENABLED === "true";
 // column is set to NULL so the same token cannot be accepted again.
 const INVITE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 
+/**
+ * Returns SESSION_SECRET and throws at call-time if it is absent.
+ * Invite tokens must not be signed with a known fallback — fail closed.
+ */
+function getInviteSecret(): string {
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) throw new Error("SESSION_SECRET must be set to use corporate invite tokens");
+  return secret;
+}
+
 function generateInviteToken(orgId: number, email: string): string {
   const exp = Date.now() + INVITE_EXPIRY_MS;
   const payload = `${orgId}|${email}|${exp}`;
-  const secret = process.env.SESSION_SECRET ?? "dbrief-default-invite-secret";
-  const sig = crypto.createHmac("sha256", secret).update(payload).digest("base64url");
+  const sig = crypto.createHmac("sha256", getInviteSecret()).update(payload).digest("base64url");
   return Buffer.from(`${payload}|${sig}`).toString("base64url");
 }
 
@@ -35,8 +44,7 @@ function verifyInviteToken(
     if (sigSep === -1) return { valid: false, expired: false };
     const payload = decoded.slice(0, sigSep);
     const sig = decoded.slice(sigSep + 1);
-    const secret = process.env.SESSION_SECRET ?? "dbrief-default-invite-secret";
-    const expected = crypto.createHmac("sha256", secret).update(payload).digest("base64url");
+    const expected = crypto.createHmac("sha256", getInviteSecret()).update(payload).digest("base64url");
     if (sig !== expected) return { valid: false, expired: false };
     // Payload: orgId|email|exp
     const firstPipe = payload.indexOf("|");
