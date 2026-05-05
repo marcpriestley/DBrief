@@ -58,6 +58,10 @@ export default function Welcome() {
         username: data.email,
         password: data.password,
       });
+      const contentType = res.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        throw new Error("Server returned an unexpected response. Please check your connection and try again.");
+      }
       return res.json();
     },
     onSuccess: (data) => {
