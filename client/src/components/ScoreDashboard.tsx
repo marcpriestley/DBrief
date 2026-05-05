@@ -100,7 +100,7 @@ function NativeSlider({ value, onChange, min = 0, max = 100, color = "hsl(40, 95
     <div className="relative" style={{ height: 28 }}>
       <div className="absolute pointer-events-none rounded-full" style={{ left: 14, right: 14, top: 10, height: 8, background: "var(--muted)" }} />
       <div className="absolute pointer-events-none rounded-full" style={{ left: 14, top: 10, height: 8, width: `calc(${pct / 100} * (100% - 28px))`, background: color }} />
-      <div className="absolute pointer-events-none rounded-full" style={{ width: 28, height: 28, top: 0, left: `calc(${pct / 100} * (100% - 28px))`, background: color, border: "2px solid hsl(0,0%,8%)", boxShadow: "0 2px 6px rgba(0,0,0,0.35)" }} />
+      <div className="absolute pointer-events-none rounded-full" style={{ width: 28, height: 28, top: 0, left: `calc(${pct / 100} * (100% - 28px))`, background: color, border: "2px solid var(--background)", boxShadow: "0 2px 6px rgba(0,0,0,0.35)" }} />
       <input
         ref={inputRef}
         type="range"

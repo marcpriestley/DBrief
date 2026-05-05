@@ -3,16 +3,16 @@
 @tailwind utilities;
 
 :root {
-  --background: hsl(40, 15%, 93%);
+  --background: hsl(40, 14%, 87%);
   --foreground: hsl(0, 0%, 7%);
-  --muted: hsl(40, 10%, 88%);
-  --muted-foreground: hsl(0, 0%, 25%);
-  --popover: hsl(40, 20%, 97%);
+  --muted: hsl(40, 10%, 80%);
+  --muted-foreground: hsl(0, 0%, 28%);
+  --popover: hsl(40, 18%, 95%);
   --popover-foreground: hsl(0, 0%, 7%);
-  --card: hsl(40, 20%, 97%);
+  --card: hsl(40, 18%, 95%);
   --card-foreground: hsl(0, 0%, 7%);
-  --border: hsl(40, 8%, 68%);
-  --input: hsl(40, 8%, 70%);
+  --border: hsl(40, 8%, 60%);
+  --input: hsl(40, 8%, 62%);
   --primary: hsl(40, 95%, 48%);
   --primary-foreground: hsl(0, 0%, 8%);
   --secondary: hsl(0, 0%, 93%);
@@ -69,7 +69,7 @@ html {
 }
 html.light {
   color-scheme: light;
-  background-color: hsl(40, 15%, 93%);
+  background-color: hsl(40, 14%, 87%);
 }
 html.dark {
   color-scheme: dark;
@@ -108,13 +108,28 @@ html.dark body {
   overscroll-behavior-y: none;
   /* Hardcoded rather than var() so the safe-area zones are always painted the
      correct colour even before CSS vars (which depend on html.dark) resolve. */
-  background-color: hsl(40, 15%, 93%);
+  background-color: hsl(40, 14%, 87%);
   /* Do NOT use -webkit-overflow-scrolling:touch — it creates a new stacking
      context that breaks position:fixed children on some WKWebView versions. */
 }
 
 html.dark #root {
   background-color: hsl(0, 0%, 8%);
+}
+
+/* ── Debrief hero card ───────────────────────────────────────────────────────
+   Always renders as a premium dark cockpit panel regardless of app theme.
+   CSS custom properties are overridden locally so all child text-foreground /
+   text-muted-foreground utilities read the light-on-dark values. */
+.debrief-hero-card {
+  background: linear-gradient(145deg, hsl(30, 8%, 20%) 0%, hsl(30, 6%, 16%) 60%, hsl(38, 40%, 13%) 100%);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.08), 0 8px 32px rgba(245, 158, 11, 0.10);
+  --foreground: hsl(0, 0%, 93%);
+  --muted-foreground: hsl(0, 0%, 60%);
+}
+.dark .debrief-hero-card {
+  background: linear-gradient(145deg, hsl(0, 0%, 11%) 0%, hsl(0, 0%, 9%) 60%, hsl(38, 92%, 6%) 100%);
 }
 
 

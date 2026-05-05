@@ -1703,14 +1703,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     const hour = new Date().getHours();
     const greeting = hour < 12 ? "Morning debrief" : hour < 17 ? "Afternoon debrief" : "Evening debrief";
     return (
-      <div
-        className="rounded-2xl overflow-hidden relative"
-        style={{
-          background: 'linear-gradient(145deg, hsl(0,0%,11%) 0%, hsl(0,0%,9%) 60%, hsl(38,92%,6%) 100%)',
-          border: '1px solid rgba(245,158,11,0.35)',
-          boxShadow: '0 0 0 1px rgba(245,158,11,0.08), 0 8px 32px rgba(245,158,11,0.10)',
-        }}
-      >
+      <div className="debrief-hero-card rounded-2xl overflow-hidden relative">
         {/* Subtle top amber strip */}
         <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ background: 'linear-gradient(90deg, transparent, rgba(245,158,11,0.7) 30%, rgba(245,158,11,0.9) 50%, rgba(245,158,11,0.7) 70%, transparent)' }} />
 
@@ -1755,7 +1748,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
             <Button
               onClick={() => { haptic("light"); setShowQuickLog(true); }}
               variant="outline"
-              className="h-12 text-sm font-medium rounded-xl border-white/10 text-foreground"
+              className="h-12 text-sm font-medium rounded-xl border-border/40 text-foreground"
               style={{ touchAction: 'manipulation' }}
             >
               <BookOpen className="h-4 w-4 mr-1.5" />Log a moment
@@ -1781,14 +1774,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     return (
       <div className="space-y-3">
         {/* New session hero — full prominence even after a session exists */}
-        <div
-          className="rounded-2xl overflow-hidden relative"
-          style={{
-            background: 'linear-gradient(145deg, hsl(0,0%,11%) 0%, hsl(0,0%,9%) 60%, hsl(38,92%,6%) 100%)',
-            border: '1px solid rgba(245,158,11,0.35)',
-            boxShadow: '0 0 0 1px rgba(245,158,11,0.08), 0 8px 32px rgba(245,158,11,0.10)',
-          }}
-        >
+        <div className="debrief-hero-card rounded-2xl overflow-hidden relative">
           <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ background: 'linear-gradient(90deg, transparent, rgba(245,158,11,0.7) 30%, rgba(245,158,11,0.9) 50%, rgba(245,158,11,0.7) 70%, transparent)' }} />
           <div className="px-5 pt-5 pb-6 space-y-5">
             <div className="flex items-center gap-1.5">
@@ -1821,7 +1807,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
               <Button
                 onClick={() => { haptic("light"); setShowQuickLog(true); }}
                 variant="outline"
-                className="h-12 text-sm font-medium rounded-xl border-white/10 text-foreground"
+                className="h-12 text-sm font-medium rounded-xl border-border/40 text-foreground"
                 style={{ touchAction: 'manipulation' }}
               >
                 <BookOpen className="h-4 w-4 mr-1.5" />Log a moment
