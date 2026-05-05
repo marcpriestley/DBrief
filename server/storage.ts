@@ -61,6 +61,7 @@ export interface IStorage {
   // Streak freeze event methods
   getStreakFreezeEvents(userId: number, limit?: number): Promise<StreakFreezeEvent[]>;
   createStreakFreezeEvent(event: InsertStreakFreezeEvent): Promise<StreakFreezeEvent>;
+  getAwardedActivityPointThresholds(userId: number): Promise<Set<number>>;
 
   // AI insights methods
   getActiveAIInsights(userId: number): Promise<AIInsight[]>;
@@ -661,6 +662,7 @@ export class MemStorage implements IStorage {
   async createStreakFreezeEvent(event: InsertStreakFreezeEvent): Promise<StreakFreezeEvent> {
     return { id: 0, userId: event.userId, eventType: event.eventType, reason: event.reason, amount: event.amount ?? 1, createdAt: new Date() };
   }
+  async getAwardedActivityPointThresholds(_userId: number): Promise<Set<number>> { return new Set(); }
 }
 
 // Database implementation
@@ -848,6 +850,25 @@ export class DatabaseStorage implements IStorage {
   async createStreakFreezeEvent(event: InsertStreakFreezeEvent): Promise<StreakFreezeEvent> {
     const [created] = await db.insert(streakFreezeEvents).values(event).returning();
     return created;
+  }
+
+  async getAwardedActivityPointThresholds(userId: number): Promise<Set<number>> {
+    const rows = await db
+      .select({ reason: streakFreezeEvents.reason })
+      .from(streakFreezeEvents)
+      .where(
+        and(
+          eq(streakFreezeEvents.userId, userId),
+          eq(streakFreezeEvents.eventType, "earned"),
+          sql`${streakFreezeEvents.reason} LIKE 'activity-points-%'`,
+        ),
+      );
+    const thresholds = new Set<number>();
+    for (const { reason } of rows) {
+      const t = parseInt(reason.replace("activity-points-", ""), 10);
+      if (!isNaN(t)) thresholds.add(t);
+    }
+    return thresholds;
   }
 
   async getActiveAIInsights(userId: number): Promise<AIInsight[]> {

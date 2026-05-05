@@ -140,22 +140,15 @@ export async function checkActivityPointFreeze(
   userId: number,
 ): Promise<{ awarded: number }> {
   try {
-    const [streak, currentPoints, events] = await Promise.all([
+    const [streak, currentPoints, awardedThresholds] = await Promise.all([
       storage.getUserStreak(userId),
       storage.getUserPoints(userId),
-      storage.getStreakFreezeEvents(userId, 200),
+      // Purpose-built query fetches ALL awarded thresholds (no pagination limit)
+      storage.getAwardedActivityPointThresholds(userId),
     ]);
 
     const freezeBalance = streak?.streakFreezes ?? 0;
     if (freezeBalance >= FREEZE_CAP) return { awarded: 0 };
-
-    // Determine which 500-point thresholds have already been awarded
-    const awardedThresholds = new Set(
-      events
-        .filter(e => e.eventType === "earned" && e.reason.startsWith("activity-points-"))
-        .map(e => parseInt(e.reason.replace("activity-points-", ""), 10))
-        .filter(n => !isNaN(n)),
-    );
 
     const maxThreshold = Math.floor(currentPoints / 500) * 500;
     let newlyAwarded = 0;
@@ -169,6 +162,8 @@ export async function checkActivityPointFreeze(
           amount: 1,
         });
         newlyAwarded++;
+        // Track locally so we don't re-award within the same call for multiple thresholds
+        awardedThresholds.add(t);
       }
     }
 

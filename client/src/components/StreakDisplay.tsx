@@ -4,8 +4,35 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { haptic, hapticSequence } from "@/lib/haptics";
 
+interface FreezEvent {
+  id: number;
+  userId: number;
+  eventType: "earned" | "used";
+  reason: string;
+  amount: number;
+  createdAt: string | null;
+}
+
+interface FreezeData {
+  freezeBalance: number;
+  recentEvents: FreezEvent[];
+  streakWasProtected: boolean;
+  freezeUsedDate: string | null;
+}
+
+interface StreakProps {
+  currentStreak: number | null;
+  longestStreak: number | null;
+  lastEntryDate: string | null;
+  streakFreezes?: number | null;
+  freezeUsedDate?: string | null;
+  recentActiveDays?: number;
+  insightsUnlocked?: boolean;
+  dataDays?: number;
+}
+
 interface StreakDisplayProps {
-  streak: any;
+  streak: StreakProps | null | undefined;
 }
 
 const MILESTONES = [
@@ -354,7 +381,7 @@ function FreezePopover({
   onClose,
 }: {
   freezeBalance: number;
-  recentEvents: any[];
+  recentEvents: FreezEvent[];
   streakWasProtected: boolean;
   onClose: () => void;
 }) {
@@ -409,7 +436,7 @@ function FreezePopover({
           {recentEvents.length > 0 && (
             <div className="space-y-1.5">
               <p className="text-[10px] font-semibold tracking-widest uppercase text-gray-600 mb-2">Recent</p>
-              {recentEvents.map((ev: any) => (
+              {recentEvents.map((ev) => (
                 <div key={ev.id} className="flex items-center gap-2.5 text-[11px]">
                   <span className={`font-bold ${ev.eventType === "earned" ? "text-blue-400" : "text-amber-400"}`}>
                     {ev.eventType === "earned" ? `+${ev.amount}` : `-${ev.amount}`}
@@ -438,18 +465,13 @@ export default function StreakDisplay({ streak }: StreakDisplayProps) {
   const [showFreezePopover, setShowFreezePopover] = useState(false);
   const initializedRef = useRef(false);
 
-  const { data: freezeData } = useQuery<{
-    freezeBalance: number;
-    recentEvents: any[];
-    streakWasProtected: boolean;
-    freezeUsedDate: string | null;
-  }>({
+  const { data: freezeData } = useQuery<FreezeData>({
     queryKey: ["/api/streak-freezes"],
     refetchInterval: 30_000,
   });
 
   const freezeBalance = freezeData?.freezeBalance ?? 0;
-  const recentEvents = freezeData?.recentEvents ?? [];
+  const recentEvents: FreezEvent[] = freezeData?.recentEvents ?? [];
   const streakWasProtected = freezeData?.streakWasProtected ?? false;
 
   // Show "protected" toast once when a new missed-day-protection event is detected
@@ -457,7 +479,7 @@ export default function StreakDisplay({ streak }: StreakDisplayProps) {
     if (!freezeData) return;
     const seen = getSeenFreezeEventIds();
     const unseenProtection = recentEvents.find(
-      (e: any) => e.eventType === "used" && e.reason === "missed-day-protection" && !seen.has(e.id),
+      (e) => e.eventType === "used" && e.reason === "missed-day-protection" && !seen.has(e.id),
     );
     if (!unseenProtection) return;
     markFreezeEventSeen(unseenProtection.id);
@@ -487,7 +509,7 @@ export default function StreakDisplay({ streak }: StreakDisplayProps) {
         // Check for an unseen freeze-earned event to announce in the celebration
         const seenIds = getSeenFreezeEventIds();
         const unseenEarned = recentEvents.find(
-          (e: any) =>
+          (e) =>
             e.eventType === "earned" &&
             !e.reason.startsWith("activity-points-") &&
             !seenIds.has(e.id),

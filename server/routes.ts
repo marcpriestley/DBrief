@@ -783,6 +783,7 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
       // Update streak based on score inputs (only for user inputs, not auto-synced)
       if (!validatedData.isAutoSynced) {
         await updateUserStreak(userId, validatedData.date);
+        checkActivityPointFreeze(userId).catch(() => {});
 
         // ── Milestone notifications (fire-and-forget, non-blocking) ──────────
         setImmediate(async () => {
@@ -1014,7 +1015,10 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
       const updated = await storage.toggleDailyGoal(parseInt(id), userId);
       if (!updated) return res.status(404).json({ message: "Goal not found" });
       const today = new Date().toISOString().split("T")[0];
-      if (updated.date === today) updateUserStreak(userId, today).catch(() => {});
+      if (updated.date === today) {
+        updateUserStreak(userId, today).catch(() => {});
+        checkActivityPointFreeze(userId).catch(() => {});
+      }
       res.json(updated);
     } catch (error) {
       res.status(500).json({ message: "Failed to toggle goal" });
@@ -1092,6 +1096,7 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
         label: label || null,
       });
       updateUserStreak(userId, today).catch(() => {});
+      checkActivityPointFreeze(userId).catch(() => {});
       res.json(checkin);
     } catch (error) {
       res.status(500).json({ message: "Failed to save mood check-in" });
@@ -1148,8 +1153,6 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
   app.get("/api/streak-freezes", async (req, res) => {
     try {
       const userId = getUserId(req);
-      // Also run point-threshold check on every poll so new thresholds are caught
-      checkActivityPointFreeze(userId).catch(() => {});
       const [streak, events] = await Promise.all([
         storage.getUserStreak(userId),
         storage.getStreakFreezeEvents(userId, 10),
