@@ -168,9 +168,21 @@ export async function checkActivityPointFreeze(
     }
 
     if (newlyAwarded > 0) {
-      await storage.updateStreak(userId, {
-        streakFreezes: Math.min(FREEZE_CAP, freezeBalance + newlyAwarded),
-      });
+      if (streak) {
+        // Streak row exists — just update the freeze balance
+        await storage.updateStreak(userId, {
+          streakFreezes: Math.min(FREEZE_CAP, freezeBalance + newlyAwarded),
+        });
+      } else {
+        // No streak row yet — create one so the freeze balance is persisted
+        await storage.createStreak({
+          userId,
+          currentStreak: 0,
+          longestStreak: 0,
+          lastEntryDate: null,
+          streakFreezes: Math.min(FREEZE_CAP, newlyAwarded),
+        });
+      }
     }
 
     return { awarded: newlyAwarded };
