@@ -290,6 +290,20 @@ function AppLayoutInner({ children }: AppLayoutProps) {
     };
     document.addEventListener("visibilitychange", onVisibility);
 
+    // Theme switch observer — fires applyStatusBar immediately whenever the
+    // user toggles light/dark in Settings so the native iOS status bar colour
+    // updates in real-time rather than waiting for the next keyboard event.
+    let lastThemeClass = document.documentElement.classList.contains('light') ? 'light' : 'dark';
+    const themeObserver = new MutationObserver(() => {
+      const nowLight = document.documentElement.classList.contains('light');
+      const nowClass = nowLight ? 'light' : 'dark';
+      if (nowClass !== lastThemeClass) {
+        lastThemeClass = nowClass;
+        applyStatusBar(false);
+      }
+    });
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+
     return () => {
       if (vv) {
         vv.removeEventListener("resize", setVh);
@@ -300,6 +314,7 @@ function AppLayoutInner({ children }: AppLayoutProps) {
       document.removeEventListener("focus", onFocus, true);
       document.removeEventListener("blur", onBlur, true);
       document.removeEventListener("visibilitychange", onVisibility);
+      themeObserver.disconnect();
     };
   }, []);
 
