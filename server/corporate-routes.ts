@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { organisations } from "@shared/schema";
 import crypto from "crypto";
 import nodemailer from "nodemailer";
+import type { InsertOrganisation, Organisation } from "@shared/schema";
 
 const CORPORATE_ENABLED = process.env.CORPORATE_TIER_ENABLED === "true";
 
@@ -185,12 +186,12 @@ export function registerCorporateRoutes(app: Express) {
   });
 
   // ── PUT /api/corporate/org/settings ──────────────────────────────────────
-  // Note: seatCount is intentionally excluded — seat count authority lives in
-  // the Stripe subscription quantity and is synced via webhook only.
+  // Branding fields only. seatCount is excluded — its authoritative value
+  // comes from the Stripe subscription item quantity (synced via webhook).
   app.put("/api/corporate/org/settings", requireOrgAdmin, async (req: any, res) => {
     try {
       const { name, logoUrl, accentColour, aiPersonaName } = req.body;
-      const updates: Record<string, unknown> = {};
+      const updates: Partial<InsertOrganisation> = {};
       if (name !== undefined) updates.name = String(name).trim();
       if (logoUrl !== undefined) updates.logoUrl = logoUrl || null;
       if (accentColour !== undefined) updates.accentColour = accentColour;
@@ -200,7 +201,7 @@ export function registerCorporateRoutes(app: Express) {
         return res.status(400).json({ message: "No updatable fields provided" });
       }
 
-      const org = await storage.updateOrganisation(req.org.id, updates as any);
+      const org = await storage.updateOrganisation(req.org.id, updates);
       res.json(org);
     } catch (err: any) {
       res.status(err.status ?? 500).json({ message: err.message });
@@ -350,8 +351,17 @@ export function registerCorporateRoutes(app: Express) {
     try {
       const stripe = await getUncachableStripeClient();
       const priceId = await getCorporatePriceId();
-      const org: any = req.org;
+      const org: Organisation = req.org;
       const userId: number = req.adminUserId;
+
+      // Accept optional seatCount override from the onboarding flow.
+      // This is the pre-Stripe seat selection; after checkout the webhook
+      // syncs the authoritative quantity from the Stripe subscription item.
+      const requestedSeats = req.body?.seatCount ? Math.max(1, Number(req.body.seatCount)) : null;
+      if (requestedSeats !== null && requestedSeats !== org.seatCount) {
+        await storage.updateOrganisation(org.id, { seatCount: requestedSeats });
+      }
+      const seatQty = requestedSeats ?? org.seatCount ?? 5;
 
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ message: "User not found" });
@@ -374,7 +384,7 @@ export function registerCorporateRoutes(app: Express) {
       const session = await stripe.checkout.sessions.create({
         customer: customerId,
         mode: "subscription",
-        line_items: [{ price: priceId, quantity: org.seatCount ?? 5 }],
+        line_items: [{ price: priceId, quantity: seatQty }],
         success_url: `${baseUrl}/corporate/dashboard?setup=success`,
         cancel_url: `${baseUrl}/corporate/onboarding?step=checkout&cancelled=1`,
         metadata: { orgId: String(org.id) },
@@ -487,12 +497,12 @@ export async function handleCorporateWebhookEvent(event: any) {
 
       // Sync seat count from Stripe subscription quantity — this is the
       // authoritative seat count; never accept client-supplied values.
-      const items: any[] = obj.items?.data ?? [];
+      const items: Array<{ quantity?: number }> = (obj.items?.data as Array<{ quantity?: number }>) ?? [];
       const quantity = items[0]?.quantity ?? null;
-      const updates: Record<string, unknown> = { subscriptionStatus: status };
-      if (quantity && quantity > 0) updates.seatCount = quantity;
+      const subUpdates: Partial<InsertOrganisation> = { subscriptionStatus: status };
+      if (quantity && quantity > 0) subUpdates.seatCount = quantity;
 
-      await db.update(organisations).set(updates as any).where(eq(organisations.id, orgId));
+      await db.update(organisations).set(subUpdates).where(eq(organisations.id, orgId));
       console.log(`[Corporate] Org ${orgId} subscription updated → ${status}${quantity ? `, seats=${quantity}` : ""}`);
 
     } else if (event.type === "customer.subscription.deleted") {

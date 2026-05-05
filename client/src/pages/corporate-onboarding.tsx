@@ -46,9 +46,9 @@ export default function CorporateOnboarding() {
   async function handleCheckout() {
     setCheckoutLoading(true);
     try {
-      // Update seat count then checkout
-      await apiRequest("PUT", "/api/corporate/org/settings", { seatCount });
-      const res = await apiRequest("POST", "/api/corporate/checkout", {});
+      // Pass selected seat count directly to checkout — settings endpoint is
+      // branding-only; seat quantity is passed here and authorised via Stripe.
+      const res = await apiRequest("POST", "/api/corporate/checkout", { seatCount });
       const { url } = await res.json();
       if (url) window.location.href = url;
     } catch (err: any) {

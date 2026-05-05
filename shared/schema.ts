@@ -568,7 +568,13 @@ export type ChallengeWithProgress = Challenge & {
   myReminderTime: string | null;
 };
 
-// ── Corporate Tier (gated by CORPORATE_TIER_ENABLED env flag) ────────────────
+// ── Corporate Tier ───────────────────────────────────────────────────────────
+// Schema is always defined so Drizzle migrations are tracked in a single place.
+// The application layer gates ALL corporate functionality behind the
+// CORPORATE_TIER_ENABLED=true / VITE_CORPORATE_TIER_ENABLED=true env flags —
+// routes, UI pages, and webhook handling are no-ops when the flag is absent.
+// Running `npm run db:push` with the flag absent is safe: the tables are
+// created but no routes register to expose them.
 
 export const organisations = pgTable("organisations", {
   id: serial("id").primaryKey(),
