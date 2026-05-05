@@ -306,8 +306,10 @@ export default function TrendsEnhanced() {
   };
 
   const renderChart = () => {
-    const axisStyle = { fontSize: 11, fill: 'hsl(220, 10%, 46%)' };
-    
+    const axisStyle = { fontSize: 11, fill: 'hsl(0, 0%, 38%)' };
+    const gridStroke = 'hsl(40, 8%, 85%)';
+    const tooltipStyle = { borderRadius: '8px', border: '1px solid hsl(40, 8%, 82%)', fontSize: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', backgroundColor: 'hsl(40, 18%, 97%)' };
+
     const commonXAxis = (
       <XAxis 
         dataKey="date" 
@@ -324,12 +326,12 @@ export default function TrendsEnhanced() {
     if (chartType === "line") {
       return (
         <LineChart data={chartData}>
-          <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 14%, 92%)" vertical={false} />
+          <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
           {commonXAxis}
           <YAxis domain={[0, 100]} tick={axisStyle} axisLine={false} tickLine={false} width={30} />
           <Tooltip
             labelFormatter={(value) => new Date(value).toLocaleDateString("en-GB")}
-            contentStyle={{ borderRadius: '8px', border: '1px solid hsl(220, 14%, 90%)', fontSize: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}
+            contentStyle={tooltipStyle}
           />
           <Legend wrapperStyle={{ fontSize: '12px' }} />
           {displayMetrics.map((metric) => (
@@ -359,12 +361,12 @@ export default function TrendsEnhanced() {
               </linearGradient>
             ))}
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 14%, 92%)" vertical={false} />
+          <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
           {commonXAxis}
           <YAxis domain={[0, 100]} tick={axisStyle} axisLine={false} tickLine={false} width={30} />
           <Tooltip
             labelFormatter={(value) => new Date(value).toLocaleDateString("en-GB")}
-            contentStyle={{ borderRadius: '8px', border: '1px solid hsl(220, 14%, 90%)', fontSize: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}
+            contentStyle={tooltipStyle}
           />
           <Legend wrapperStyle={{ fontSize: '12px' }} />
           {displayMetrics.map((metric) => (
@@ -383,12 +385,12 @@ export default function TrendsEnhanced() {
 
     return (
       <BarChart data={chartData}>
-        <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 14%, 92%)" vertical={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
         {commonXAxis}
         <YAxis domain={[0, 100]} tick={axisStyle} axisLine={false} tickLine={false} width={30} />
         <Tooltip
           labelFormatter={(value) => new Date(value).toLocaleDateString("en-GB")}
-          contentStyle={{ borderRadius: '8px', border: '1px solid hsl(220, 14%, 90%)', fontSize: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}
+          contentStyle={tooltipStyle}
         />
         <Legend wrapperStyle={{ fontSize: '12px' }} />
         {displayMetrics.map((metric) => (
@@ -516,7 +518,7 @@ export default function TrendsEnhanced() {
                         key={index}
                         className="aspect-square rounded-sm cursor-pointer transition-transform hover:scale-125"
                         style={{
-                          backgroundColor: intensity > 0 ? `rgba(79, 70, 229, ${0.15 + intensity * 0.7})` : 'hsl(220, 14%, 94%)',
+                          backgroundColor: intensity > 0 ? `rgba(79, 70, 229, ${0.15 + intensity * 0.7})` : 'hsl(40, 10%, 88%)',
                         }}
                         title={`${new Date(day.date).toLocaleDateString("en-GB")}: ${avgScore.toFixed(0)}/100`}
                       />
@@ -566,20 +568,20 @@ export default function TrendsEnhanced() {
               </div>
               <ResponsiveContainer width="100%" height={120}>
                 <BarChart data={dailyPointsData} barCategoryGap="20%">
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 14%, 92%)" vertical={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(40, 8%, 85%)" vertical={false} />
                   <XAxis
                     dataKey="date"
-                    tick={{ fontSize: 10, fill: 'hsl(220, 10%, 46%)' }}
+                    tick={{ fontSize: 10, fill: 'hsl(0, 0%, 38%)' }}
                     tickFormatter={(v) => { const d = new Date(v); return `${d.getDate()}/${d.getMonth()+1}`; }}
                     axisLine={false}
                     tickLine={false}
                     interval={Math.max(0, Math.floor(dailyPointsData.length / 6) - 1)}
                   />
-                  <YAxis tick={{ fontSize: 10, fill: 'hsl(220, 10%, 46%)' }} axisLine={false} tickLine={false} width={28} />
+                  <YAxis tick={{ fontSize: 10, fill: 'hsl(0, 0%, 38%)' }} axisLine={false} tickLine={false} width={28} />
                   <Tooltip
                     labelFormatter={(v) => new Date(v).toLocaleDateString("en-GB")}
                     formatter={(v: number) => [`${v} pts`, "Points"]}
-                    contentStyle={{ borderRadius: '8px', border: '1px solid hsl(220, 14%, 90%)', fontSize: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}
+                    contentStyle={{ borderRadius: '8px', border: '1px solid hsl(40, 8%, 82%)', fontSize: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', backgroundColor: 'hsl(40, 18%, 97%)' }}
                   />
                   <Bar dataKey="points" fill="hsl(45, 93%, 47%)" radius={[3, 3, 0, 0]} />
                 </BarChart>
