@@ -27,6 +27,27 @@ import { PaywallProvider } from "@/contexts/PaywallContext";
 import PaywallModal from "@/components/PaywallModal";
 import { useSubscription } from "@/hooks/useSubscription";
 
+function hslCssVarToHex(variable: string): string {
+  try {
+    const raw = getComputedStyle(document.documentElement).getPropertyValue(variable).trim();
+    // raw is e.g. "hsl(40, 15%, 93%)" or "40 15% 93%"
+    const nums = raw.match(/[\d.]+/g);
+    if (!nums || nums.length < 3) return '#000000';
+    const h = parseFloat(nums[0]);
+    const s = parseFloat(nums[1]) / 100;
+    const l = parseFloat(nums[2]) / 100;
+    const a = s * Math.min(l, 1 - l);
+    const f = (n: number) => {
+      const k = (n + h / 30) % 12;
+      const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+      return Math.round(255 * color).toString(16).padStart(2, '0');
+    };
+    return `#${f(0)}${f(8)}${f(4)}`;
+  } catch (_) {
+    return '#f0eeeb';
+  }
+}
+
 function applyStatusBar(includeOverlay: boolean) {
   if (!Capacitor.isNativePlatform()) return;
   try {
@@ -34,7 +55,8 @@ function applyStatusBar(includeOverlay: boolean) {
     if (!StatusBar) return;
     const isLight = document.documentElement.classList.contains('light');
     if (includeOverlay) StatusBar.setOverlaysWebView({ overlay: true });
-    StatusBar.setBackgroundColor({ color: isLight ? '#f7f7f7' : '#141414' });
+    const lightBg = hslCssVarToHex('--background');
+    StatusBar.setBackgroundColor({ color: isLight ? lightBg : '#141414' });
     StatusBar.setStyle({ style: isLight ? 'DARK' : 'LIGHT' });
   } catch (_) {}
 }
