@@ -24,6 +24,7 @@ import { registerChatRoutes } from "./replit_integrations/chat/routes";
 import { registerDebriefRoutes } from "./debrief-routes";
 import { registerRealtimeVoiceWS } from "./realtime-voice";
 import { registerSubscriptionRoutes } from "./subscription-routes";
+import { registerCorporateRoutes } from "./corporate-routes";
 import { generateWeeklyReport, generatePerformancePatterns } from "./weekly-report";
 import { db } from "./db";
 import { eq, and, desc, gte } from "drizzle-orm";
@@ -268,6 +269,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!user) {
         return res.status(401).json({ message: "Not authenticated" });
       }
+      // Check corporate org membership — org members get isPremium regardless of their own subscriptionStatus
+      let orgInfo: { orgId: number; orgRole: string; orgName: string; accentColour: string | null; aiPersonaName: string | null; orgSubscriptionStatus: string } | null = null;
+      if (process.env.CORPORATE_TIER_ENABLED === "true") {
+        try {
+          const adminOrg = await storage.getOrganisationByAdmin(user.id);
+          if (adminOrg) {
+            orgInfo = { orgId: adminOrg.id, orgRole: "admin", orgName: adminOrg.name, accentColour: adminOrg.accentColour, aiPersonaName: adminOrg.aiPersonaName, orgSubscriptionStatus: adminOrg.subscriptionStatus };
+          } else {
+            const membership = await storage.getOrgMembershipByUser(user.id);
+            if (membership) {
+              orgInfo = { orgId: membership.organisation.id, orgRole: "member", orgName: membership.organisation.name, accentColour: membership.organisation.accentColour, aiPersonaName: membership.organisation.aiPersonaName, orgSubscriptionStatus: membership.organisation.subscriptionStatus };
+            }
+          }
+        } catch {}
+      }
+
+      const orgIsPremium = orgInfo !== null && orgInfo.orgSubscriptionStatus === "active";
       res.json({
         id: user.id,
         username: user.username,
@@ -277,8 +295,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         journalPreference: user.journalPreference ?? "evening",
         userProfile: user.userProfile ?? null,
         subscriptionStatus: user.subscriptionStatus ?? 'free',
-        isPremium: user.subscriptionStatus === 'premium' || user.subscriptionStatus === 'beta',
+        isPremium: user.subscriptionStatus === 'premium' || user.subscriptionStatus === 'beta' || orgIsPremium,
         subscriptionCurrentPeriodEnd: user.subscriptionCurrentPeriodEnd ?? null,
+        ...(orgInfo ? { orgId: orgInfo.orgId, orgRole: orgInfo.orgRole, orgName: orgInfo.orgName } : {}),
       });
     } catch (error) {
       res.status(500).json({ message: "Failed to get user" });
@@ -2420,6 +2439,7 @@ Convert the habit to a natural English verb phrase. Return ONLY the sentence, no
   registerChatRoutes(app);
   registerDebriefRoutes(app);
   registerSubscriptionRoutes(app);
+  registerCorporateRoutes(app);
   registerRealtimeVoiceWS(httpServer);
 
   return httpServer;

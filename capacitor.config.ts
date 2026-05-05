@@ -4,10 +4,15 @@ const config: CapacitorConfig = {
   appId: 'com.dbrief.app',
   appName: 'DBrief',
   webDir: 'dist/public',
-  // server.url removed: using local bundled JS (avoids Android WebView caching issues).
-  // API calls are routed to https://DBrief.replit.app via resolveUrl() in queryClient.ts
-  // (detects window.location.hostname === 'localhost' and prepends the base URL).
+  // No server.url — JS is bundled into the APK (avoids WebView caching issues).
+  // hostname is set to the real API domain so that all relative API calls (e.g.
+  // /api/auth/login) resolve to https://dbrief.replit.app/api/... and reach the
+  // production server over the network.  Capacitor's local asset server only
+  // intercepts requests for files that exist in dist/public; anything else
+  // (API routes) falls through to the real network automatically — no JS
+  // detection or URL-rewriting needed.
   server: {
+    hostname: 'dbrief.replit.app',
     cleartext: false,
   },
   ios: {

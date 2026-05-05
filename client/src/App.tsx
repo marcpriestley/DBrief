@@ -13,6 +13,10 @@ import OnboardingFlow from "@/components/OnboardingFlow";
 import NotFound from "@/pages/not-found";
 import PrivacyPolicy from "@/pages/privacy";
 import TermsOfService from "@/pages/terms";
+import CorporateOnboarding from "@/pages/corporate-onboarding";
+import CorporateDashboard from "@/pages/corporate-dashboard";
+import JoinOrg from "@/pages/join-org";
+import { OrgBrandingProvider } from "@/contexts/OrgBrandingContext";
 import BirthdayCelebration from "@/components/BirthdayCelebration";
 import MoodCheckinModal from "@/components/MoodCheckinModal";
 import GlobalPointsToast from "@/components/GlobalPointsToast";
@@ -385,20 +389,27 @@ function AuthenticatedRouter() {
         transition: 'opacity 0.2s ease',
       }}
     >
-      <MoodProvider value={{ openMood: () => setIsMoodOpen(true) }}>
-        <Switch>
-          <Route path="/" component={Dashboard} />
-          <Route path="/dashboard" component={Dashboard} />
-          <Route path="/calendar" component={CalendarPage} />
-          <Route path="/trends" component={Trends} />
-          <Route path="/squad" component={SquadPage} />
-          <Route component={NotFound} />
-        </Switch>
-        <BirthdayCelebration displayName={user?.displayName} dateOfBirth={dateOfBirth} />
-        <MoodCheckinModal open={isMoodOpen} onClose={() => setIsMoodOpen(false)} />
-        <GlobalPointsToast />
-        <CallsignPromptModal open={showCallsignPrompt} onClose={() => setCallsignDismissed(true)} />
-      </MoodProvider>
+      <OrgBrandingProvider>
+        <MoodProvider value={{ openMood: () => setIsMoodOpen(true) }}>
+          <Switch>
+            <Route path="/" component={Dashboard} />
+            <Route path="/dashboard" component={Dashboard} />
+            <Route path="/calendar" component={CalendarPage} />
+            <Route path="/trends" component={Trends} />
+            <Route path="/squad" component={SquadPage} />
+            <Route path="/corporate/onboarding" component={CorporateOnboarding} />
+            <Route path="/corporate/dashboard" component={CorporateDashboard} />
+            <Route path="/join/:token">
+              {(params: { token: string }) => <JoinOrg token={params.token} />}
+            </Route>
+            <Route component={NotFound} />
+          </Switch>
+          <BirthdayCelebration displayName={user?.displayName} dateOfBirth={dateOfBirth} />
+          <MoodCheckinModal open={isMoodOpen} onClose={() => setIsMoodOpen(false)} />
+          <GlobalPointsToast />
+          <CallsignPromptModal open={showCallsignPrompt} onClose={() => setCallsignDismissed(true)} />
+        </MoodProvider>
+      </OrgBrandingProvider>
     </div>
   );
 }

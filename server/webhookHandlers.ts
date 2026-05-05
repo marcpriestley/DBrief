@@ -2,6 +2,7 @@ import { getStripeSync } from './stripeClient';
 import { db } from './db';
 import { users } from '@shared/schema';
 import { eq } from 'drizzle-orm';
+import { handleCorporateWebhookEvent } from './corporate-routes';
 
 // ── Webhook idempotency ───────────────────────────────────────────────────────
 // Stripe guarantees at-least-once delivery — duplicate events are normal.
@@ -134,5 +135,8 @@ export class WebhookHandlers {
         break;
       }
     }
+
+    // Also handle corporate subscription events
+    await handleCorporateWebhookEvent(event);
   }
 }

@@ -2,6 +2,7 @@ import {
   users, journalEntries, dailyScores, userMetrics, streaks, aiInsights, pushSubscriptions,
   goalTemplates, dailyGoals, journalAttachments, moodCheckins, debriefs, debriefMessages, habits, habitLogs, serverConfig,
   weeklyReports, performancePatterns, infiniteGoals, longTermGoals, userConnections,
+  organisations, orgMembers, orgChallenges,
   type User, type InsertUser, type JournalEntry, type InsertJournalEntry,
   type DailyScore, type InsertDailyScore, type UserMetric, type InsertUserMetric,
   type Streak, type InsertStreak, type AIInsight, type InsertAIInsight,
@@ -12,6 +13,7 @@ import {
   type WeeklyReport, type InsertWeeklyReport,
   type PerformancePattern, type InsertPerformancePattern,
   type UserConnection, type ConnectionPublicStats,
+  type Organisation, type InsertOrganisation, type OrgMember, type InsertOrgMember,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, asc, desc, gte, lte, gt, or, ne, sql } from "drizzle-orm";
@@ -136,6 +138,21 @@ export interface IStorage {
 
   // Account deletion
   deleteUser(userId: number): Promise<void>;
+
+  // Corporate Tier methods
+  getOrganisationById(id: number): Promise<Organisation | undefined>;
+  getOrganisationByAdmin(adminUserId: number): Promise<Organisation | undefined>;
+  createOrganisation(data: InsertOrganisation): Promise<Organisation>;
+  updateOrganisation(id: number, updates: Partial<InsertOrganisation>): Promise<Organisation | undefined>;
+  getOrgMembershipByUser(userId: number): Promise<(OrgMember & { organisation: Organisation }) | undefined>;
+  getOrgMembersByOrg(orgId: number): Promise<OrgMember[]>;
+  createOrgMember(data: InsertOrgMember): Promise<OrgMember>;
+  updateOrgMember(id: number, updates: Partial<OrgMember>): Promise<OrgMember | undefined>;
+  getOrgMemberByToken(token: string): Promise<OrgMember | undefined>;
+  getOrgMemberByEmail(orgId: number, email: string): Promise<OrgMember | undefined>;
+  getOrgTeamStats(orgId: number): Promise<{ avgStreak: number; avgConsistency: number; activeCount: number; pendingCount: number }>;
+  addOrgChallenge(orgId: number, challengeId: number): Promise<void>;
+  getOrgChallengeIds(orgId: number): Promise<number[]>;
 
   // Challenge methods
   createChallenge(creatorId: number, data: import("@shared/schema").InsertChallenge, creatorCommitment?: string, creatorReminderTime?: string): Promise<import("@shared/schema").Challenge>;
@@ -2160,6 +2177,88 @@ export function todayInTz(tz: string | null | undefined): string {
   } catch {}
   return new Date().toISOString().split("T")[0];
 }
+
+// ─── Corporate Tier storage implementations ──────────────────────────────────
+// These are added to the DatabaseStorage class via prototype injection to keep
+// the main class body from growing unwieldy.
+
+// Attach corporate methods to DatabaseStorage before it is instantiated.
+Object.assign(DatabaseStorage.prototype, {
+  async getOrganisationById(id: number): Promise<Organisation | undefined> {
+    const [org] = await db.select().from(organisations).where(eq(organisations.id, id));
+    return org;
+  },
+  async getOrganisationByAdmin(adminUserId: number): Promise<Organisation | undefined> {
+    const [org] = await db.select().from(organisations).where(eq(organisations.adminUserId, adminUserId));
+    return org;
+  },
+  async createOrganisation(data: InsertOrganisation): Promise<Organisation> {
+    const [org] = await db.insert(organisations).values(data).returning();
+    return org;
+  },
+  async updateOrganisation(id: number, updates: Partial<InsertOrganisation>): Promise<Organisation | undefined> {
+    const [org] = await db.update(organisations).set(updates).where(eq(organisations.id, id)).returning();
+    return org;
+  },
+  async getOrgMembershipByUser(userId: number): Promise<(OrgMember & { organisation: Organisation }) | undefined> {
+    const rows = await db
+      .select({ member: orgMembers, org: organisations })
+      .from(orgMembers)
+      .innerJoin(organisations, eq(orgMembers.orgId, organisations.id))
+      .where(and(eq(orgMembers.userId, userId), eq(orgMembers.status, "active")));
+    if (!rows.length) return undefined;
+    return { ...rows[0].member, organisation: rows[0].org };
+  },
+  async getOrgMembersByOrg(orgId: number): Promise<OrgMember[]> {
+    return db.select().from(orgMembers).where(eq(orgMembers.orgId, orgId)).orderBy(desc(orgMembers.createdAt));
+  },
+  async createOrgMember(data: InsertOrgMember): Promise<OrgMember> {
+    const [member] = await db.insert(orgMembers).values(data).returning();
+    return member;
+  },
+  async updateOrgMember(id: number, updates: Partial<OrgMember>): Promise<OrgMember | undefined> {
+    const [member] = await db.update(orgMembers).set(updates as any).where(eq(orgMembers.id, id)).returning();
+    return member;
+  },
+  async getOrgMemberByToken(token: string): Promise<OrgMember | undefined> {
+    const [member] = await db.select().from(orgMembers).where(eq(orgMembers.inviteToken, token));
+    return member;
+  },
+  async getOrgMemberByEmail(orgId: number, email: string): Promise<OrgMember | undefined> {
+    const [member] = await db.select().from(orgMembers)
+      .where(and(eq(orgMembers.orgId, orgId), eq(orgMembers.email, email.toLowerCase())));
+    return member;
+  },
+  async getOrgTeamStats(this: DatabaseStorage, orgId: number): Promise<{ avgStreak: number; avgConsistency: number; activeCount: number; pendingCount: number }> {
+    const members = await db.select().from(orgMembers).where(eq(orgMembers.orgId, orgId));
+    const activeMembers = members.filter(m => m.status === "active" && m.userId !== null);
+    const pendingCount = members.filter(m => m.status === "pending").length;
+    if (activeMembers.length === 0) return { avgStreak: 0, avgConsistency: 0, activeCount: 0, pendingCount };
+
+    let totalStreak = 0;
+    let totalConsistency = 0;
+    for (const member of activeMembers) {
+      if (!member.userId) continue;
+      const [streak] = await db.select().from(streaks).where(eq(streaks.userId, member.userId));
+      totalStreak += streak?.currentStreak ?? 0;
+      const activeDays = await (this as any).getRecentActiveDays(member.userId);
+      totalConsistency += Math.round((activeDays / 7) * 100);
+    }
+    return {
+      avgStreak: Math.round(totalStreak / activeMembers.length),
+      avgConsistency: Math.round(totalConsistency / activeMembers.length),
+      activeCount: activeMembers.length,
+      pendingCount,
+    };
+  },
+  async addOrgChallenge(orgId: number, challengeId: number): Promise<void> {
+    await db.insert(orgChallenges).values({ orgId, challengeId }).onConflictDoNothing();
+  },
+  async getOrgChallengeIds(orgId: number): Promise<number[]> {
+    const rows = await db.select().from(orgChallenges).where(eq(orgChallenges.orgId, orgId));
+    return rows.map(r => r.challengeId);
+  },
+});
 
 // ─── Streak computation helper ──────────────────────────────────────────────
 function computeHabitStreak(sortedDatesDesc: string[]): { currentStreak: number; longestStreak: number; lastDate: string | null } {
