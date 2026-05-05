@@ -9,8 +9,9 @@ import {
   insertUserMetricSchema, insertAIInsightSchema,
   insertPushSubscriptionSchema, insertHabitSchema,
   infiniteGoals, longTermGoals, challengeParticipants,
-  habits, habitLogs, dailyGoals, orgChallenges,
+  habits, habitLogs, dailyGoals,
 } from "@shared/schema";
+import { orgChallenges } from "@shared/corporate-schema";
 import OpenAI from "openai";
 import type { HealthData } from "./oura";
 import { sendPushNotification, getVapidPublicKey } from "./notifications";

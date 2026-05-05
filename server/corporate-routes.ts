@@ -3,12 +3,55 @@ import { storage } from "./storage";
 import { getUncachableStripeClient } from "./stripeClient";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
-import { organisations } from "@shared/schema";
+import { organisations, orgMembers, orgChallenges } from "@shared/corporate-schema";
+import type { InsertOrganisation, Organisation } from "@shared/corporate-schema";
 import crypto from "crypto";
 import nodemailer from "nodemailer";
-import type { InsertOrganisation, Organisation } from "@shared/schema";
 
 const CORPORATE_ENABLED = process.env.CORPORATE_TIER_ENABLED === "true";
+
+// ── Signed invite token helpers ───────────────────────────────────────────────
+// Tokens are HMAC-SHA256 signed and include an expiry so they cannot be forged
+// or replayed after 7 days. Format (base64url-encoded): orgId|email|exp|sig
+// They are also stored in the DB for single-use enforcement: once consumed the
+// column is set to NULL so the same token cannot be accepted again.
+const INVITE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
+
+function generateInviteToken(orgId: number, email: string): string {
+  const exp = Date.now() + INVITE_EXPIRY_MS;
+  const payload = `${orgId}|${email}|${exp}`;
+  const secret = process.env.SESSION_SECRET ?? "dbrief-default-invite-secret";
+  const sig = crypto.createHmac("sha256", secret).update(payload).digest("base64url");
+  return Buffer.from(`${payload}|${sig}`).toString("base64url");
+}
+
+function verifyInviteToken(
+  token: string,
+): { valid: boolean; expired: boolean; orgId?: number; email?: string } {
+  try {
+    const decoded = Buffer.from(token, "base64url").toString("utf8");
+    // Split only on the last `|` to extract sig, preserving any `|` in email (none in practice)
+    const sigSep = decoded.lastIndexOf("|");
+    if (sigSep === -1) return { valid: false, expired: false };
+    const payload = decoded.slice(0, sigSep);
+    const sig = decoded.slice(sigSep + 1);
+    const secret = process.env.SESSION_SECRET ?? "dbrief-default-invite-secret";
+    const expected = crypto.createHmac("sha256", secret).update(payload).digest("base64url");
+    if (sig !== expected) return { valid: false, expired: false };
+    // Payload: orgId|email|exp
+    const firstPipe = payload.indexOf("|");
+    const lastPipe = payload.lastIndexOf("|");
+    if (firstPipe === lastPipe) return { valid: false, expired: false };
+    const orgId = parseInt(payload.slice(0, firstPipe));
+    const email = payload.slice(firstPipe + 1, lastPipe);
+    const exp = parseInt(payload.slice(lastPipe + 1));
+    if (isNaN(orgId) || isNaN(exp) || !email) return { valid: false, expired: false };
+    if (Date.now() > exp) return { valid: true, expired: true, orgId, email };
+    return { valid: true, expired: false, orgId, email };
+  } catch {
+    return { valid: false, expired: false };
+  }
+}
 
 // ── Email helper ─────────────────────────────────────────────────────────────
 // Sends the invite email. Falls back to console logging when SMTP is not
@@ -247,7 +290,7 @@ export function registerCorporateRoutes(app: Express) {
       const existing = await storage.getOrgMemberByEmail(org.id, normalised);
       if (existing) return res.status(409).json({ message: "This email has already been invited" });
 
-      const token = crypto.randomBytes(32).toString("hex");
+      const token = generateInviteToken(org.id, normalised);
       await storage.createOrgMember({
         orgId: org.id,
         email: normalised,
@@ -284,6 +327,10 @@ export function registerCorporateRoutes(app: Express) {
   app.get("/api/corporate/join/:token", async (req, res) => {
     try {
       const { token } = req.params;
+      // Verify HMAC signature and expiry before hitting the DB
+      const tokenResult = verifyInviteToken(token);
+      if (!tokenResult.valid) return res.status(404).json({ message: "Invite link is invalid" });
+      if (tokenResult.expired) return res.status(410).json({ message: "Invite link has expired" });
       const member = await storage.getOrgMemberByToken(token);
       if (!member || member.status !== "pending") {
         return res.status(404).json({ message: "Invite not found or already used" });
@@ -307,6 +354,11 @@ export function registerCorporateRoutes(app: Express) {
     try {
       const userId = getUserId(req);
       const { token } = req.params;
+
+      // Verify HMAC signature and expiry before hitting the DB
+      const tokenResult = verifyInviteToken(token);
+      if (!tokenResult.valid) return res.status(404).json({ message: "Invite link is invalid" });
+      if (tokenResult.expired) return res.status(410).json({ message: "Invite link has expired. Please ask your admin to resend." });
 
       const member = await storage.getOrgMemberByToken(token);
       if (!member) return res.status(404).json({ message: "Invite not found or already used" });

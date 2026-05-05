@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -79,15 +79,17 @@ export default function CorporateDashboard() {
         return r.json();
       }),
     staleTime: 30000,
-    onSuccess: (d: DashboardData) => {
-      setSettingsForm({
-        name: d.org.name,
-        accentColour: d.org.accentColour ?? "#d97706",
-        aiPersonaName: d.org.aiPersonaName ?? "Performance Engineer",
-        logoUrl: d.org.logoUrl ?? "",
-      });
-    },
-  } as Parameters<typeof useQuery<DashboardData>>[0]);
+  });
+
+  useEffect(() => {
+    if (!data) return;
+    setSettingsForm({
+      name: data.org.name,
+      accentColour: data.org.accentColour ?? "#d97706",
+      aiPersonaName: data.org.aiPersonaName ?? "Performance Engineer",
+      logoUrl: data.org.logoUrl ?? "",
+    });
+  }, [data]);
 
   const inviteMutation = useMutation({
     mutationFn: (email: string) =>

@@ -2,7 +2,6 @@ import {
   users, journalEntries, dailyScores, userMetrics, streaks, aiInsights, pushSubscriptions,
   goalTemplates, dailyGoals, journalAttachments, moodCheckins, debriefs, debriefMessages, habits, habitLogs, serverConfig,
   weeklyReports, performancePatterns, infiniteGoals, longTermGoals, userConnections,
-  organisations, orgMembers, orgChallenges,
   type User, type InsertUser, type JournalEntry, type InsertJournalEntry,
   type DailyScore, type InsertDailyScore, type UserMetric, type InsertUserMetric,
   type Streak, type InsertStreak, type AIInsight, type InsertAIInsight,
@@ -13,8 +12,9 @@ import {
   type WeeklyReport, type InsertWeeklyReport,
   type PerformancePattern, type InsertPerformancePattern,
   type UserConnection, type ConnectionPublicStats,
-  type Organisation, type InsertOrganisation, type OrgMember, type InsertOrgMember, type OrgMemberUpdate,
 } from "@shared/schema";
+import { organisations, orgMembers, orgChallenges } from "@shared/corporate-schema";
+import type { Organisation, InsertOrganisation, OrgMember, InsertOrgMember, OrgMemberUpdate } from "@shared/corporate-schema";
 import { db } from "./db";
 import { eq, and, asc, desc, gte, lte, gt, or, ne, sql } from "drizzle-orm";
 import { encrypt, decrypt } from "./encryption";

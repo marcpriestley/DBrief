@@ -568,94 +568,18 @@ export type ChallengeWithProgress = Challenge & {
   myReminderTime: string | null;
 };
 
-// ── Corporate Tier ───────────────────────────────────────────────────────────
-// Schema is always defined so Drizzle migrations are tracked in a single place.
-// The application layer gates ALL corporate functionality behind the
-// CORPORATE_TIER_ENABLED=true / VITE_CORPORATE_TIER_ENABLED=true env flags —
-// routes, UI pages, and webhook handling are no-ops when the flag is absent.
-// Running `npm run db:push` with the flag absent is safe: the tables are
-// created but no routes register to expose them.
-
-export const organisations = pgTable("organisations", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  logoUrl: text("logo_url"),
-  accentColour: text("accent_colour").default("#d97706"),
-  aiPersonaName: text("ai_persona_name").default("Performance Engineer"),
-  stripeCustomerId: text("stripe_customer_id"),
-  subscriptionStatus: text("subscription_status").notNull().default("inactive"),
-  seatCount: integer("seat_count").default(5),
-  adminUserId: integer("admin_user_id").notNull().references(() => users.id),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-export const orgMembers = pgTable("org_members", {
-  id: serial("id").primaryKey(),
-  orgId: integer("org_id").notNull().references(() => organisations.id, { onDelete: "cascade" }),
-  userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
-  email: text("email").notNull(),
-  status: text("status").notNull().default("pending"),
-  inviteToken: text("invite_token").unique(),
-  joinedAt: timestamp("joined_at"),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-export const orgChallenges = pgTable("org_challenges", {
-  id: serial("id").primaryKey(),
-  orgId: integer("org_id").notNull().references(() => organisations.id, { onDelete: "cascade" }),
-  challengeId: integer("challenge_id").notNull().references(() => challenges.id, { onDelete: "cascade" }),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-export const insertOrganisationSchema = createInsertSchema(organisations).omit({
-  id: true,
-  createdAt: true,
-});
-export const insertOrgMemberSchema = createInsertSchema(orgMembers).omit({
-  id: true,
-  createdAt: true,
-  joinedAt: true,
-});
-export const insertOrgChallengeSchema = createInsertSchema(orgChallenges).omit({
-  id: true,
-  createdAt: true,
-});
-
-export type Organisation = typeof organisations.$inferSelect;
-export type InsertOrganisation = z.infer<typeof insertOrganisationSchema>;
-export type OrgMember = typeof orgMembers.$inferSelect;
-export type InsertOrgMember = z.infer<typeof insertOrgMemberSchema>;
-export type OrgChallenge = typeof orgChallenges.$inferSelect;
-
-export const organisationsRelations = relations(organisations, ({ one, many }) => ({
-  admin: one(users, { fields: [organisations.adminUserId], references: [users.id] }),
-  members: many(orgMembers),
-  challenges: many(orgChallenges),
-}));
-
-export const orgMembersRelations = relations(orgMembers, ({ one }) => ({
-  organisation: one(organisations, { fields: [orgMembers.orgId], references: [organisations.id] }),
-  user: one(users, { fields: [orgMembers.userId], references: [users.id] }),
-}));
-
-export const orgChallengesRelations = relations(orgChallenges, ({ one }) => ({
-  organisation: one(organisations, { fields: [orgChallenges.orgId], references: [organisations.id] }),
-  challenge: one(challenges, { fields: [orgChallenges.challengeId], references: [challenges.id] }),
-}));
-
-export type OrgMemberUpdate = {
-  userId?: number | null;
-  status?: string;
-  inviteToken?: string | null;
-  role?: string;
-  joinedAt?: Date | null;
-};
-
-export type OrgMemberWithUser = OrgMember & {
-  displayName: string | null;
-  driverHandle: string | null;
-  currentStreak: number;
-  sevenDayConsistency: number;
-};
+// ── Corporate Tier (type re-exports only) ────────────────────────────────────
+// Corporate table definitions live in shared/corporate-schema.ts and are
+// intentionally excluded from this file so that `npm run db:push`
+// (drizzle.config.ts → shared/schema.ts) does NOT create corporate tables
+// in environments where CORPORATE_TIER_ENABLED is not set.
+// To push corporate tables, use: npx drizzle-kit push --config=drizzle-corporate.config.ts
+// Server/client files that need the actual table objects import directly from
+// @shared/corporate-schema; only types are re-exported here for convenience.
+export type {
+  Organisation, InsertOrganisation,
+  OrgMember, InsertOrgMember, OrgChallenge,
+  OrgMemberUpdate, OrgMemberWithUser,
+} from "./corporate-schema";
 
 export * from "./models/chat";
