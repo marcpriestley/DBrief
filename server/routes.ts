@@ -728,13 +728,11 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
           content: validatedData.content,
           isVoiceEntry: validatedData.isVoiceEntry,
         });
-        updateUserStreak(userId, validatedData.date).catch(() => {});
-        checkActivityPointFreeze(userId).catch(() => {});
+        updateUserStreak(userId, validatedData.date).then(() => checkActivityPointFreeze(userId)).catch(() => {});
         res.json(updatedEntry);
       } else {
         const entry = await storage.createJournalEntry(validatedData);
-        updateUserStreak(userId, validatedData.date).catch(() => {});
-        checkActivityPointFreeze(userId).catch(() => {});
+        updateUserStreak(userId, validatedData.date).then(() => checkActivityPointFreeze(userId)).catch(() => {});
         res.json(entry);
       }
     } catch (error) {
@@ -785,7 +783,7 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
       // Update streak based on score inputs (only for user inputs, not auto-synced)
       if (!validatedData.isAutoSynced) {
         await updateUserStreak(userId, validatedData.date);
-        checkActivityPointFreeze(userId).catch(() => {});
+        await checkActivityPointFreeze(userId).catch(() => {});
 
         // ── Milestone notifications (fire-and-forget, non-blocking) ──────────
         setImmediate(async () => {
@@ -1018,8 +1016,7 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
       if (!updated) return res.status(404).json({ message: "Goal not found" });
       const today = new Date().toISOString().split("T")[0];
       if (updated.date === today) {
-        updateUserStreak(userId, today).catch(() => {});
-        checkActivityPointFreeze(userId).catch(() => {});
+        updateUserStreak(userId, today).then(() => checkActivityPointFreeze(userId)).catch(() => {});
       }
       res.json(updated);
     } catch (error) {
@@ -1097,8 +1094,7 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
         value,
         label: label || null,
       });
-      updateUserStreak(userId, today).catch(() => {});
-      checkActivityPointFreeze(userId).catch(() => {});
+      updateUserStreak(userId, today).then(() => checkActivityPointFreeze(userId)).catch(() => {});
       res.json(checkin);
     } catch (error) {
       res.status(500).json({ message: "Failed to save mood check-in" });
@@ -1156,12 +1152,16 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
   app.get("/api/streak-freezes", async (req, res) => {
     try {
       const userId = getUserId(req);
-      const [streak, events] = await Promise.all([
+      const [streak, events, user] = await Promise.all([
         storage.getUserStreak(userId),
         storage.getStreakFreezeEvents(userId, 10),
+        storage.getUser(userId),
       ]);
-      const today = new Date().toISOString().split("T")[0];
-      const yesterdayStr = new Date(Date.now() - 86_400_000).toISOString().split("T")[0];
+      // Use user-local date (same basis as streakHelper) to avoid badge
+      // mis-timing around timezone boundaries
+      const today = todayInTz(user?.timezone);
+      const yesterdayMs = new Date(today + "T12:00:00Z").getTime() - 86_400_000;
+      const yesterdayStr = new Date(yesterdayMs).toISOString().split("T")[0];
       const freezeUsedDate = streak?.freezeUsedDate ?? null;
       const streakWasProtected =
         freezeUsedDate === today || freezeUsedDate === yesterdayStr;
@@ -1967,8 +1967,7 @@ Convert the habit to a natural English verb phrase. Return ONLY the sentence, no
       // users who log habits but not metric scores still build their streak.
       // updateUserStreak is idempotent: only acts if entryDate === today and
       // skips silently if the streak was already updated for today.
-      updateUserStreak(userId, date).catch(e => console.error("Streak update (habit) error:", e));
-      checkActivityPointFreeze(userId).catch(() => {});
+      updateUserStreak(userId, date).then(() => checkActivityPointFreeze(userId)).catch(e => console.error("Streak/freeze update (habit) error:", e));
       res.json(result);
     } catch (error) {
       console.error("Toggle habit error:", error);
