@@ -2202,13 +2202,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateOrgMember(id: number, updates: OrgMemberUpdate): Promise<OrgMember | undefined> {
-    const updatePayload: Record<string, unknown> = {};
-    if ("userId" in updates) updatePayload["user_id"] = updates.userId;
-    if ("status" in updates) updatePayload["status"] = updates.status;
-    if ("inviteToken" in updates) updatePayload["invite_token"] = updates.inviteToken;
-    if ("role" in updates) updatePayload["role"] = updates.role;
-    if ("joinedAt" in updates) updatePayload["joined_at"] = updates.joinedAt;
-    const [member] = await db.update(orgMembers).set(updatePayload as typeof orgMembers.$inferInsert).where(eq(orgMembers.id, id)).returning();
+    const patch: Partial<typeof orgMembers.$inferInsert> = {};
+    if ("userId" in updates) patch.userId = updates.userId ?? null;
+    if ("status" in updates) patch.status = updates.status;
+    if ("inviteToken" in updates) patch.inviteToken = updates.inviteToken ?? null;
+    if ("joinedAt" in updates) patch.joinedAt = updates.joinedAt ?? null;
+    const [member] = await db.update(orgMembers).set(patch).where(eq(orgMembers.id, id)).returning();
     return member;
   }
 

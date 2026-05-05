@@ -89,7 +89,6 @@ export type OrgMemberUpdate = {
   userId?: number | null;
   status?: string;
   inviteToken?: string | null;
-  role?: string;
   joinedAt?: Date | null;
 };
 

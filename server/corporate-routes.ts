@@ -214,6 +214,9 @@ export function registerCorporateRoutes(app: Express) {
       const existing = await storage.getOrganisationByAdmin(userId);
       if (existing) return res.status(409).json({ message: "You already have an organisation" });
 
+      const existingMembership = await storage.getOrgMembershipByUser(userId);
+      if (existingMembership) return res.status(409).json({ message: "You are already a member of an organisation" });
+
       const { name, seatCount = 5 } = req.body;
       if (!name || typeof name !== "string" || name.trim().length < 2) {
         return res.status(400).json({ message: "name must be at least 2 characters" });
