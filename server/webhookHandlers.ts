@@ -55,88 +55,94 @@ export class WebhookHandlers {
     const obj = event.data?.object;
     if (!obj) return;
 
-    switch (event.type) {
-      case 'checkout.session.completed': {
-        if (obj.mode !== 'subscription') break;
-        const customerId = obj.customer as string | null;
-        if (!customerId) break;
+    // ── Corporate events must never update the `users` table ─────────────────
+    // Corporate checkout sessions and subscriptions carry `metadata.orgId`.
+    // If this is a corporate event, skip ALL individual user status updates and
+    // hand it straight to the corporate handler to avoid corrupting personal billing.
+    const isCorporateEvent = !!(obj.metadata?.orgId);
 
-        // Primary match: by stripeCustomerId (for sessions created via our checkout endpoint).
-        const primaryResult = await db.update(users)
-          .set({ subscriptionStatus: 'premium', stripeCustomerId: customerId })
-          .where(eq(users.stripeCustomerId, customerId))
-          .returning({ id: users.id });
+    if (!isCorporateEvent) {
+      switch (event.type) {
+        case 'checkout.session.completed': {
+          if (obj.mode !== 'subscription') break;
+          const customerId = obj.customer as string | null;
+          if (!customerId) break;
 
-        if (primaryResult.length > 0) {
-          console.log(`[Stripe] Checkout complete — customer ${customerId} -> premium (matched by customerId)`);
+          // Primary match: by stripeCustomerId (for sessions created via our checkout endpoint).
+          const primaryResult = await db.update(users)
+            .set({ subscriptionStatus: 'premium', stripeCustomerId: customerId })
+            .where(eq(users.stripeCustomerId, customerId))
+            .returning({ id: users.id });
+
+          if (primaryResult.length > 0) {
+            console.log(`[Stripe] Checkout complete — customer ${customerId} -> premium (matched by customerId)`);
+            break;
+          }
+
+          // Fallback: match by email — handles payment-link purchases where no prior
+          // customer ID was stored. We also update stripeCustomerId so future syncs work.
+          const customerEmail = obj.customer_details?.email as string | null;
+          if (!customerEmail) {
+            console.warn(`[Stripe] Checkout complete — customer ${customerId}: no user match and no email in event.`);
+            break;
+          }
+
+          const emailResult = await db.update(users)
+            .set({ subscriptionStatus: 'premium', stripeCustomerId: customerId })
+            .where(eq(users.username, customerEmail))
+            .returning({ id: users.id });
+
+          if (emailResult.length > 0) {
+            console.log(`[Stripe] Checkout complete — customer ${customerId} -> premium (matched by email ${customerEmail})`);
+          } else {
+            console.warn(`[Stripe] Checkout complete — customer ${customerId} (${customerEmail}): no matching user found.`);
+          }
           break;
         }
 
-        // Fallback: match by email — handles payment-link purchases where no prior
-        // customer ID was stored. We also update stripeCustomerId so future syncs work.
-        const customerEmail = obj.customer_details?.email as string | null;
-        if (!customerEmail) {
-          console.warn(`[Stripe] Checkout complete — customer ${customerId}: no user match and no email in event.`);
+        case 'customer.subscription.updated': {
+          const customerId = obj.customer;
+          const status = obj.status;
+          if (!customerId) break;
+
+          const periodEnd = obj.current_period_end
+            ? new Date(obj.current_period_end * 1000)
+            : null;
+
+          let appStatus: string;
+          if ((status === 'active' || status === 'trialing') && !obj.cancel_at_period_end) {
+            appStatus = 'premium';
+          } else if ((status === 'active' || status === 'trialing') && obj.cancel_at_period_end) {
+            appStatus = 'premium';
+            console.log(`[Stripe] Subscription cancel_at_period_end — customer ${customerId} keeps premium until ${periodEnd}`);
+          } else if (status === 'canceled' || status === 'unpaid' || status === 'incomplete_expired') {
+            appStatus = 'free';
+          } else {
+            break;
+          }
+
+          await db.update(users)
+            .set({ subscriptionStatus: appStatus, ...(periodEnd ? { subscriptionCurrentPeriodEnd: periodEnd } : {}) })
+            .where(eq(users.stripeCustomerId, customerId));
+          console.log(`[Stripe] Subscription updated — customer ${customerId} -> ${appStatus}`);
           break;
         }
 
-        const emailResult = await db.update(users)
-          .set({ subscriptionStatus: 'premium', stripeCustomerId: customerId })
-          .where(eq(users.username, customerEmail))
-          .returning({ id: users.id });
-
-        if (emailResult.length > 0) {
-          console.log(`[Stripe] Checkout complete — customer ${customerId} -> premium (matched by email ${customerEmail})`);
-        } else {
-          console.warn(`[Stripe] Checkout complete — customer ${customerId} (${customerEmail}): no matching user found.`);
-        }
-        break;
-      }
-
-      case 'customer.subscription.updated': {
-        const customerId = obj.customer;
-        const status = obj.status;
-        if (!customerId) break;
-
-        const periodEnd = obj.current_period_end
-          ? new Date(obj.current_period_end * 1000)
-          : null;
-
-        let appStatus: string;
-        if ((status === 'active' || status === 'trialing') && !obj.cancel_at_period_end) {
-          // Fully active renewal — user keeps premium
-          appStatus = 'premium';
-        } else if ((status === 'active' || status === 'trialing') && obj.cancel_at_period_end) {
-          // User cancelled but is still within the paid period — keep premium until it expires.
-          // customer.subscription.deleted will fire when the period actually ends.
-          appStatus = 'premium';
-          console.log(`[Stripe] Subscription cancel_at_period_end — customer ${customerId} keeps premium until ${periodEnd}`);
-        } else if (status === 'canceled' || status === 'unpaid' || status === 'incomplete_expired') {
-          appStatus = 'free';
-        } else {
+        case 'customer.subscription.deleted': {
+          const customerId = obj.customer;
+          if (!customerId) break;
+          await db.update(users)
+            .set({ subscriptionStatus: 'free', subscriptionCurrentPeriodEnd: null })
+            .where(eq(users.stripeCustomerId, customerId));
+          console.log(`[Stripe] Subscription deleted — customer ${customerId} -> free`);
           break;
         }
-
-        await db.update(users)
-          .set({ subscriptionStatus: appStatus, ...(periodEnd ? { subscriptionCurrentPeriodEnd: periodEnd } : {}) })
-          .where(eq(users.stripeCustomerId, customerId));
-        console.log(`[Stripe] Subscription updated — customer ${customerId} -> ${appStatus}`);
-        break;
       }
-
-      case 'customer.subscription.deleted': {
-        // Subscription fully expired or was cancelled immediately.
-        const customerId = obj.customer;
-        if (!customerId) break;
-        await db.update(users)
-          .set({ subscriptionStatus: 'free', subscriptionCurrentPeriodEnd: null })
-          .where(eq(users.stripeCustomerId, customerId));
-        console.log(`[Stripe] Subscription deleted — customer ${customerId} -> free`);
-        break;
-      }
+    } else {
+      console.log(`[Stripe] Corporate event ${event.type} (orgId=${obj.metadata.orgId}) — skipping individual user update`);
     }
 
-    // Also handle corporate subscription events
+    // Corporate subscription events (org status, seat count sync)
     await handleCorporateWebhookEvent(event);
   }
 }

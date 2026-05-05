@@ -185,15 +185,20 @@ export function registerCorporateRoutes(app: Express) {
   });
 
   // ── PUT /api/corporate/org/settings ──────────────────────────────────────
+  // Note: seatCount is intentionally excluded — seat count authority lives in
+  // the Stripe subscription quantity and is synced via webhook only.
   app.put("/api/corporate/org/settings", requireOrgAdmin, async (req: any, res) => {
     try {
-      const { name, logoUrl, accentColour, aiPersonaName, seatCount } = req.body;
-      const updates: Partial<typeof req.org> = {};
+      const { name, logoUrl, accentColour, aiPersonaName } = req.body;
+      const updates: Record<string, unknown> = {};
       if (name !== undefined) updates.name = String(name).trim();
       if (logoUrl !== undefined) updates.logoUrl = logoUrl || null;
       if (accentColour !== undefined) updates.accentColour = accentColour;
       if (aiPersonaName !== undefined) updates.aiPersonaName = aiPersonaName;
-      if (seatCount !== undefined) updates.seatCount = Math.max(1, Number(seatCount));
+
+      if (Object.keys(updates).length === 0) {
+        return res.status(400).json({ message: "No updatable fields provided" });
+      }
 
       const org = await storage.updateOrganisation(req.org.id, updates as any);
       res.json(org);
@@ -462,26 +467,39 @@ export function registerCorporateRoutes(app: Express) {
 // ── Stripe webhook handler for corporate subscriptions ──────────────────────
 export async function handleCorporateWebhookEvent(event: any) {
   if (!CORPORATE_ENABLED) return;
+  const obj = event.data?.object;
+  if (!obj) return;
+
+  // Only handle events that carry our orgId metadata
+  const orgId = obj.metadata?.orgId ? Number(obj.metadata.orgId) : null;
+  if (!orgId) return;
+
   try {
     if (event.type === "checkout.session.completed") {
-      const session = event.data.object;
-      const orgId = session.metadata?.orgId ? Number(session.metadata.orgId) : null;
-      if (!orgId) return;
+      if (obj.mode !== "subscription") return;
       await db.update(organisations)
         .set({ subscriptionStatus: "active" })
         .where(eq(organisations.id, orgId));
-      console.log(`[Corporate] Org ${orgId} activated`);
+      console.log(`[Corporate] Org ${orgId} activated via checkout`);
+
     } else if (event.type === "customer.subscription.updated") {
-      const sub = event.data.object;
-      const orgId = sub.metadata?.orgId ? Number(sub.metadata.orgId) : null;
-      if (!orgId) return;
-      const status = sub.status === "active" ? "active" : "inactive";
-      await db.update(organisations).set({ subscriptionStatus: status }).where(eq(organisations.id, orgId));
+      const status = obj.status === "active" || obj.status === "trialing" ? "active" : "inactive";
+
+      // Sync seat count from Stripe subscription quantity — this is the
+      // authoritative seat count; never accept client-supplied values.
+      const items: any[] = obj.items?.data ?? [];
+      const quantity = items[0]?.quantity ?? null;
+      const updates: Record<string, unknown> = { subscriptionStatus: status };
+      if (quantity && quantity > 0) updates.seatCount = quantity;
+
+      await db.update(organisations).set(updates as any).where(eq(organisations.id, orgId));
+      console.log(`[Corporate] Org ${orgId} subscription updated → ${status}${quantity ? `, seats=${quantity}` : ""}`);
+
     } else if (event.type === "customer.subscription.deleted") {
-      const sub = event.data.object;
-      const orgId = sub.metadata?.orgId ? Number(sub.metadata.orgId) : null;
-      if (!orgId) return;
-      await db.update(organisations).set({ subscriptionStatus: "cancelled" }).where(eq(organisations.id, orgId));
+      await db.update(organisations)
+        .set({ subscriptionStatus: "cancelled" })
+        .where(eq(organisations.id, orgId));
+      console.log(`[Corporate] Org ${orgId} subscription cancelled`);
     }
   } catch (err: any) {
     console.error("[Corporate Webhook]", err.message);

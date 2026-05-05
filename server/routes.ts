@@ -9,7 +9,7 @@ import {
   insertUserMetricSchema, insertAIInsightSchema,
   insertPushSubscriptionSchema, insertHabitSchema,
   infiniteGoals, longTermGoals, challengeParticipants,
-  habits, habitLogs, dailyGoals,
+  habits, habitLogs, dailyGoals, orgChallenges,
 } from "@shared/schema";
 import OpenAI from "openai";
 import type { HealthData } from "./oura";
@@ -2252,6 +2252,23 @@ Convert the habit to a natural English verb phrase. Return ONLY the sentence, no
       const { commitment, reminderTime } = req.body;
       const challenge = await storage.getChallengeById(challengeId);
       if (!challenge) return res.status(404).json({ message: "This challenge no longer exists" });
+
+      // Org-scoped challenges: only active members of the owning org may join
+      if (challenge.visibility === "org") {
+        const orgChalRows = await db
+          .select({ orgId: orgChallenges.orgId })
+          .from(orgChallenges)
+          .where(eq(orgChallenges.challengeId, challengeId));
+        if (orgChalRows.length > 0) {
+          const owningOrgId = orgChalRows[0].orgId;
+          const membership = await storage.getOrgMembershipByUser(userId);
+          const isOrgAdmin = (await storage.getOrganisationByAdmin(userId))?.id === owningOrgId;
+          if (!isOrgAdmin && (!membership || membership.orgId !== owningOrgId)) {
+            return res.status(403).json({ message: "This challenge is restricted to organisation members" });
+          }
+        }
+      }
+
       await storage.joinChallenge(challengeId, userId, commitment ?? undefined, reminderTime ?? undefined);
 
       // For score challenges, auto-install the metric in the user's daily scores panel
@@ -2405,6 +2422,23 @@ Convert the habit to a natural English verb phrase. Return ONLY the sentence, no
       const target = await storage.getUserByUsername(username);
       if (!target) return res.status(404).json({ message: "User not found" });
 
+      // Org-scoped challenges cannot be used to invite arbitrary users
+      const inviteChallenge = await storage.getChallengeById(challengeId);
+      if (inviteChallenge?.visibility === "org") {
+        const orgChalRows = await db
+          .select({ orgId: orgChallenges.orgId })
+          .from(orgChallenges)
+          .where(eq(orgChallenges.challengeId, challengeId));
+        if (orgChalRows.length > 0) {
+          const owningOrgId = orgChalRows[0].orgId;
+          const targetMembership = await storage.getOrgMembershipByUser(target.id);
+          const isTargetAdmin = (await storage.getOrganisationByAdmin(target.id))?.id === owningOrgId;
+          if (!isTargetAdmin && (!targetMembership || targetMembership.orgId !== owningOrgId)) {
+            return res.status(403).json({ message: "You can only invite organisation members to this challenge" });
+          }
+        }
+      }
+
       try {
         await storage.inviteToChallenge(challengeId, target.id, userId);
       } catch (inviteErr: any) {
@@ -2416,12 +2450,11 @@ Convert the habit to a natural English verb phrase. Return ONLY the sentence, no
       }
 
       // Notify the invitee
-      const [inviter, challenge] = await Promise.all([
+      const [inviter] = await Promise.all([
         storage.getUser(userId),
-        storage.getChallengeById(challengeId),
       ]);
       const inviterName = inviter?.displayName || inviter?.username || "Someone";
-      const challengeTitle = challenge?.title || "a challenge";
+      const challengeTitle = inviteChallenge?.title || "a challenge";
       await notifyUser(target.id, {
         title: "New Challenge Invite",
         body: "You've been invited to a DBrief App challenge",
