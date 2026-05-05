@@ -61,13 +61,35 @@ function applyStatusBar(includeOverlay: boolean) {
   } catch (_) {}
 }
 
+// Android navigation bar (bottom system bar) — kept separate from applyStatusBar
+// because it is Android-only (iOS does not have a persistent bottom system bar).
+// Uses the same dynamic Capacitor.Plugins pattern so it silently no-ops on web
+// and on any Android build that does not register a NavigationBar plugin.
+// Compatible with @capacitor/navigation-bar and community equivalents that
+// expose setBackgroundColor({ color }) and setButtonStyle({ style }).
+function applyNavigationBar() {
+  if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== 'android') return;
+  try {
+    const NavigationBar = (Capacitor as any).Plugins?.NavigationBar;
+    if (!NavigationBar) return;
+    const isLight = document.documentElement.classList.contains('light');
+    const lightBg = hslCssVarToHex('--background');
+    NavigationBar.setBackgroundColor({ color: isLight ? lightBg : '#141414' });
+    // DARK style = dark icons/buttons on light background; LIGHT = light icons on dark background
+    NavigationBar.setButtonStyle?.({ style: isLight ? 'DARK' : 'LIGHT' });
+  } catch (_) {}
+}
+
 // Staggered retries — include overlay reset because iOS resets the overlay
 // mode after keyboard close (not just the colour), which is what causes the
 // white top band to re-appear after typing.  Stagger gives the keyboard
 // dismiss animation time to finish before we call setOverlaysWebView so the
 // relayout happens after the animation (less visible).
 function scheduleStatusBarRetries() {
-  [100, 350, 700, 1200].forEach(ms => setTimeout(() => applyStatusBar(true), ms));
+  [100, 350, 700, 1200].forEach(ms => {
+    setTimeout(() => applyStatusBar(true), ms);
+    setTimeout(() => applyNavigationBar(), ms);
+  });
 }
 
 
@@ -244,6 +266,7 @@ function AppLayoutInner({ children }: AppLayoutProps) {
     // here causes an async WKWebView frame-resize that fires after the splash
     // starts fading, creating a visible layout-shift jitter on launch.
     applyStatusBar(false);
+    applyNavigationBar();
 
     const vv = window.visualViewport;
     const setVh = () => {
@@ -300,6 +323,7 @@ function AppLayoutInner({ children }: AppLayoutProps) {
       if (nowClass !== lastThemeClass) {
         lastThemeClass = nowClass;
         applyStatusBar(false);
+        applyNavigationBar();
       }
     });
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
