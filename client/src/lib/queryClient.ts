@@ -1,17 +1,15 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
-import { Capacitor } from "@capacitor/core";
 
-// When running as a native app (iOS or Android), the WebView serves from a
-// local bridge origin (e.g. capacitor://localhost or https://localhost).
-// Relative API paths would resolve to that local origin instead of the real
-// server, returning index.html instead of JSON.
-// Capacitor.isNativePlatform() is the reliable way to detect this — it doesn't
-// depend on any specific hostname or URL scheme that may vary between platforms
-// and Capacitor versions.
+// VITE_NATIVE_BUILD=true is set at build time when compiling for Android/iOS.
+// This is more reliable than any runtime detection (hostname, Capacitor.isNativePlatform, etc.)
+// because it is baked into the JS bundle and cannot be affected by bridge timing or
+// URL-scheme differences between Capacitor versions.
+// Build for Android/iOS with: VITE_NATIVE_BUILD=true npm run build
+const IS_NATIVE_BUILD = import.meta.env.VITE_NATIVE_BUILD === "true";
 const NATIVE_API_BASE = "https://DBrief.replit.app";
 
 function resolveUrl(url: string): string {
-  if (url.startsWith("/") && Capacitor.isNativePlatform()) {
+  if (url.startsWith("/") && IS_NATIVE_BUILD) {
     return `${NATIVE_API_BASE}${url}`;
   }
   return url;
