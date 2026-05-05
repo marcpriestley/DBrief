@@ -73,8 +73,8 @@ function applyNavigationBar() {
   const isLight = document.documentElement.classList.contains('light');
   const lightBg = hslCssVarToHex('--background');
   // DARK style = dark icons/buttons on light background; LIGHT = light icons on dark background
-  NavigationBar.setBackgroundColor({ color: isLight ? lightBg : '#141414' }).catch(() => {});
-  NavigationBar.setButtonStyle({ style: isLight ? 'DARK' : 'LIGHT' }).catch(() => {});
+  NavigationBar.setBackgroundColor({ color: isLight ? lightBg : '#141414' });
+  NavigationBar.setButtonStyle({ style: isLight ? 'DARK' : 'LIGHT' });
 }
 
 // Staggered retries — include overlay reset because iOS resets the overlay
