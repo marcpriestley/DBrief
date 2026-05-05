@@ -3,20 +3,20 @@
 @tailwind utilities;
 
 :root {
-  --background: hsl(220, 8%, 90%);
-  --foreground: hsl(220, 15%, 12%);
-  --muted: hsl(220, 8%, 85%);
-  --muted-foreground: hsl(220, 8%, 38%);
-  --popover: hsl(220, 7%, 93%);
-  --popover-foreground: hsl(220, 15%, 12%);
-  --card: hsl(220, 7%, 93%);
-  --card-foreground: hsl(220, 15%, 12%);
-  --border: hsl(220, 7%, 74%);
-  --input: hsl(220, 7%, 76%);
+  --background: hsl(220, 10%, 78%);
+  --foreground: hsl(220, 25%, 7%);
+  --muted: hsl(220, 10%, 71%);
+  --muted-foreground: hsl(220, 10%, 28%);
+  --popover: hsl(220, 10%, 82%);
+  --popover-foreground: hsl(220, 25%, 7%);
+  --card: hsl(220, 10%, 78%);
+  --card-foreground: hsl(220, 25%, 7%);
+  --border: hsl(220, 8%, 58%);
+  --input: hsl(220, 8%, 60%);
   --primary: hsl(40, 95%, 48%);
   --primary-foreground: hsl(0, 0%, 8%);
-  --secondary: hsl(220, 7%, 88%);
-  --secondary-foreground: hsl(220, 15%, 12%);
+  --secondary: hsl(220, 10%, 73%);
+  --secondary-foreground: hsl(220, 25%, 7%);
   --accent: hsl(40, 95%, 48%);
   --accent-foreground: hsl(0, 0%, 8%);
   --destructive: hsl(0, 72%, 51%);
@@ -69,7 +69,7 @@ html {
 }
 html.light {
   color-scheme: light;
-  background-color: hsl(220, 8%, 90%);
+  background-color: hsl(220, 10%, 78%);
 }
 html.dark {
   color-scheme: dark;
@@ -108,7 +108,7 @@ html.dark body {
   overscroll-behavior-y: none;
   /* Hardcoded rather than var() so the safe-area zones are always painted the
      correct colour even before CSS vars (which depend on html.dark) resolve. */
-  background-color: hsl(220, 8%, 90%);
+  background-color: hsl(220, 10%, 78%);
   /* Do NOT use -webkit-overflow-scrolling:touch — it creates a new stacking
      context that breaks position:fixed children on some WKWebView versions. */
 }
