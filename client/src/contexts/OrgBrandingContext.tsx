@@ -35,8 +35,20 @@ export function OrgBrandingProvider({ children }: { children: React.ReactNode })
     const r = parseInt(hex.slice(0, 2), 16);
     const g = parseInt(hex.slice(2, 4), 16);
     const b = parseInt(hex.slice(4, 6), 16);
-    const h = rgbToHsl(r, g, b);
-    document.documentElement.style.setProperty("--org-accent", h);
+    const hsl = rgbToHsl(r, g, b);
+    const hslCss = `hsl(${hsl})`;
+    document.documentElement.style.setProperty("--org-accent", hsl);
+    // Apply org accent as the primary theme token so all Shadcn components
+    // and Tailwind bg-primary / text-primary classes reflect the org branding.
+    document.documentElement.style.setProperty("--primary", hslCss);
+    document.documentElement.style.setProperty("--accent", hslCss);
+    document.documentElement.style.setProperty("--ring", hslCss);
+    return () => {
+      document.documentElement.style.removeProperty("--org-accent");
+      document.documentElement.style.removeProperty("--primary");
+      document.documentElement.style.removeProperty("--accent");
+      document.documentElement.style.removeProperty("--ring");
+    };
   }, [branding?.accentColour]);
 
   return (

@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import OpenAI from "openai";
 import { aiLimiter } from "./rate-limit";
 import { db } from "./db";
-import { debriefs, debriefMessages, dailyScores, journalEntries, moodCheckins, dailyGoals, userMetrics, users, infiniteGoals, longTermGoals, goalTemplates, habits, habitLogs, challenges, challengeParticipants } from "@shared/schema";
+import { debriefs, debriefMessages, dailyScores, journalEntries, moodCheckins, dailyGoals, userMetrics, users, infiniteGoals, longTermGoals, goalTemplates, habits, habitLogs, challenges, challengeParticipants, organisations, orgMembers } from "@shared/schema";
 import { eq, and, desc, gte, lt } from "drizzle-orm";
 import { encrypt, decrypt } from "./encryption";
 import { updateUserStreak } from "./streakHelper";
@@ -23,6 +23,26 @@ function requireAuth(req: Request, res: Response): number | null {
     return null;
   }
   return userId;
+}
+
+/** Returns the org's custom AI persona name for the given user, or null. */
+async function getOrgPersonaName(userId: number): Promise<string | null> {
+  const adminOrg = await db
+    .select({ aiPersonaName: organisations.aiPersonaName })
+    .from(organisations)
+    .where(eq(organisations.adminUserId, userId))
+    .limit(1);
+  if (adminOrg.length > 0) return adminOrg[0].aiPersonaName;
+
+  const member = await db
+    .select({ aiPersonaName: organisations.aiPersonaName })
+    .from(orgMembers)
+    .innerJoin(organisations, eq(orgMembers.orgId, organisations.id))
+    .where(and(eq(orgMembers.userId, userId), eq(orgMembers.status, "active")))
+    .limit(1);
+  if (member.length > 0) return member[0].aiPersonaName;
+
+  return null;
 }
 
 export async function gatherDayContext(userId: number, date: string) {
@@ -276,7 +296,7 @@ function buildUserProfileSummary(profile: Record<string, string> | null | undefi
   return { summary, isBirthday: birthday };
 }
 
-export function buildSystemPrompt(context: Awaited<ReturnType<typeof gatherDayContext>>, date: string, userMessageCount: number, journalPreference: string = "evening", userProfile?: Record<string, string> | null, displayName?: string | null) {
+export function buildSystemPrompt(context: Awaited<ReturnType<typeof gatherDayContext>>, date: string, userMessageCount: number, journalPreference: string = "evening", userProfile?: Record<string, string> | null, displayName?: string | null, aiPersonaName?: string | null) {
   const now = new Date();
   const currentHour = now.getHours();
 
@@ -341,7 +361,8 @@ ${context.isWeeklyAlignmentDay ? `TODAY IS THE WEEKLY ALIGNMENT CHECK. At some p
     ? `\n\nSPECIAL — TODAY IS THE DRIVER'S BIRTHDAY. Acknowledge this naturally and warmly at the start of the debrief — something brief, genuine and in-character (e.g. "Happy birthday by the way — another lap around the sun."). Don't overdo it, just make it feel human.`
     : "";
 
-  return `You are the user's performance engineer — an F1 performance engineer conducting a post-session debrief.${driverName} You have an engineering brain: rigorous, data-driven, and wired to find root causes rather than surface explanations. You are genuinely invested in helping them extract more performance, but you do not simply validate what they tell you.${profileSection}${birthdayNote}
+  const personaRole = aiPersonaName ?? "Performance Engineer";
+  return `You are the user's ${personaRole} — an F1 ${personaRole} conducting a post-session debrief.${driverName} You have an engineering brain: rigorous, data-driven, and wired to find root causes rather than surface explanations. You are genuinely invested in helping them extract more performance, but you do not simply validate what they tell you.${profileSection}${birthdayNote}
 
 ENGINEERING MINDSET — THIS IS THE CORE OF YOUR PERSONA:
 - You think in first principles. When a driver tells you why something happened, your instinct is to ask whether that explanation is actually correct. Correlation is not causation. Feelings are data, but so is the telemetry — and they don't always agree.
@@ -521,9 +542,12 @@ export function registerDebriefRoutes(app: Express): void {
       // Send debriefId first so the client can reference it
       res.write(`data: ${JSON.stringify({ debriefId: debrief.id })}\n\n`);
 
-      const context = await gatherDayContext(userId, date);
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
-      const systemPrompt = buildSystemPrompt(context, date, 0, user?.journalPreference || "evening", user?.userProfile, user?.displayName);
+      const [context, [user], orgPersonaName] = await Promise.all([
+        gatherDayContext(userId, date),
+        db.select().from(users).where(eq(users.id, userId)),
+        getOrgPersonaName(userId),
+      ]);
+      const systemPrompt = buildSystemPrompt(context, date, 0, user?.journalPreference || "evening", user?.userProfile, user?.displayName, orgPersonaName);
 
       const openingStream = await openai.chat.completions.create({
         model: "gpt-4o",
@@ -639,9 +663,12 @@ export function registerDebriefRoutes(app: Express): void {
         .orderBy(debriefMessages.createdAt);
 
       const userMessageCount = allMessages.filter(m => m.role === "user").length;
-      const context = await gatherDayContext(userId, debrief.date);
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
-      const systemPrompt = buildSystemPrompt(context, debrief.date, userMessageCount, user?.journalPreference || "evening", user?.userProfile, user?.displayName);
+      const [context, [user], orgPersonaName] = await Promise.all([
+        gatherDayContext(userId, debrief.date),
+        db.select().from(users).where(eq(users.id, userId)),
+        getOrgPersonaName(userId),
+      ]);
+      const systemPrompt = buildSystemPrompt(context, debrief.date, userMessageCount, user?.journalPreference || "evening", user?.userProfile, user?.displayName, orgPersonaName);
 
       const chatMessages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
         { role: "system", content: systemPrompt },
@@ -1063,9 +1090,12 @@ export function registerDebriefRoutes(app: Express): void {
         .orderBy(debriefMessages.createdAt);
 
       const userMessageCount = allMessages.filter(m => m.role === "user").length;
-      const context = await gatherDayContext(userId, debrief.date);
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
-      const systemPrompt = buildSystemPrompt(context, debrief.date, userMessageCount, user?.journalPreference || "evening", user?.userProfile, user?.displayName);
+      const [context, [user], orgPersonaName] = await Promise.all([
+        gatherDayContext(userId, debrief.date),
+        db.select().from(users).where(eq(users.id, userId)),
+        getOrgPersonaName(userId),
+      ]);
+      const systemPrompt = buildSystemPrompt(context, debrief.date, userMessageCount, user?.journalPreference || "evening", user?.userProfile, user?.displayName, orgPersonaName);
 
       const chatMessages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
         { role: "system", content: systemPrompt },

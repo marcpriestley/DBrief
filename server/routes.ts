@@ -2237,6 +2237,24 @@ Convert the habit to a natural English verb phrase. Return ONLY the sentence, no
     try {
       const userId = getUserId(req);
       const challengeId = parseInt(req.params.id);
+
+      // Org-scoped challenges: only active members of the owning org may view
+      const challenge = await storage.getChallengeById(challengeId);
+      if (challenge?.visibility === "org") {
+        const orgChalRows = await db
+          .select({ orgId: orgChallenges.orgId })
+          .from(orgChallenges)
+          .where(eq(orgChallenges.challengeId, challengeId));
+        if (orgChalRows.length > 0) {
+          const owningOrgId = orgChalRows[0].orgId;
+          const membership = await storage.getOrgMembershipByUser(userId);
+          const isOrgAdmin = (await storage.getOrganisationByAdmin(userId))?.id === owningOrgId;
+          if (!isOrgAdmin && (!membership || membership.orgId !== owningOrgId)) {
+            return res.status(403).json({ message: "This leaderboard is restricted to organisation members" });
+          }
+        }
+      }
+
       const board = await storage.getChallengeLeaderboard(challengeId, userId);
       res.json(board);
     } catch (error) {
