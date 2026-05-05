@@ -29,6 +29,7 @@ interface StreakProps {
   recentActiveDays?: number;
   insightsUnlocked?: boolean;
   dataDays?: number;
+  recentFreezeEvents?: FreezEvent[];
 }
 
 interface StreakDisplayProps {
@@ -490,6 +491,11 @@ export default function StreakDisplay({ streak }: StreakDisplayProps) {
     }
   }, [freezeData]);
 
+  // Use freeze events embedded in the streak response for milestone detection.
+  // These arrive in the same query/refetch as the streak count change, making the
+  // freeze-award announcement in the milestone overlay fully deterministic.
+  const streakFreezeEvents: FreezEvent[] = streak?.recentFreezeEvents ?? [];
+
   useEffect(() => {
     if (!initializedRef.current) {
       initializedRef.current = true;
@@ -506,9 +512,10 @@ export default function StreakDisplay({ streak }: StreakDisplayProps) {
 
       if (newMilestone) {
         markMilestoneSeen(newMilestone.days);
-        // Check for an unseen freeze-earned event to announce in the celebration
+        // Use streak-embedded events — same response payload as the streak increment
+        // so freeze data is guaranteed to be present when the milestone fires.
         const seenIds = getSeenFreezeEventIds();
-        const unseenEarned = recentEvents.find(
+        const unseenEarned = streakFreezeEvents.find(
           (e) =>
             e.eventType === "earned" &&
             !e.reason.startsWith("activity-points-") &&
@@ -525,7 +532,7 @@ export default function StreakDisplay({ streak }: StreakDisplayProps) {
     } else {
       prevStreakRef.current = currentStreak;
     }
-  }, [currentStreak]);
+  }, [currentStreak, streakFreezeEvents]);
 
   const nextMilestone = getNextMilestone(currentStreak);
 

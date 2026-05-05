@@ -729,10 +729,12 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
           isVoiceEntry: validatedData.isVoiceEntry,
         });
         updateUserStreak(userId, validatedData.date).catch(() => {});
+        checkActivityPointFreeze(userId).catch(() => {});
         res.json(updatedEntry);
       } else {
         const entry = await storage.createJournalEntry(validatedData);
         updateUserStreak(userId, validatedData.date).catch(() => {});
+        checkActivityPointFreeze(userId).catch(() => {});
         res.json(entry);
       }
     } catch (error) {
@@ -1130,10 +1132,11 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
   app.get("/api/streak", async (req, res) => {
     try {
       const userId = getUserId(req);
-      const [streak, recentActiveDays, allScores] = await Promise.all([
+      const [streak, recentActiveDays, allScores, recentFreezeEvents] = await Promise.all([
         storage.getUserStreak(userId),
         storage.getRecentActiveDays(userId),
         storage.getDailyScoresByUser(userId),
+        storage.getStreakFreezeEvents(userId, 5),
       ]);
       const base = streak || { currentStreak: 0, longestStreak: 0, lastEntryDate: null };
       const everUnlocked = (base.longestStreak ?? 0) >= 7;
@@ -1143,7 +1146,7 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
       const dataDays = new Set(
         allScores.filter(s => s.date >= ninetyDaysAgo && s.value > 0).map(s => s.date)
       ).size;
-      res.json({ ...base, recentActiveDays, insightsUnlocked, dataDays });
+      res.json({ ...base, recentActiveDays, insightsUnlocked, dataDays, recentFreezeEvents });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch streak" });
     }
@@ -1965,6 +1968,7 @@ Convert the habit to a natural English verb phrase. Return ONLY the sentence, no
       // updateUserStreak is idempotent: only acts if entryDate === today and
       // skips silently if the streak was already updated for today.
       updateUserStreak(userId, date).catch(e => console.error("Streak update (habit) error:", e));
+      checkActivityPointFreeze(userId).catch(() => {});
       res.json(result);
     } catch (error) {
       console.error("Toggle habit error:", error);
