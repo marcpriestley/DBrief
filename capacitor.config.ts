@@ -4,8 +4,10 @@ const config: CapacitorConfig = {
   appId: 'com.dbrief.app',
   appName: 'DBrief',
   webDir: 'dist/public',
+  // server.url removed: using local bundled JS (avoids Android WebView caching issues).
+  // API calls are routed to https://DBrief.replit.app via resolveUrl() in queryClient.ts
+  // (detects window.location.hostname === 'localhost' and prepends the base URL).
   server: {
-    url: 'https://DBrief.replit.app',
     cleartext: false,
   },
   ios: {
