@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Building2, Users, Flame, TrendingUp, Mail, Plus, Settings,
-  Check, X, Copy, Loader2, ExternalLink, Trash2, Shield, ChevronRight,
+  X, Copy, Loader2, ExternalLink, Trash2, Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,25 +11,22 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { haptic } from "@/lib/haptics";
+import type { OrgMember } from "@shared/schema";
+
+interface OrgShape {
+  id: number;
+  name: string;
+  logoUrl: string | null;
+  accentColour: string | null;
+  aiPersonaName: string | null;
+  seatCount: number;
+  subscriptionStatus: string;
+  stripeCustomerId: string | null;
+}
 
 interface DashboardData {
-  org: {
-    id: number;
-    name: string;
-    logoUrl: string | null;
-    accentColour: string | null;
-    aiPersonaName: string | null;
-    seatCount: number;
-    subscriptionStatus: string;
-    stripeCustomerId: string | null;
-  };
-  members: Array<{
-    id: number;
-    email: string;
-    status: string;
-    userId: number | null;
-    joinedAt: string | null;
-  }>;
+  org: OrgShape;
+  members: OrgMember[];
   stats: {
     avgStreak: number;
     avgConsistency: number;
@@ -37,6 +34,13 @@ interface DashboardData {
     pendingCount: number;
   };
   challengeCount: number;
+}
+
+interface SettingsFormState {
+  name: string;
+  accentColour: string;
+  aiPersonaName: string;
+  logoUrl: string;
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -47,7 +51,11 @@ function StatusBadge({ status }: { status: string }) {
     inactive: { label: "Inactive", cls: "bg-muted text-muted-foreground" },
   };
   const { label, cls } = map[status] ?? { label: status, cls: "bg-muted text-muted-foreground" };
-  return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${cls}`}>{label}</span>;
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${cls}`}>
+      {label}
+    </span>
+  );
 }
 
 export default function CorporateDashboard() {
@@ -55,16 +63,23 @@ export default function CorporateDashboard() {
   const qc = useQueryClient();
   const [inviteEmail, setInviteEmail] = useState("");
   const [showSettings, setShowSettings] = useState(false);
-  const [settingsForm, setSettingsForm] = useState<{ name: string; accentColour: string; aiPersonaName: string; logoUrl: string }>({
-    name: "", accentColour: "#d97706", aiPersonaName: "Performance Engineer", logoUrl: "",
+  const [settingsForm, setSettingsForm] = useState<SettingsFormState>({
+    name: "",
+    accentColour: "#d97706",
+    aiPersonaName: "Performance Engineer",
+    logoUrl: "",
   });
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery<DashboardData>({
     queryKey: ["/api/corporate/dashboard"],
-    queryFn: () => fetch("/api/corporate/dashboard", { credentials: "include" }).then(r => r.json()),
+    queryFn: (): Promise<DashboardData> =>
+      fetch("/api/corporate/dashboard", { credentials: "include" }).then(r => {
+        if (!r.ok) throw new Error("Failed to load dashboard");
+        return r.json();
+      }),
     staleTime: 30000,
-    onSuccess: (d) => {
+    onSuccess: (d: DashboardData) => {
       setSettingsForm({
         name: d.org.name,
         accentColour: d.org.accentColour ?? "#d97706",
@@ -72,28 +87,37 @@ export default function CorporateDashboard() {
         logoUrl: d.org.logoUrl ?? "",
       });
     },
-  } as any);
+  } as Parameters<typeof useQuery<DashboardData>>[0]);
 
   const inviteMutation = useMutation({
-    mutationFn: (email: string) => apiRequest("POST", "/api/corporate/invite", { email }).then(r => r.json()),
-    onSuccess: (data) => {
+    mutationFn: (email: string) =>
+      apiRequest("POST", "/api/corporate/invite", { email }).then(r => r.json()),
+    onSuccess: (respData: { inviteUrl?: string; email?: string; emailDelivered?: boolean }) => {
       haptic("success");
       setInviteEmail("");
       qc.invalidateQueries({ queryKey: ["/api/corporate/dashboard"] });
-      toast({ title: "Invite link generated", description: "Copy the link below and send it to your team member." });
-      if (data.inviteUrl) {
-        setCopiedUrl(data.inviteUrl);
+      if (respData.inviteUrl) {
+        setCopiedUrl(respData.inviteUrl);
+        if (respData.emailDelivered) {
+          toast({ title: "Invite sent!", description: `An email was sent to ${respData.email}.` });
+        } else {
+          toast({ title: "Invite link generated", description: "Copy the link below and send it to your team member." });
+        }
       }
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       let msg = "Failed to send invite";
-      try { const p = JSON.parse(err.message.split(":").slice(1).join(":").trim()); msg = p.message ?? msg; } catch {}
+      try {
+        const p = JSON.parse(err.message.split(":").slice(1).join(":").trim());
+        msg = p.message ?? msg;
+      } catch {}
       toast({ title: msg, variant: "destructive" });
     },
   });
 
   const settingsMutation = useMutation({
-    mutationFn: (updates: typeof settingsForm) => apiRequest("PUT", "/api/corporate/org/settings", updates).then(r => r.json()),
+    mutationFn: (updates: SettingsFormState) =>
+      apiRequest("PUT", "/api/corporate/org/settings", updates).then(r => r.json()),
     onSuccess: () => {
       haptic("success");
       toast({ title: "Settings saved" });
@@ -105,7 +129,8 @@ export default function CorporateDashboard() {
   });
 
   const removeMutation = useMutation({
-    mutationFn: (memberId: number) => apiRequest("DELETE", `/api/corporate/members/${memberId}`, {}).then(r => r.json()),
+    mutationFn: (memberId: number) =>
+      apiRequest("DELETE", `/api/corporate/members/${memberId}`, {}).then(r => r.json()),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/corporate/dashboard"] });
       toast({ title: "Member removed" });
@@ -114,7 +139,7 @@ export default function CorporateDashboard() {
 
   const portalMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/corporate/portal", {}).then(r => r.json()),
-    onSuccess: ({ url }) => { if (url) window.location.href = url; },
+    onSuccess: ({ url }: { url: string }) => { if (url) window.location.href = url; },
     onError: () => toast({ title: "Could not open billing portal", variant: "destructive" }),
   });
 
@@ -138,7 +163,9 @@ export default function CorporateDashboard() {
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
           <p className="text-muted-foreground mb-4">No corporate account found.</p>
-          <Button onClick={() => window.location.href = "/corporate/onboarding"}>Set up your organisation</Button>
+          <Button onClick={() => (window.location.href = "/corporate/onboarding")}>
+            Set up your organisation
+          </Button>
         </div>
       </div>
     );
@@ -162,7 +189,9 @@ export default function CorporateDashboard() {
             <h1 className="text-2xl font-black text-foreground tracking-tight">{org.name}</h1>
             <div className="flex items-center gap-2 mt-1">
               <StatusBadge status={org.subscriptionStatus} />
-              <span className="text-xs text-muted-foreground">{activeMembers.length}/{org.seatCount} seats active</span>
+              <span className="text-xs text-muted-foreground">
+                {activeMembers.length}/{org.seatCount} seats active
+              </span>
             </div>
           </div>
           <div className="flex gap-2">
@@ -189,9 +218,15 @@ export default function CorporateDashboard() {
           <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex items-center justify-between">
             <div>
               <p className="text-sm font-semibold text-amber-500">Plan not yet active</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Complete checkout to activate seats and invite your team</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Complete checkout to activate seats and invite your team
+              </p>
             </div>
-            <Button size="sm" className="shrink-0 ml-4" onClick={() => window.location.href = "/corporate/onboarding"}>
+            <Button
+              size="sm"
+              className="shrink-0 ml-4"
+              onClick={() => (window.location.href = "/corporate/onboarding")}
+            >
               Activate
             </Button>
           </div>
@@ -216,27 +251,54 @@ export default function CorporateDashboard() {
                 <div className="space-y-3">
                   <div>
                     <Label className="text-xs text-muted-foreground mb-1 block">Organisation name</Label>
-                    <Input value={settingsForm.name} onChange={e => setSettingsForm(f => ({ ...f, name: e.target.value }))} className="h-9" />
+                    <Input
+                      value={settingsForm.name}
+                      onChange={e => setSettingsForm(f => ({ ...f, name: e.target.value }))}
+                      className="h-9"
+                    />
                   </div>
                   <div>
                     <Label className="text-xs text-muted-foreground mb-1 block">Logo URL (optional)</Label>
-                    <Input value={settingsForm.logoUrl} onChange={e => setSettingsForm(f => ({ ...f, logoUrl: e.target.value }))} placeholder="https://..." className="h-9" />
+                    <Input
+                      value={settingsForm.logoUrl}
+                      onChange={e => setSettingsForm(f => ({ ...f, logoUrl: e.target.value }))}
+                      placeholder="https://..."
+                      className="h-9"
+                    />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <Label className="text-xs text-muted-foreground mb-1 block">Accent colour</Label>
                       <div className="flex gap-2">
-                        <input type="color" value={settingsForm.accentColour} onChange={e => setSettingsForm(f => ({ ...f, accentColour: e.target.value }))} className="w-9 h-9 rounded-lg cursor-pointer border border-border" />
-                        <Input value={settingsForm.accentColour} onChange={e => setSettingsForm(f => ({ ...f, accentColour: e.target.value }))} className="h-9 font-mono text-sm flex-1" />
+                        <input
+                          type="color"
+                          value={settingsForm.accentColour}
+                          onChange={e => setSettingsForm(f => ({ ...f, accentColour: e.target.value }))}
+                          className="w-9 h-9 rounded-lg cursor-pointer border border-border"
+                        />
+                        <Input
+                          value={settingsForm.accentColour}
+                          onChange={e => setSettingsForm(f => ({ ...f, accentColour: e.target.value }))}
+                          className="h-9 font-mono text-sm flex-1"
+                        />
                       </div>
                     </div>
                     <div>
                       <Label className="text-xs text-muted-foreground mb-1 block">AI persona name</Label>
-                      <Input value={settingsForm.aiPersonaName} onChange={e => setSettingsForm(f => ({ ...f, aiPersonaName: e.target.value }))} className="h-9" placeholder="Engineer name" />
+                      <Input
+                        value={settingsForm.aiPersonaName}
+                        onChange={e => setSettingsForm(f => ({ ...f, aiPersonaName: e.target.value }))}
+                        className="h-9"
+                        placeholder="Engineer name"
+                      />
                     </div>
                   </div>
                 </div>
-                <Button className="w-full h-9 font-bold" onClick={() => settingsMutation.mutate(settingsForm)} disabled={settingsMutation.isPending}>
+                <Button
+                  className="w-full h-9 font-bold"
+                  onClick={() => settingsMutation.mutate(settingsForm)}
+                  disabled={settingsMutation.isPending}
+                >
                   {settingsMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" /> : null}
                   Save settings
                 </Button>
@@ -277,9 +339,15 @@ export default function CorporateDashboard() {
             animate={{ opacity: 1, y: 0 }}
             className="bg-primary/5 border border-primary/20 rounded-2xl p-4"
           >
-            <p className="text-xs font-semibold text-primary mb-2">Invite link generated — copy and send to your team member:</p>
+            <p className="text-xs font-semibold text-primary mb-2">
+              Copy and send this link to your team member:
+            </p>
             <div className="flex gap-2">
-              <Input value={copiedUrl} readOnly className="h-8 text-xs font-mono flex-1 bg-background" />
+              <Input
+                value={copiedUrl}
+                readOnly
+                className="h-8 text-xs font-mono flex-1 bg-background"
+              />
               <button
                 onClick={() => copyToClipboard(copiedUrl)}
                 className="flex-shrink-0 px-3 h-8 rounded-lg bg-primary text-primary-foreground text-xs font-bold flex items-center gap-1"
@@ -287,7 +355,12 @@ export default function CorporateDashboard() {
                 <Copy className="h-3 w-3" /> Copy
               </button>
             </div>
-            <button onClick={() => setCopiedUrl(null)} className="text-xs text-muted-foreground mt-2 hover:text-foreground">Dismiss</button>
+            <button
+              onClick={() => setCopiedUrl(null)}
+              className="text-xs text-muted-foreground mt-2 hover:text-foreground"
+            >
+              Dismiss
+            </button>
           </motion.div>
         )}
 
@@ -304,31 +377,42 @@ export default function CorporateDashboard() {
               onChange={e => setInviteEmail(e.target.value)}
               placeholder="teammate@company.com"
               className="h-10 flex-1"
-              onKeyDown={e => e.key === "Enter" && inviteEmail.includes("@") && inviteMutation.mutate(inviteEmail)}
+              onKeyDown={e => {
+                if (e.key === "Enter" && inviteEmail.includes("@")) {
+                  inviteMutation.mutate(inviteEmail);
+                }
+              }}
             />
             <Button
               className="h-10 px-4 font-bold shrink-0"
-              disabled={!inviteEmail.includes("@") || inviteMutation.isPending || org.subscriptionStatus !== "active"}
+              disabled={
+                !inviteEmail.includes("@") ||
+                inviteMutation.isPending ||
+                org.subscriptionStatus !== "active"
+              }
               onClick={() => inviteMutation.mutate(inviteEmail)}
             >
-              {inviteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              {inviteMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Plus className="h-4 w-4" />
+              )}
             </Button>
           </div>
-          {org.subscriptionStatus !== "active" && (
+          {org.subscriptionStatus !== "active" ? (
             <p className="text-xs text-amber-500">Activate your plan to invite team members</p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              An invite email will be sent. If email is not configured, a shareable link will appear above.
+            </p>
           )}
-          <p className="text-xs text-muted-foreground">
-            An invite link will be generated for you to copy and email to your team member.
-          </p>
         </div>
 
         {/* Members list */}
         <div className="space-y-2">
-          <div className="flex items-center justify-between px-1">
-            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-              Team members ({activeMembers.length} active, {pendingMembers.length} pending)
-            </p>
-          </div>
+          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground px-1">
+            Team members ({activeMembers.length} active, {pendingMembers.length} pending)
+          </p>
 
           {members.length === 0 && (
             <div className="bg-card rounded-2xl border border-border/50 p-6 text-center">
@@ -337,7 +421,7 @@ export default function CorporateDashboard() {
             </div>
           )}
 
-          {members.map((member) => (
+          {members.map((member: OrgMember) => (
             <motion.div
               key={member.id}
               layout
@@ -347,12 +431,18 @@ export default function CorporateDashboard() {
             >
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                  <span className="text-xs font-bold text-primary">{member.email.slice(0, 2).toUpperCase()}</span>
+                  <span className="text-xs font-bold text-primary">
+                    {member.email.slice(0, 2).toUpperCase()}
+                  </span>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-foreground truncate max-w-[180px]">{member.email}</p>
+                  <p className="text-sm font-medium text-foreground truncate max-w-[180px]">
+                    {member.email}
+                  </p>
                   <p className="text-[10px] text-muted-foreground">
-                    {member.joinedAt ? `Joined ${new Date(member.joinedAt).toLocaleDateString()}` : "Invite pending"}
+                    {member.joinedAt
+                      ? `Joined ${new Date(member.joinedAt).toLocaleDateString()}`
+                      : "Invite pending"}
                   </p>
                 </div>
               </div>

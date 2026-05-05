@@ -13,20 +13,23 @@ import OnboardingFlow from "@/components/OnboardingFlow";
 import NotFound from "@/pages/not-found";
 import PrivacyPolicy from "@/pages/privacy";
 import TermsOfService from "@/pages/terms";
+import { OrgBrandingProvider } from "@/contexts/OrgBrandingContext";
 import CorporateOnboarding from "@/pages/corporate-onboarding";
 import CorporateDashboard from "@/pages/corporate-dashboard";
 import JoinOrg from "@/pages/join-org";
-import { OrgBrandingProvider } from "@/contexts/OrgBrandingContext";
 import BirthdayCelebration from "@/components/BirthdayCelebration";
 import MoodCheckinModal from "@/components/MoodCheckinModal";
 import GlobalPointsToast from "@/components/GlobalPointsToast";
 import CallsignPromptModal from "@/components/CallsignPromptModal";
+
 import { MoodProvider } from "@/contexts/MoodContext";
 import { useLocation } from "wouter";
 import { registerNativePush, isNativePlatform, clearBadge, setupNotificationTapListener, consumePendingMoodOpen, consumePendingSquadNav } from "@/hooks/useNativeNotifications";
 import { useToast } from "@/hooks/use-toast";
 import { Capacitor } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
+
+const CORPORATE_ENABLED = import.meta.env.VITE_CORPORATE_TIER_ENABLED === "true";
 
 // ── Status-bar: overlay + light-icon style ──────────────────────────────────
 // StatusBar is bundled into every Capacitor 8 iOS shell by default (Swift
@@ -397,11 +400,13 @@ function AuthenticatedRouter() {
             <Route path="/calendar" component={CalendarPage} />
             <Route path="/trends" component={Trends} />
             <Route path="/squad" component={SquadPage} />
-            <Route path="/corporate/onboarding" component={CorporateOnboarding} />
-            <Route path="/corporate/dashboard" component={CorporateDashboard} />
-            <Route path="/join/:token">
-              {(params: { token: string }) => <JoinOrg token={params.token} />}
-            </Route>
+            {CORPORATE_ENABLED && <Route path="/corporate/onboarding" component={CorporateOnboarding} />}
+            {CORPORATE_ENABLED && <Route path="/corporate/dashboard" component={CorporateDashboard} />}
+            {CORPORATE_ENABLED && (
+              <Route path="/join/:token">
+                {(params: { token: string }) => <JoinOrg token={params.token} />}
+              </Route>
+            )}
             <Route component={NotFound} />
           </Switch>
           <BirthdayCelebration displayName={user?.displayName} dateOfBirth={dateOfBirth} />

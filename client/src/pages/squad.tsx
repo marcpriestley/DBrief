@@ -678,6 +678,7 @@ export default function SquadPage() {
                   displayName: s.displayName,
                 }))}
                 viewerUserId={me?.id ?? -1}
+                orgRole={me?.orgRole ?? null}
               />
             </motion.div>
           )}

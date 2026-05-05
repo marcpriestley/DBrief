@@ -5,7 +5,7 @@ import {
   Plus, Flame, Zap, Trophy, Calendar, Users, ChevronRight, ChevronDown,
   Check, X, Trash2, Crown, Medal, Lock, Globe,
   Target, Activity, CheckCircle2, Clock, EyeOff, Eye, Pencil, Bell,
-  Search, UserPlus,
+  Search, UserPlus, Building2, Loader2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -1376,15 +1376,171 @@ function CreateChallengeSheet({
   );
 }
 
+// ── Org challenge creation sheet (admin-only) ─────────────────────────────────
+function OrgChallengeSheet({ onClose }: { onClose: () => void }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+
+  const [type, setType] = useState<"habit" | "score">("habit");
+  const [title, setTitle] = useState("");
+  const [habitName, setHabitName] = useState("");
+  const [habitEmoji, setHabitEmoji] = useState("🎯");
+  const [metricName, setMetricName] = useState("");
+  const [durationDays, setDurationDays] = useState(14);
+  const [frequency, setFrequency] = useState<"daily" | "every_other_day" | "weekly">("daily");
+
+  const createMutation = useMutation({
+    mutationFn: (body: object) =>
+      apiRequest("POST", "/api/corporate/org-challenge", body).then(r => r.json()),
+    onSuccess: () => {
+      haptic("success");
+      toast({ title: "Team challenge created!", description: "All active org members have been auto-enrolled." });
+      qc.invalidateQueries({ queryKey: ["/api/challenges"] });
+      qc.invalidateQueries({ queryKey: ["/api/corporate/dashboard"] });
+      onClose();
+    },
+    onError: (err: Error) => {
+      let msg = "Failed to create challenge";
+      try { msg = JSON.parse(err.message.split(":").slice(1).join(":").trim()).message ?? msg; } catch {}
+      toast({ title: msg, variant: "destructive" });
+    },
+  });
+
+  function handleCreate() {
+    const today = localToday();
+    const end = new Date(new Date(today + "T12:00:00").getTime() + durationDays * 86400000).toLocaleDateString("en-CA");
+    createMutation.mutate({
+      title: title.trim() || (type === "habit" ? habitName : `${metricName} challenge`),
+      type,
+      habitName: type === "habit" ? habitName : null,
+      habitEmoji: type === "habit" ? habitEmoji : null,
+      metricName: type === "score" ? metricName : null,
+      frequency,
+      startDate: today,
+      endDate: end,
+    });
+  }
+
+  const canCreate = type === "habit" ? habitName.trim().length > 0 : metricName.trim().length > 0;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 30 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 30 }}
+      className="fixed inset-0 z-[200] flex items-end"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-2xl mx-auto bg-background rounded-t-3xl border-t border-x border-border/60 shadow-2xl p-6 pb-10 space-y-5 max-h-[88vh] overflow-y-auto"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-bold text-base">New team challenge</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">Auto-enrolls all active org members</p>
+          </div>
+          <button onClick={onClose} className="p-1 text-muted-foreground"><X className="h-4 w-4" /></button>
+        </div>
+
+        {/* Type selector */}
+        <div className="flex gap-2">
+          {(["habit", "score"] as const).map(t => (
+            <button
+              key={t}
+              onClick={() => setType(t)}
+              className={`flex-1 py-2.5 rounded-xl border text-sm font-medium transition-all ${
+                type === t ? "border-primary bg-primary/5 text-primary" : "border-border/50 text-muted-foreground"
+              }`}
+            >
+              {t === "habit" ? "🎯 Habit streak" : "📊 Score battle"}
+            </button>
+          ))}
+        </div>
+
+        {type === "habit" ? (
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">Habit name</label>
+              <Input value={habitName} onChange={e => setHabitName(e.target.value)} placeholder="e.g. Morning workout" className="h-10" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">Emoji</label>
+              <Input value={habitEmoji} onChange={e => setHabitEmoji(e.target.value)} className="h-10 w-20 text-center text-xl" maxLength={2} />
+            </div>
+          </div>
+        ) : (
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">Metric name</label>
+            <Input value={metricName} onChange={e => setMetricName(e.target.value)} placeholder="e.g. Sleep quality" className="h-10" />
+          </div>
+        )}
+
+        <div>
+          <label className="text-xs text-muted-foreground block mb-1">Challenge title (optional)</label>
+          <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Auto-generated if blank" className="h-10" />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">Duration</label>
+            <div className="flex gap-1">
+              {[7, 14, 30].map(d => (
+                <button
+                  key={d}
+                  onClick={() => setDurationDays(d)}
+                  className={`flex-1 py-2 rounded-lg border text-xs font-medium transition-all ${
+                    durationDays === d ? "border-primary bg-primary/5 text-primary" : "border-border/50 text-muted-foreground"
+                  }`}
+                >
+                  {d}d
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">Frequency</label>
+            <div className="flex gap-1">
+              {([["daily", "Daily"], ["every_other_day", "Alt"], ["weekly", "Weekly"]] as const).map(([v, label]) => (
+                <button
+                  key={v}
+                  onClick={() => setFrequency(v)}
+                  className={`flex-1 py-2 rounded-lg border text-[10px] font-medium transition-all ${
+                    frequency === v ? "border-primary bg-primary/5 text-primary" : "border-border/50 text-muted-foreground"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <button
+          onClick={handleCreate}
+          disabled={!canCreate || createMutation.isPending}
+          className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          {createMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+          Launch team challenge
+        </button>
+      </div>
+    </motion.div>
+  );
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 export default function ChallengesTab({
   acceptedConnections,
   viewerUserId,
+  orgRole,
 }: {
   acceptedConnections: { userId: number; username: string; displayName: string | null }[];
   viewerUserId: number;
+  orgRole?: string | null;
 }) {
   const [showCreate, setShowCreate] = useState(false);
+  const [showOrgCreate, setShowOrgCreate] = useState(false);
   const [showPast, setShowPast] = useState(false);
   const { data: challenges = [], isLoading } = useQuery<ChallengeWithProgress[]>({
     queryKey: ["/api/challenges"],
@@ -1403,12 +1559,23 @@ export default function ChallengesTab({
       {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Challenges</h2>
-        <button
-          onClick={() => { haptic("light"); setShowCreate(true); }}
-          className="flex items-center gap-1 text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 px-3 py-1.5 rounded-lg transition-colors"
-        >
-          <Plus className="h-3.5 w-3.5" /> New
-        </button>
+        <div className="flex items-center gap-2">
+          {orgRole === "admin" && (
+            <button
+              onClick={() => { haptic("light"); setShowOrgCreate(true); }}
+              className="flex items-center gap-1 text-xs font-medium text-amber-500 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-1.5 rounded-lg transition-colors"
+              title="Create a challenge for all org members"
+            >
+              <Building2 className="h-3.5 w-3.5" /> Team
+            </button>
+          )}
+          <button
+            onClick={() => { haptic("light"); setShowCreate(true); }}
+            className="flex items-center gap-1 text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 px-3 py-1.5 rounded-lg transition-colors"
+          >
+            <Plus className="h-3.5 w-3.5" /> New
+          </button>
+        </div>
       </div>
 
       {/* Invited */}
@@ -1492,6 +1659,12 @@ export default function ChallengesTab({
             onClose={() => setShowCreate(false)}
             connections={acceptedConnections}
           />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showOrgCreate && (
+          <OrgChallengeSheet onClose={() => setShowOrgCreate(false)} />
         )}
       </AnimatePresence>
     </div>

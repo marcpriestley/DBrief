@@ -5,9 +5,63 @@ import { db } from "./db";
 import { eq } from "drizzle-orm";
 import { organisations } from "@shared/schema";
 import crypto from "crypto";
+import nodemailer from "nodemailer";
 
 const CORPORATE_ENABLED = process.env.CORPORATE_TIER_ENABLED === "true";
 
+// ── Email helper ─────────────────────────────────────────────────────────────
+// Sends the invite email. Falls back to console logging when SMTP is not
+// configured so the flow still works during development.
+async function sendInviteEmail(opts: { to: string; orgName: string; inviteUrl: string }): Promise<void> {
+  const { to, orgName, inviteUrl } = opts;
+
+  const smtpHost = process.env.SMTP_HOST;
+  const smtpUser = process.env.SMTP_USER;
+  const smtpPass = process.env.SMTP_PASS;
+  const smtpFrom = process.env.SMTP_FROM ?? smtpUser ?? "noreply@dbrief.app";
+  const smtpPort = Number(process.env.SMTP_PORT ?? 587);
+
+  if (!smtpHost || !smtpUser || !smtpPass) {
+    console.log(`[Corporate Invite] SMTP not configured — invite URL for ${to}: ${inviteUrl}`);
+    return;
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpPort === 465,
+    auth: { user: smtpUser, pass: smtpPass },
+  });
+
+  const html = `
+    <div style="font-family: -apple-system, sans-serif; max-width: 520px; margin: 0 auto; padding: 32px 24px; background: #141414; color: #f5f5f5; border-radius: 16px;">
+      <div style="text-align: center; margin-bottom: 28px;">
+        <div style="display: inline-block; width: 48px; height: 48px; border-radius: 12px; background: #d97706; color: #141414; font-size: 24px; font-weight: 900; line-height: 48px; text-align: center;">D</div>
+        <h1 style="color: #f5f5f5; font-size: 22px; margin: 16px 0 4px;">DBrief App — Team Invite</h1>
+        <p style="color: #999; font-size: 14px; margin: 0;">${orgName} has invited you to join their team</p>
+      </div>
+      <div style="text-align: center; margin: 32px 0;">
+        <a href="${inviteUrl}" style="display: inline-block; padding: 14px 32px; background: #d97706; color: #141414; font-weight: 700; border-radius: 12px; text-decoration: none; font-size: 15px;">Join ${orgName} →</a>
+      </div>
+      <p style="color: #666; font-size: 12px; text-align: center; margin-top: 24px; line-height: 1.5;">
+        Your performance data stays private — no manager can read your debriefs or journal.
+        <br>This link is single-use. Once you join, it expires.
+      </p>
+    </div>
+  `;
+
+  await transporter.sendMail({
+    from: `DBrief App <${smtpFrom}>`,
+    to,
+    subject: `You've been invited to join ${orgName} on DBrief App`,
+    html,
+    text: `${orgName} has invited you to DBrief App. Click here to join: ${inviteUrl}`,
+  });
+
+  console.log(`[Corporate Invite] Email sent to ${to}`);
+}
+
+// ── Route helpers ─────────────────────────────────────────────────────────────
 function getUserId(req: any): number {
   const id = (req.session as any)?.userId;
   if (!id) throw Object.assign(new Error("Not authenticated"), { status: 401 });
@@ -41,7 +95,6 @@ async function getCorporatePriceId(): Promise<string> {
   _corporatePriceIdPromise = (async () => {
     const stripe = await getUncachableStripeClient();
 
-    // Look for existing DBrief Corporate product
     const products = await stripe.products.list({ limit: 100 });
     let product = products.data.find(p => p.name === "DBrief Corporate" && p.active);
     if (!product) {
@@ -71,14 +124,11 @@ export function registerCorporateRoutes(app: Express) {
   if (!CORPORATE_ENABLED) return;
 
   // ── GET /api/corporate/membership ─────────────────────────────────────────
-  // Returns this user's org membership + org settings (for all org members).
-  // Called by OrgBrandingContext on startup.
   app.get("/api/corporate/membership", requireCorporate, async (req, res) => {
     try {
       const userId = getUserId(req);
       const membership = await storage.getOrgMembershipByUser(userId);
       if (!membership) {
-        // Also check if this user is an admin
         const adminOrg = await storage.getOrganisationByAdmin(userId);
         if (!adminOrg) return res.json(null);
         return res.json({
@@ -106,19 +156,19 @@ export function registerCorporateRoutes(app: Express) {
   });
 
   // ── POST /api/corporate/org ───────────────────────────────────────────────
-  // Create a new organisation for this user (they become the admin).
   app.post("/api/corporate/org", requireCorporate, async (req, res) => {
     try {
       const userId = getUserId(req);
-      // One org per admin
       const existing = await storage.getOrganisationByAdmin(userId);
       if (existing) return res.status(409).json({ message: "You already have an organisation" });
 
       const { name, seatCount = 5 } = req.body;
-      if (!name) return res.status(400).json({ message: "name is required" });
+      if (!name || typeof name !== "string" || name.trim().length < 2) {
+        return res.status(400).json({ message: "name must be at least 2 characters" });
+      }
 
       const org = await storage.createOrganisation({
-        name,
+        name: name.trim(),
         seatCount: Math.max(1, Number(seatCount)),
         adminUserId: userId,
         subscriptionStatus: "inactive",
@@ -130,24 +180,22 @@ export function registerCorporateRoutes(app: Express) {
   });
 
   // ── GET /api/corporate/org ────────────────────────────────────────────────
-  // Get the org for the current admin.
   app.get("/api/corporate/org", requireOrgAdmin, async (req: any, res) => {
     res.json(req.org);
   });
 
   // ── PUT /api/corporate/org/settings ──────────────────────────────────────
-  // Update org branding / name / persona.
   app.put("/api/corporate/org/settings", requireOrgAdmin, async (req: any, res) => {
     try {
       const { name, logoUrl, accentColour, aiPersonaName, seatCount } = req.body;
-      const updates: any = {};
-      if (name !== undefined) updates.name = name;
-      if (logoUrl !== undefined) updates.logoUrl = logoUrl;
+      const updates: Partial<typeof req.org> = {};
+      if (name !== undefined) updates.name = String(name).trim();
+      if (logoUrl !== undefined) updates.logoUrl = logoUrl || null;
       if (accentColour !== undefined) updates.accentColour = accentColour;
       if (aiPersonaName !== undefined) updates.aiPersonaName = aiPersonaName;
       if (seatCount !== undefined) updates.seatCount = Math.max(1, Number(seatCount));
 
-      const org = await storage.updateOrganisation(req.org.id, updates);
+      const org = await storage.updateOrganisation(req.org.id, updates as any);
       res.json(org);
     } catch (err: any) {
       res.status(err.status ?? 500).json({ message: err.message });
@@ -155,7 +203,6 @@ export function registerCorporateRoutes(app: Express) {
   });
 
   // ── GET /api/corporate/dashboard ─────────────────────────────────────────
-  // Full dashboard data: members list + team engagement stats.
   app.get("/api/corporate/dashboard", requireOrgAdmin, async (req: any, res) => {
     try {
       const [members, stats, challengeIds] = await Promise.all([
@@ -175,23 +222,22 @@ export function registerCorporateRoutes(app: Express) {
   });
 
   // ── POST /api/corporate/invite ────────────────────────────────────────────
-  // Invite a member by email. Returns the invite URL for the admin to share.
   app.post("/api/corporate/invite", requireOrgAdmin, async (req: any, res) => {
     try {
       const { email } = req.body;
-      if (!email || !email.includes("@")) return res.status(400).json({ message: "Valid email required" });
+      if (!email || typeof email !== "string" || !email.includes("@")) {
+        return res.status(400).json({ message: "Valid email required" });
+      }
 
       const normalised = email.toLowerCase().trim();
-      const org: any = req.org;
+      const org: typeof req.org = req.org;
 
-      // Check seat limit
       const existingMembers = await storage.getOrgMembersByOrg(org.id);
-      const activeCount = existingMembers.filter(m => m.status === "active").length;
+      const activeCount = existingMembers.filter((m: any) => m.status === "active").length;
       if (activeCount >= (org.seatCount ?? 5)) {
         return res.status(400).json({ message: `Seat limit (${org.seatCount}) reached. Upgrade your plan to add more seats.` });
       }
 
-      // Already invited?
       const existing = await storage.getOrgMemberByEmail(org.id, normalised);
       if (existing) return res.status(409).json({ message: "This email has already been invited" });
 
@@ -207,62 +253,29 @@ export function registerCorporateRoutes(app: Express) {
       const baseUrl = process.env.REPLIT_DEPLOYMENT === "1"
         ? `https://${process.env.REPLIT_DOMAINS?.split(",")[0]}`
         : "http://localhost:5000";
+      const inviteUrl = `${baseUrl}/join/${token}`;
+
+      // Send the invite email (falls back to console log when SMTP is not configured)
+      try {
+        await sendInviteEmail({ to: normalised, orgName: org.name, inviteUrl });
+      } catch (emailErr: any) {
+        console.error("[Corporate Invite] Email failed:", emailErr.message);
+      }
 
       res.json({
-        message: "Invite created",
+        message: "Invite sent",
         email: normalised,
-        inviteUrl: `${baseUrl}/join/${token}`,
-        note: "Copy this link and email it to the invitee. A built-in email delivery option is coming soon.",
+        inviteUrl,
+        emailDelivered: !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS),
       });
     } catch (err: any) {
       res.status(err.status ?? 500).json({ message: err.message });
     }
   });
 
-  // ── POST /api/corporate/join/:token ──────────────────────────────────────
-  // Accept an invite. The user must be logged in.
-  app.post("/api/corporate/join/:token", requireCorporate, async (req, res) => {
-    try {
-      const userId = getUserId(req);
-      const { token } = req.params;
-
-      const member = await storage.getOrgMemberByToken(token);
-      if (!member) return res.status(404).json({ message: "Invite not found or already used" });
-      if (member.status === "active") return res.status(400).json({ message: "This invite has already been used" });
-
-      // Check the org is active
-      const org = await storage.getOrganisationById(member.orgId);
-      if (!org) return res.status(404).json({ message: "Organisation not found" });
-
-      // Check seat limit
-      const existingMembers = await storage.getOrgMembersByOrg(org.id);
-      const activeCount = existingMembers.filter(m => m.status === "active").length;
-      if (activeCount >= (org.seatCount ?? 5)) {
-        return res.status(400).json({ message: "This organisation has reached its seat limit" });
-      }
-
-      // Make sure no other active membership
-      const existingMembership = await storage.getOrgMembershipByUser(userId);
-      if (existingMembership) {
-        return res.status(409).json({ message: "You are already a member of an organisation" });
-      }
-
-      await storage.updateOrgMember(member.id, {
-        userId,
-        status: "active",
-        joinedAt: new Date(),
-        inviteToken: null,
-      } as any);
-
-      res.json({ message: "Successfully joined organisation", orgName: org.name });
-    } catch (err: any) {
-      res.status(err.status ?? 500).json({ message: err.message });
-    }
-  });
-
   // ── GET /api/corporate/join/:token ────────────────────────────────────────
-  // Preview invite details (org name, etc.) without consuming the token.
-  app.get("/api/corporate/join/:token", requireCorporate, async (req, res) => {
+  // Preview invite without consuming the token.
+  app.get("/api/corporate/join/:token", async (req, res) => {
     try {
       const { token } = req.params;
       const member = await storage.getOrgMemberByToken(token);
@@ -282,8 +295,52 @@ export function registerCorporateRoutes(app: Express) {
     }
   });
 
+  // ── POST /api/corporate/join/:token ──────────────────────────────────────
+  // Accept an invite. The user must be logged in and their email must match.
+  app.post("/api/corporate/join/:token", requireCorporate, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { token } = req.params;
+
+      const member = await storage.getOrgMemberByToken(token);
+      if (!member) return res.status(404).json({ message: "Invite not found or already used" });
+      if (member.status === "active") return res.status(400).json({ message: "This invite has already been used" });
+
+      // Security: the logged-in user's email must match the invited email
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(401).json({ message: "Not authenticated" });
+      if (user.username.toLowerCase() !== member.email.toLowerCase()) {
+        return res.status(403).json({ message: `This invite was sent to ${member.email}. Please log in with that account.` });
+      }
+
+      const org = await storage.getOrganisationById(member.orgId);
+      if (!org) return res.status(404).json({ message: "Organisation not found" });
+
+      const existingMembers = await storage.getOrgMembersByOrg(org.id);
+      const activeCount = existingMembers.filter((m: any) => m.status === "active").length;
+      if (activeCount >= (org.seatCount ?? 5)) {
+        return res.status(400).json({ message: "This organisation has reached its seat limit" });
+      }
+
+      const existingMembership = await storage.getOrgMembershipByUser(userId);
+      if (existingMembership) {
+        return res.status(409).json({ message: "You are already a member of an organisation" });
+      }
+
+      await storage.updateOrgMember(member.id, {
+        userId,
+        status: "active",
+        joinedAt: new Date(),
+        inviteToken: null,
+      });
+
+      res.json({ message: "Successfully joined organisation", orgName: org.name });
+    } catch (err: any) {
+      res.status(err.status ?? 500).json({ message: err.message });
+    }
+  });
+
   // ── POST /api/corporate/checkout ─────────────────────────────────────────
-  // Create a Stripe Checkout session for the org plan.
   app.post("/api/corporate/checkout", requireOrgAdmin, async (req: any, res) => {
     try {
       const stripe = await getUncachableStripeClient();
@@ -291,7 +348,6 @@ export function registerCorporateRoutes(app: Express) {
       const org: any = req.org;
       const userId: number = req.adminUserId;
 
-      // Ensure Stripe customer for the admin user
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ message: "User not found" });
 
@@ -313,16 +369,11 @@ export function registerCorporateRoutes(app: Express) {
       const session = await stripe.checkout.sessions.create({
         customer: customerId,
         mode: "subscription",
-        line_items: [{
-          price: priceId,
-          quantity: org.seatCount ?? 5,
-        }],
+        line_items: [{ price: priceId, quantity: org.seatCount ?? 5 }],
         success_url: `${baseUrl}/corporate/dashboard?setup=success`,
         cancel_url: `${baseUrl}/corporate/onboarding?step=checkout&cancelled=1`,
         metadata: { orgId: String(org.id) },
-        subscription_data: {
-          metadata: { orgId: String(org.id) },
-        },
+        subscription_data: { metadata: { orgId: String(org.id) } },
       });
 
       res.json({ url: session.url });
@@ -333,7 +384,6 @@ export function registerCorporateRoutes(app: Express) {
   });
 
   // ── POST /api/corporate/portal ────────────────────────────────────────────
-  // Create a Stripe billing portal session for the org admin.
   app.post("/api/corporate/portal", requireOrgAdmin, async (req: any, res) => {
     try {
       const org: any = req.org;
@@ -356,7 +406,6 @@ export function registerCorporateRoutes(app: Express) {
   });
 
   // ── POST /api/corporate/org-challenge ────────────────────────────────────
-  // Create a challenge scoped to the org (all members auto-added).
   app.post("/api/corporate/org-challenge", requireOrgAdmin, async (req: any, res) => {
     try {
       const org: any = req.org;
@@ -381,13 +430,11 @@ export function registerCorporateRoutes(app: Express) {
       // Auto-add all active org members as participants
       const members = await storage.getOrgMembersByOrg(org.id);
       const activeUserIds = members
-        .filter(m => m.status === "active" && m.userId !== null && m.userId !== req.adminUserId)
-        .map(m => m.userId as number);
+        .filter((m: any) => m.status === "active" && m.userId !== null && m.userId !== req.adminUserId)
+        .map((m: any) => m.userId as number);
 
       for (const uid of activeUserIds) {
-        try {
-          await storage.joinChallenge(challenge.id, uid);
-        } catch {}
+        try { await storage.joinChallenge(challenge.id, uid); } catch {}
       }
 
       res.status(201).json(challenge);
@@ -398,14 +445,13 @@ export function registerCorporateRoutes(app: Express) {
   });
 
   // ── DELETE /api/corporate/members/:id ───────────────────────────────────
-  // Remove a member from the org.
   app.delete("/api/corporate/members/:id", requireOrgAdmin, async (req: any, res) => {
     try {
       const memberId = Number(req.params.id);
       const members = await storage.getOrgMembersByOrg(req.org.id);
-      const member = members.find(m => m.id === memberId);
+      const member = members.find((m: any) => m.id === memberId);
       if (!member) return res.status(404).json({ message: "Member not found" });
-      await storage.updateOrgMember(memberId, { status: "removed" } as any);
+      await storage.updateOrgMember(memberId, { status: "removed" });
       res.json({ message: "Member removed" });
     } catch (err: any) {
       res.status(err.status ?? 500).json({ message: err.message });

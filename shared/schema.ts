@@ -637,6 +637,14 @@ export const orgChallengesRelations = relations(orgChallenges, ({ one }) => ({
   challenge: one(challenges, { fields: [orgChallenges.challengeId], references: [challenges.id] }),
 }));
 
+export type OrgMemberUpdate = {
+  userId?: number | null;
+  status?: string;
+  inviteToken?: string | null;
+  role?: string;
+  joinedAt?: Date | null;
+};
+
 export type OrgMemberWithUser = OrgMember & {
   displayName: string | null;
   driverHandle: string | null;
