@@ -2,6 +2,7 @@ import {
   users, journalEntries, dailyScores, userMetrics, streaks, aiInsights, pushSubscriptions,
   goalTemplates, dailyGoals, journalAttachments, moodCheckins, debriefs, debriefMessages, habits, habitLogs, serverConfig,
   weeklyReports, performancePatterns, infiniteGoals, longTermGoals, userConnections,
+  streakFreezeEvents,
   type User, type InsertUser, type JournalEntry, type InsertJournalEntry,
   type DailyScore, type InsertDailyScore, type UserMetric, type InsertUserMetric,
   type Streak, type InsertStreak, type AIInsight, type InsertAIInsight,
@@ -12,6 +13,7 @@ import {
   type WeeklyReport, type InsertWeeklyReport,
   type PerformancePattern, type InsertPerformancePattern,
   type UserConnection, type ConnectionPublicStats,
+  type StreakFreezeEvent, type InsertStreakFreezeEvent,
 } from "@shared/schema";
 import { organisations, orgMembers, orgChallenges } from "@shared/corporate-schema";
 import type { Organisation, InsertOrganisation, OrgMember, InsertOrgMember, OrgMemberUpdate } from "@shared/corporate-schema";
@@ -55,6 +57,10 @@ export interface IStorage {
   createStreak(streak: InsertStreak): Promise<Streak>;
   updateStreak(userId: number, streak: Partial<InsertStreak>): Promise<Streak | undefined>;
   getRecentActiveDays(userId: number): Promise<number>;
+
+  // Streak freeze event methods
+  getStreakFreezeEvents(userId: number, limit?: number): Promise<StreakFreezeEvent[]>;
+  createStreakFreezeEvent(event: InsertStreakFreezeEvent): Promise<StreakFreezeEvent>;
 
   // AI insights methods
   getActiveAIInsights(userId: number): Promise<AIInsight[]>;
@@ -254,6 +260,8 @@ export class MemStorage implements IStorage {
       currentStreak: 0,
       longestStreak: 0,
       lastEntryDate: null,
+      streakFreezes: 0,
+      freezeUsedDate: null,
     };
     this.streaks.set(1, defaultStreak);
     this.currentStreakId = 2;
@@ -426,6 +434,8 @@ export class MemStorage implements IStorage {
       currentStreak: insertStreak.currentStreak ?? 0,
       longestStreak: insertStreak.longestStreak ?? 0,
       lastEntryDate: insertStreak.lastEntryDate ?? null,
+      streakFreezes: insertStreak.streakFreezes ?? 0,
+      freezeUsedDate: insertStreak.freezeUsedDate ?? null,
     };
     this.streaks.set(id, streak);
     return streak;
@@ -647,6 +657,10 @@ export class MemStorage implements IStorage {
   async getChallengeLeaderboard(): Promise<any> { return { entries: [], scoresHidden: false, submittedToday: 0, totalParticipants: 0 }; }
   async inviteToChallenge(): Promise<void> {}
   async getChallengesNeedingReminders(): Promise<any[]> { return []; }
+  async getStreakFreezeEvents(_userId: number, _limit?: number): Promise<StreakFreezeEvent[]> { return []; }
+  async createStreakFreezeEvent(event: InsertStreakFreezeEvent): Promise<StreakFreezeEvent> {
+    return { id: 0, userId: event.userId, eventType: event.eventType, reason: event.reason, amount: event.amount ?? 1, createdAt: new Date() };
+  }
 }
 
 // Database implementation
@@ -820,6 +834,20 @@ export class DatabaseStorage implements IStorage {
         gt(dailyScores.value, 0),
       ));
     return rows.length;
+  }
+
+  async getStreakFreezeEvents(userId: number, limit = 20): Promise<StreakFreezeEvent[]> {
+    return db
+      .select()
+      .from(streakFreezeEvents)
+      .where(eq(streakFreezeEvents.userId, userId))
+      .orderBy(desc(streakFreezeEvents.createdAt))
+      .limit(limit);
+  }
+
+  async createStreakFreezeEvent(event: InsertStreakFreezeEvent): Promise<StreakFreezeEvent> {
+    const [created] = await db.insert(streakFreezeEvents).values(event).returning();
+    return created;
   }
 
   async getActiveAIInsights(userId: number): Promise<AIInsight[]> {

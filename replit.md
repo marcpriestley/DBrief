@@ -40,7 +40,7 @@ The application uses a **React with TypeScript** frontend, styled with **Shadcn/
 - **Goal Systems**: "Infinite Goal," up to three "Long-Term Targets," and "Daily Goals."
 - **Habit Lab**: Supports habit formation with streak tracking, milestones, habit stacking, and AI guidance.
 - **Performance Telemetry**: Daily metric tracking on a 0-100 scale.
-- **Streak Tracking**: Duolingo-style system with milestone celebrations.
+- **Streak Tracking**: Duolingo-style system with milestone celebrations and Pit Stop Shields (streak freezes). Freezes auto-consume when exactly one day is missed. Earned at 7-day intervals, 30/90/365-day bonuses, and every 500 activity-point threshold. Max 5 shields. Tracked in `streak_freeze_events` table.
 - **Three-tier AI intelligence**: Includes Weekly Race Report (7-day debrief), Data Pattern Analysis (30-day correlations), and Mission Intelligence (90-day goal alignment).
 - **Retrospective Editing**: Allows input of scores and journal entries for past dates.
 - **Mood Check-in**: Slider-based daily mood tracking.

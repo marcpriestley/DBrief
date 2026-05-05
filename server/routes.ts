@@ -2,7 +2,7 @@ import express from "express";
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage, todayInTz } from "./storage";
-import { updateUserStreak } from "./streakHelper";
+import { updateUserStreak, checkActivityPointFreeze } from "./streakHelper";
 import { authLimiter, aiLimiter, generalLimiter } from "./rate-limit";
 import { 
   insertJournalEntrySchema, insertDailyScoreSchema, 
@@ -1141,6 +1141,32 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
       res.json({ ...base, recentActiveDays, insightsUnlocked, dataDays });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch streak" });
+    }
+  });
+
+  // Streak Freeze status
+  app.get("/api/streak-freezes", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      // Also run point-threshold check on every poll so new thresholds are caught
+      checkActivityPointFreeze(userId).catch(() => {});
+      const [streak, events] = await Promise.all([
+        storage.getUserStreak(userId),
+        storage.getStreakFreezeEvents(userId, 10),
+      ]);
+      const today = new Date().toISOString().split("T")[0];
+      const yesterdayStr = new Date(Date.now() - 86_400_000).toISOString().split("T")[0];
+      const freezeUsedDate = streak?.freezeUsedDate ?? null;
+      const streakWasProtected =
+        freezeUsedDate === today || freezeUsedDate === yesterdayStr;
+      res.json({
+        freezeBalance: streak?.streakFreezes ?? 0,
+        recentEvents: events.slice(0, 5),
+        streakWasProtected,
+        freezeUsedDate,
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch freeze status" });
     }
   });
 

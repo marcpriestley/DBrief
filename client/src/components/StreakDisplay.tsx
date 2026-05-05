@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
-import { Flame, Zap } from "lucide-react";
+import { Flame, Zap, Snowflake, ShieldCheck, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useQuery } from "@tanstack/react-query";
 import { haptic, hapticSequence } from "@/lib/haptics";
 
 interface StreakDisplayProps {
@@ -60,6 +61,8 @@ const MILESTONES = [
 
 const SEEN_KEY = "dbrief_seen_milestones";
 const INCREMENT_DATE_KEY = "dbrief_streak_increment_date";
+const SEEN_FREEZE_KEY = "dbrief_seen_freeze_event_ids";
+const PROTECTED_SHOWN_KEY = "dbrief_freeze_protected_shown_id";
 
 function getSeenMilestones(): Set<number> {
   try {
@@ -74,7 +77,24 @@ function getSeenMilestones(): Set<number> {
 function markMilestoneSeen(days: number) {
   const seen = getSeenMilestones();
   seen.add(days);
-  localStorage.setItem(SEEN_KEY, JSON.stringify([...seen]));
+  localStorage.setItem(SEEN_KEY, JSON.stringify(Array.from(seen)));
+}
+
+function getSeenFreezeEventIds(): Set<number> {
+  try {
+    const raw = localStorage.getItem(SEEN_FREEZE_KEY);
+    if (!raw) return new Set();
+    return new Set(JSON.parse(raw) as number[]);
+  } catch {
+    return new Set();
+  }
+}
+
+function markFreezeEventSeen(id: number) {
+  const seen = getSeenFreezeEventIds();
+  seen.add(id);
+  const arr = Array.from(seen).slice(-200);
+  localStorage.setItem(SEEN_FREEZE_KEY, JSON.stringify(arr));
 }
 
 function todayDateString(): string {
@@ -102,6 +122,15 @@ function getStreakMessage(days: number): string {
 
 function getNextMilestone(days: number) {
   return MILESTONES.find(m => m.days > days) || null;
+}
+
+function humanReason(reason: string): string {
+  if (reason === "missed-day-protection") return "Missed day — streak protected";
+  if (reason.startsWith("activity-points-")) {
+    const pts = reason.replace("activity-points-", "");
+    return `${pts} activity point threshold`;
+  }
+  return `${reason} milestone`;
 }
 
 const PARTICLE_COLORS = ["#F59E0B", "#FCD34D", "#EF4444", "#8B5CF6", "#10B981", "#3B82F6", "#F97316", "#EC4899"];
@@ -141,13 +170,14 @@ function Particle({ color, delay, angle }: { color: string; delay: number; angle
 
 function MilestoneCelebration({
   milestone,
+  freezeAwarded,
   onDismiss,
 }: {
   milestone: typeof MILESTONES[0];
+  freezeAwarded: number;
   onDismiss: () => void;
 }) {
   useEffect(() => {
-    // Dramatic multi-step haptic sequence for milestone celebrations
     hapticSequence([
       { type: "heavy", delay: 0 },
       { type: "success", delay: 180 },
@@ -155,7 +185,7 @@ function MilestoneCelebration({
       { type: "success", delay: 750 },
       { type: "heavy", delay: 1100 },
     ]);
-    const timer = setTimeout(onDismiss, 7000);
+    const timer = setTimeout(onDismiss, 8000);
     return () => clearTimeout(timer);
   }, []);
 
@@ -189,7 +219,6 @@ function MilestoneCelebration({
         style={{ touchAction: "none" }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Swipe hint */}
         <p className="text-center text-white/30 text-[11px] mb-2 select-none">swipe up to dismiss</p>
 
         <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-[#111] shadow-2xl">
@@ -219,13 +248,32 @@ function MilestoneCelebration({
                 Streak Milestone
               </p>
               <h2 className="text-3xl font-black text-white mb-1">{milestone.sublabel}</h2>
-              <p className="text-lg font-bold text-amber-300 mb-6">{milestone.label}</p>
+              <p className="text-lg font-bold text-amber-300 mb-4">{milestone.label}</p>
 
-              <div className="rounded-xl bg-white/5 border border-white/10 p-4 mb-6">
+              <div className="rounded-xl bg-white/5 border border-white/10 p-4 mb-4">
                 <p className="text-sm text-gray-300 leading-relaxed italic">
                   "{milestone.message}"
                 </p>
               </div>
+
+              {freezeAwarded > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.75 }}
+                  className="rounded-xl bg-blue-500/10 border border-blue-400/25 p-3 mb-4 flex items-center gap-3"
+                >
+                  <Snowflake className="h-5 w-5 text-blue-400 shrink-0" />
+                  <div className="text-left">
+                    <p className="text-xs font-bold text-blue-300">
+                      Pit Stop Shield{freezeAwarded > 1 ? "s" : ""} Earned
+                    </p>
+                    <p className="text-[11px] text-blue-400/70">
+                      +{freezeAwarded} streak freeze{freezeAwarded > 1 ? "s" : ""} added to your reserves
+                    </p>
+                  </div>
+                </motion.div>
+              )}
 
               <motion.button
                 whileTap={{ scale: 0.95 }}
@@ -242,9 +290,36 @@ function MilestoneCelebration({
   );
 }
 
+function FreezeProtectedToast({ onDone }: { onDone: () => void }) {
+  useEffect(() => {
+    hapticSequence([
+      { type: "success", delay: 0 },
+      { type: "light", delay: 300 },
+    ]);
+    const t = setTimeout(onDone, 4500);
+    return () => clearTimeout(t);
+  }, []);
+
+  return (
+    <motion.div
+      drag="y"
+      dragConstraints={{ top: -200, bottom: 0 }}
+      onDragEnd={(_, info) => { if (info.offset.y < -40) { haptic("light"); onDone(); } }}
+      onClick={onDone}
+      initial={{ opacity: 0, y: 60, x: "-50%" }}
+      animate={{ opacity: 1, y: 0, x: "-50%" }}
+      exit={{ opacity: 0, y: -20, x: "-50%" }}
+      transition={{ type: "spring", damping: 18, stiffness: 260 }}
+      className="fixed bottom-24 left-1/2 z-50 flex items-center gap-2.5 px-5 py-3 rounded-full bg-blue-600 shadow-lg shadow-blue-600/30 cursor-grab active:cursor-grabbing touch-none"
+    >
+      <ShieldCheck className="h-4 w-4 text-white" />
+      <span className="text-sm font-bold text-white">Pit Stop Shield used — streak protected</span>
+    </motion.div>
+  );
+}
+
 function StreakIncrement({ onDone }: { onDone: () => void }) {
   useEffect(() => {
-    // Punchy double-tap haptic for the streak pill
     hapticSequence([
       { type: "heavy", delay: 0 },
       { type: "success", delay: 220 },
@@ -272,12 +347,126 @@ function StreakIncrement({ onDone }: { onDone: () => void }) {
   );
 }
 
+function FreezePopover({
+  freezeBalance,
+  recentEvents,
+  streakWasProtected,
+  onClose,
+}: {
+  freezeBalance: number;
+  recentEvents: any[];
+  streakWasProtected: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[90] flex items-end justify-center pb-28"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ y: 40, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: 20, opacity: 0 }}
+        transition={{ type: "spring", damping: 22, stiffness: 320 }}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-sm mx-4 rounded-2xl bg-[#1a1a1a] border border-white/10 shadow-2xl overflow-hidden"
+      >
+        <div className="flex items-center justify-between px-4 pt-4 pb-2">
+          <div className="flex items-center gap-2">
+            <Snowflake className="h-4 w-4 text-blue-400" />
+            <span className="text-sm font-bold text-white">Pit Stop Shields</span>
+          </div>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-300 transition-colors">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="px-4 pb-4">
+          <div className="flex items-center gap-3 bg-white/5 rounded-xl p-3 mb-3">
+            <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0">
+              <Snowflake className="h-5 w-5 text-blue-400" />
+            </div>
+            <div>
+              <p className="text-xl font-black text-white">{freezeBalance}<span className="text-sm font-medium text-gray-500"> / 5</span></p>
+              <p className="text-[11px] text-gray-400">shields in reserve</p>
+            </div>
+          </div>
+
+          {streakWasProtected && (
+            <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-400/20 rounded-xl p-2.5 mb-3">
+              <ShieldCheck className="h-4 w-4 text-blue-400 shrink-0" />
+              <p className="text-xs text-blue-300 font-medium">Your streak was protected recently</p>
+            </div>
+          )}
+
+          <p className="text-[11px] text-gray-500 leading-relaxed mb-3">
+            Shields absorb one missed day to keep your streak alive. Earn them at 7-day intervals and activity point milestones, with bonus drops at 30, 90, and 365 days.
+          </p>
+
+          {recentEvents.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-semibold tracking-widest uppercase text-gray-600 mb-2">Recent</p>
+              {recentEvents.map((ev: any) => (
+                <div key={ev.id} className="flex items-center gap-2.5 text-[11px]">
+                  <span className={`font-bold ${ev.eventType === "earned" ? "text-blue-400" : "text-amber-400"}`}>
+                    {ev.eventType === "earned" ? `+${ev.amount}` : `-${ev.amount}`}
+                  </span>
+                  <span className={ev.eventType === "earned" ? "text-blue-400" : "text-amber-400"}>
+                    {ev.eventType === "earned" ? "❄️" : "🛡️"}
+                  </span>
+                  <span className="text-gray-400 truncate">{humanReason(ev.reason)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 export default function StreakDisplay({ streak }: StreakDisplayProps) {
   const currentStreak = streak?.currentStreak || 0;
   const prevStreakRef = useRef<number>(currentStreak);
   const [showIncrement, setShowIncrement] = useState(false);
+  const [showProtected, setShowProtected] = useState(false);
   const [activeMilestone, setActiveMilestone] = useState<typeof MILESTONES[0] | null>(null);
+  const [activeMilestoneFreezeAwarded, setActiveMilestoneFreezeAwarded] = useState(0);
+  const [showFreezePopover, setShowFreezePopover] = useState(false);
   const initializedRef = useRef(false);
+
+  const { data: freezeData } = useQuery<{
+    freezeBalance: number;
+    recentEvents: any[];
+    streakWasProtected: boolean;
+    freezeUsedDate: string | null;
+  }>({
+    queryKey: ["/api/streak-freezes"],
+    refetchInterval: 30_000,
+  });
+
+  const freezeBalance = freezeData?.freezeBalance ?? 0;
+  const recentEvents = freezeData?.recentEvents ?? [];
+  const streakWasProtected = freezeData?.streakWasProtected ?? false;
+
+  // Show "protected" toast once when a new missed-day-protection event is detected
+  useEffect(() => {
+    if (!freezeData) return;
+    const seen = getSeenFreezeEventIds();
+    const unseenProtection = recentEvents.find(
+      (e: any) => e.eventType === "used" && e.reason === "missed-day-protection" && !seen.has(e.id),
+    );
+    if (!unseenProtection) return;
+    markFreezeEventSeen(unseenProtection.id);
+    const shownKey = localStorage.getItem(PROTECTED_SHOWN_KEY);
+    if (shownKey !== String(unseenProtection.id)) {
+      localStorage.setItem(PROTECTED_SHOWN_KEY, String(unseenProtection.id));
+      setShowProtected(true);
+    }
+  }, [freezeData]);
 
   useEffect(() => {
     if (!initializedRef.current) {
@@ -295,6 +484,17 @@ export default function StreakDisplay({ streak }: StreakDisplayProps) {
 
       if (newMilestone) {
         markMilestoneSeen(newMilestone.days);
+        // Check for an unseen freeze-earned event to announce in the celebration
+        const seenIds = getSeenFreezeEventIds();
+        const unseenEarned = recentEvents.find(
+          (e: any) =>
+            e.eventType === "earned" &&
+            !e.reason.startsWith("activity-points-") &&
+            !seenIds.has(e.id),
+        );
+        const awarded = unseenEarned?.amount ?? 0;
+        if (unseenEarned) markFreezeEventSeen(unseenEarned.id);
+        setActiveMilestoneFreezeAwarded(awarded);
         setActiveMilestone(newMilestone);
       } else if (!hasShownIncrementToday()) {
         markIncrementShownToday();
@@ -309,21 +509,47 @@ export default function StreakDisplay({ streak }: StreakDisplayProps) {
 
   return (
     <>
-      <motion.div
-        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 cursor-pointer"
-        whileTap={{ scale: 0.92 }}
-        title={`${getStreakMessage(currentStreak)}${nextMilestone ? ` · Next: ${nextMilestone.sublabel}` : " · Full season complete!"}`}
-      >
-        <Flame className={`h-3.5 w-3.5 ${currentStreak > 0 ? "text-amber-500" : "text-muted-foreground"}`} />
-        <span className={`text-xs font-semibold ${currentStreak > 0 ? "text-amber-600" : "text-muted-foreground"}`}>
-          {currentStreak}
-        </span>
-        {nextMilestone && currentStreak > 0 && (
-          <span className="text-[10px] text-amber-500/60 font-medium">
-            /{nextMilestone.days}
+      <div className="flex items-center gap-1.5">
+        {/* Streak pill */}
+        <motion.div
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 cursor-pointer"
+          whileTap={{ scale: 0.92 }}
+          title={`${getStreakMessage(currentStreak)}${nextMilestone ? ` · Next: ${nextMilestone.sublabel}` : " · Full season complete!"}`}
+        >
+          <Flame className={`h-3.5 w-3.5 ${currentStreak > 0 ? "text-amber-500" : "text-muted-foreground"}`} />
+          <span className={`text-xs font-semibold ${currentStreak > 0 ? "text-amber-600" : "text-muted-foreground"}`}>
+            {currentStreak}
           </span>
-        )}
-      </motion.div>
+          {nextMilestone && currentStreak > 0 && (
+            <span className="text-[10px] text-amber-500/60 font-medium">
+              /{nextMilestone.days}
+            </span>
+          )}
+        </motion.div>
+
+        {/* Freeze pill — tap for popover */}
+        <motion.div
+          className={`flex items-center gap-1 px-2 py-1 rounded-full cursor-pointer transition-colors ${
+            streakWasProtected
+              ? "bg-blue-500/20 border border-blue-400/30"
+              : freezeBalance > 0
+              ? "bg-blue-500/10"
+              : "bg-muted/30"
+          }`}
+          whileTap={{ scale: 0.92 }}
+          onClick={() => { haptic("light"); setShowFreezePopover(true); }}
+          title={`${freezeBalance} Pit Stop Shield${freezeBalance !== 1 ? "s" : ""}`}
+        >
+          {streakWasProtected ? (
+            <ShieldCheck className="h-3.5 w-3.5 text-blue-400" />
+          ) : (
+            <Snowflake className={`h-3.5 w-3.5 ${freezeBalance > 0 ? "text-blue-400" : "text-muted-foreground"}`} />
+          )}
+          <span className={`text-xs font-semibold ${freezeBalance > 0 ? "text-blue-400" : "text-muted-foreground"}`}>
+            {freezeBalance}
+          </span>
+        </motion.div>
+      </div>
 
       <AnimatePresence>
         {showIncrement && (
@@ -332,10 +558,31 @@ export default function StreakDisplay({ streak }: StreakDisplayProps) {
       </AnimatePresence>
 
       <AnimatePresence>
+        {showProtected && (
+          <FreezeProtectedToast onDone={() => setShowProtected(false)} />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
         {activeMilestone && (
           <MilestoneCelebration
             milestone={activeMilestone}
-            onDismiss={() => setActiveMilestone(null)}
+            freezeAwarded={activeMilestoneFreezeAwarded}
+            onDismiss={() => {
+              setActiveMilestone(null);
+              setActiveMilestoneFreezeAwarded(0);
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showFreezePopover && (
+          <FreezePopover
+            freezeBalance={freezeBalance}
+            recentEvents={recentEvents}
+            streakWasProtected={streakWasProtected}
+            onClose={() => setShowFreezePopover(false)}
           />
         )}
       </AnimatePresence>

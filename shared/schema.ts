@@ -58,7 +58,28 @@ export const streaks = pgTable("streaks", {
   currentStreak: integer("current_streak").default(0),
   longestStreak: integer("longest_streak").default(0),
   lastEntryDate: date("last_entry_date"),
+  streakFreezes: integer("streak_freezes").default(0),
+  freezeUsedDate: date("freeze_used_date"),
 });
+
+// Audit log for every freeze earned or consumed
+export const streakFreezeEvents = pgTable("streak_freeze_events", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  // 'earned' | 'used'
+  eventType: text("event_type").notNull(),
+  // e.g. "7-day milestone", "activity-points-500", "missed-day-protection"
+  reason: text("reason").notNull(),
+  amount: integer("amount").notNull().default(1),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertStreakFreezeEventSchema = createInsertSchema(streakFreezeEvents).omit({
+  id: true,
+  createdAt: true,
+});
+export type StreakFreezeEvent = typeof streakFreezeEvents.$inferSelect;
+export type InsertStreakFreezeEvent = z.infer<typeof insertStreakFreezeEventSchema>;
 
 export const aiInsights = pgTable("ai_insights", {
   id: serial("id").primaryKey(),
