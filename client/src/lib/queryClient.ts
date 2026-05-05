@@ -1,23 +1,18 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { Capacitor } from "@capacitor/core";
 
-// On Android Capacitor, the WebView runs under https://localhost (the native bridge
-// origin), NOT the remote server URL. Relative API paths like /api/auth/login
-// resolve to https://localhost/api/... which the Capacitor bridge intercepts and
-// serves index.html for — producing the "Unexpected token '<'" JSON parse error.
-//
-// We detect this by checking window.location.hostname. On Android the page runs at
-// https://localhost; on iOS and web it runs at the real domain.
-// Using hostname is more reliable than Capacitor.getPlatform() because it doesn't
-// depend on the native bridge being fully initialised at module load time.
-const ANDROID_API_BASE = "https://DBrief.replit.app";
+// When running as a native app (iOS or Android), the WebView serves from a
+// local bridge origin (e.g. capacitor://localhost or https://localhost).
+// Relative API paths would resolve to that local origin instead of the real
+// server, returning index.html instead of JSON.
+// Capacitor.isNativePlatform() is the reliable way to detect this — it doesn't
+// depend on any specific hostname or URL scheme that may vary between platforms
+// and Capacitor versions.
+const NATIVE_API_BASE = "https://DBrief.replit.app";
 
 function resolveUrl(url: string): string {
-  if (
-    url.startsWith("/") &&
-    typeof window !== "undefined" &&
-    window.location.hostname === "localhost"
-  ) {
-    return `${ANDROID_API_BASE}${url}`;
+  if (url.startsWith("/") && Capacitor.isNativePlatform()) {
+    return `${NATIVE_API_BASE}${url}`;
   }
   return url;
 }
