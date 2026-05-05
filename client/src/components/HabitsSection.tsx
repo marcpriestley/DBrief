@@ -499,10 +499,10 @@ function HabitCard({
       exit={{ opacity: 0, y: -8 }}
       className={`relative rounded-xl border transition-all ${
         isRestDay
-          ? "border-border/30 bg-muted/10 opacity-60"
+          ? "border-border/30 bg-muted/30 opacity-60"
           : habit.todayCompleted
             ? "border-primary/30 bg-primary/5"
-            : "border-border/50 bg-muted/20"
+            : "border-border/50 bg-muted/40"
       }`}
     >
       <div className="flex items-center gap-3 p-4">

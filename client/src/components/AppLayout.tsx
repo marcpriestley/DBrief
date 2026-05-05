@@ -3,6 +3,16 @@ import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Settings, LogOut, Smile, ChevronLeft, LayoutDashboard, CalendarDays, TrendingUp, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import StreakDisplay from "@/components/StreakDisplay";
 import SettingsModal from "@/components/SettingsModal";
 import AppTour from "@/components/AppTour";
@@ -126,6 +136,7 @@ function getCurrentPeriod() {
 function AppLayoutInner({ children }: AppLayoutProps) {
   const [location] = useLocation();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
   const [paywallOpen, setPaywallOpen] = useState(false);
   const [paywallFeature, setPaywallFeature] = useState<string | undefined>();
   const { isPremium } = useSubscription();
@@ -434,7 +445,7 @@ function AppLayoutInner({ children }: AppLayoutProps) {
                 variant="ghost"
                 size="icon"
                 className="h-9 w-9 text-muted-foreground hover:text-foreground"
-                onClick={() => { haptic("light"); logoutMutation.mutate(); }}
+                onClick={() => { haptic("light"); setLogoutDialogOpen(true); }}
                 title="Sign out"
               >
                 <LogOut className="h-[18px] w-[18px]" />
@@ -525,6 +536,26 @@ function AppLayoutInner({ children }: AppLayoutProps) {
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
       <PaywallModal isOpen={paywallOpen} onClose={() => setPaywallOpen(false)} featureName={paywallFeature} />
       <AppTour />
+
+      <AlertDialog open={logoutDialogOpen} onOpenChange={setLogoutDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Log out?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You can always log back in with your account.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { haptic("medium"); logoutMutation.mutate(); }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Log out
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
     </PaywallProvider>
   );
