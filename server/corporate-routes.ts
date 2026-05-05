@@ -400,6 +400,17 @@ export function registerCorporateRoutes(app: Express) {
         inviteToken: null,
       });
 
+      // Auto-enroll this new member into all currently active org-scoped challenges
+      // so they are visible immediately regardless of when they joined.
+      try {
+        const orgChallengeIds = await storage.getOrgChallengeIds(org.id);
+        await Promise.all(
+          orgChallengeIds.map(cid =>
+            storage.joinChallenge(cid, userId).catch(() => { /* already enrolled or ended — skip */ })
+          )
+        );
+      } catch (_) { /* non-fatal — join still succeeds */ }
+
       res.json({ message: "Successfully joined organisation", orgName: org.name });
     } catch (err: any) {
       res.status(err.status ?? 500).json({ message: err.message });

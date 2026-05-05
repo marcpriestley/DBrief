@@ -2159,6 +2159,101 @@ export class DatabaseStorage implements IStorage {
 
     return results;
   }
+
+  // ─── Corporate Tier storage methods ────────────────────────────────────────
+
+  async getOrganisationById(id: number): Promise<Organisation | undefined> {
+    const [org] = await db.select().from(organisations).where(eq(organisations.id, id));
+    return org;
+  }
+
+  async getOrganisationByAdmin(adminUserId: number): Promise<Organisation | undefined> {
+    const [org] = await db.select().from(organisations).where(eq(organisations.adminUserId, adminUserId));
+    return org;
+  }
+
+  async createOrganisation(data: InsertOrganisation): Promise<Organisation> {
+    const [org] = await db.insert(organisations).values(data).returning();
+    return org;
+  }
+
+  async updateOrganisation(id: number, updates: Partial<InsertOrganisation>): Promise<Organisation | undefined> {
+    const [org] = await db.update(organisations).set(updates).where(eq(organisations.id, id)).returning();
+    return org;
+  }
+
+  async getOrgMembershipByUser(userId: number): Promise<(OrgMember & { organisation: Organisation }) | undefined> {
+    const rows = await db
+      .select({ member: orgMembers, org: organisations })
+      .from(orgMembers)
+      .innerJoin(organisations, eq(orgMembers.orgId, organisations.id))
+      .where(and(eq(orgMembers.userId, userId), eq(orgMembers.status, "active")));
+    if (!rows.length) return undefined;
+    return { ...rows[0].member, organisation: rows[0].org };
+  }
+
+  async getOrgMembersByOrg(orgId: number): Promise<OrgMember[]> {
+    return db.select().from(orgMembers).where(eq(orgMembers.orgId, orgId)).orderBy(desc(orgMembers.createdAt));
+  }
+
+  async createOrgMember(data: InsertOrgMember): Promise<OrgMember> {
+    const [member] = await db.insert(orgMembers).values(data).returning();
+    return member;
+  }
+
+  async updateOrgMember(id: number, updates: OrgMemberUpdate): Promise<OrgMember | undefined> {
+    const updatePayload: Record<string, unknown> = {};
+    if ("userId" in updates) updatePayload["user_id"] = updates.userId;
+    if ("status" in updates) updatePayload["status"] = updates.status;
+    if ("inviteToken" in updates) updatePayload["invite_token"] = updates.inviteToken;
+    if ("role" in updates) updatePayload["role"] = updates.role;
+    if ("joinedAt" in updates) updatePayload["joined_at"] = updates.joinedAt;
+    const [member] = await db.update(orgMembers).set(updatePayload as typeof orgMembers.$inferInsert).where(eq(orgMembers.id, id)).returning();
+    return member;
+  }
+
+  async getOrgMemberByToken(token: string): Promise<OrgMember | undefined> {
+    const [member] = await db.select().from(orgMembers).where(eq(orgMembers.inviteToken, token));
+    return member;
+  }
+
+  async getOrgMemberByEmail(orgId: number, email: string): Promise<OrgMember | undefined> {
+    const [member] = await db.select().from(orgMembers)
+      .where(and(eq(orgMembers.orgId, orgId), eq(orgMembers.email, email.toLowerCase())));
+    return member;
+  }
+
+  async getOrgTeamStats(orgId: number): Promise<{ avgStreak: number; avgConsistency: number; activeCount: number; pendingCount: number }> {
+    const members = await db.select().from(orgMembers).where(eq(orgMembers.orgId, orgId));
+    const activeMembers = members.filter(m => m.status === "active" && m.userId !== null);
+    const pendingCount = members.filter(m => m.status === "pending").length;
+    if (activeMembers.length === 0) return { avgStreak: 0, avgConsistency: 0, activeCount: 0, pendingCount };
+
+    let totalStreak = 0;
+    let totalConsistency = 0;
+    for (const member of activeMembers) {
+      if (!member.userId) continue;
+      const [streak] = await db.select().from(streaks).where(eq(streaks.userId, member.userId));
+      totalStreak += streak?.currentStreak ?? 0;
+      const activeDays = await this.getRecentActiveDays(member.userId);
+      totalConsistency += Math.round((activeDays / 7) * 100);
+    }
+    return {
+      avgStreak: Math.round(totalStreak / activeMembers.length),
+      avgConsistency: Math.round(totalConsistency / activeMembers.length),
+      activeCount: activeMembers.length,
+      pendingCount,
+    };
+  }
+
+  async addOrgChallenge(orgId: number, challengeId: number): Promise<void> {
+    await db.insert(orgChallenges).values({ orgId, challengeId }).onConflictDoNothing();
+  }
+
+  async getOrgChallengeIds(orgId: number): Promise<number[]> {
+    const rows = await db.select().from(orgChallenges).where(eq(orgChallenges.orgId, orgId));
+    return rows.map(r => r.challengeId);
+  }
 }
 
 // ─── Timezone-aware "today" helper ──────────────────────────────────────────
@@ -2177,119 +2272,6 @@ export function todayInTz(tz: string | null | undefined): string {
   } catch {}
   return new Date().toISOString().split("T")[0];
 }
-
-// ─── Corporate Tier storage methods (class body extension) ───────────────────
-// Appended to DatabaseStorage prototype via declaration merging below.
-declare module "./storage" {
-  interface DatabaseStorage {
-    getOrganisationById(id: number): Promise<Organisation | undefined>;
-    getOrganisationByAdmin(adminUserId: number): Promise<Organisation | undefined>;
-    createOrganisation(data: InsertOrganisation): Promise<Organisation>;
-    updateOrganisation(id: number, updates: Partial<InsertOrganisation>): Promise<Organisation | undefined>;
-    getOrgMembershipByUser(userId: number): Promise<(OrgMember & { organisation: Organisation }) | undefined>;
-    getOrgMembersByOrg(orgId: number): Promise<OrgMember[]>;
-    createOrgMember(data: InsertOrgMember): Promise<OrgMember>;
-    updateOrgMember(id: number, updates: OrgMemberUpdate): Promise<OrgMember | undefined>;
-    getOrgMemberByToken(token: string): Promise<OrgMember | undefined>;
-    getOrgMemberByEmail(orgId: number, email: string): Promise<OrgMember | undefined>;
-    getOrgTeamStats(orgId: number): Promise<{ avgStreak: number; avgConsistency: number; activeCount: number; pendingCount: number }>;
-    addOrgChallenge(orgId: number, challengeId: number): Promise<void>;
-    getOrgChallengeIds(orgId: number): Promise<number[]>;
-  }
-}
-
-DatabaseStorage.prototype.getOrganisationById = async function (id: number): Promise<Organisation | undefined> {
-  const [org] = await db.select().from(organisations).where(eq(organisations.id, id));
-  return org;
-};
-
-DatabaseStorage.prototype.getOrganisationByAdmin = async function (adminUserId: number): Promise<Organisation | undefined> {
-  const [org] = await db.select().from(organisations).where(eq(organisations.adminUserId, adminUserId));
-  return org;
-};
-
-DatabaseStorage.prototype.createOrganisation = async function (data: InsertOrganisation): Promise<Organisation> {
-  const [org] = await db.insert(organisations).values(data).returning();
-  return org;
-};
-
-DatabaseStorage.prototype.updateOrganisation = async function (id: number, updates: Partial<InsertOrganisation>): Promise<Organisation | undefined> {
-  const [org] = await db.update(organisations).set(updates).where(eq(organisations.id, id)).returning();
-  return org;
-};
-
-DatabaseStorage.prototype.getOrgMembershipByUser = async function (userId: number): Promise<(OrgMember & { organisation: Organisation }) | undefined> {
-  const rows = await db
-    .select({ member: orgMembers, org: organisations })
-    .from(orgMembers)
-    .innerJoin(organisations, eq(orgMembers.orgId, organisations.id))
-    .where(and(eq(orgMembers.userId, userId), eq(orgMembers.status, "active")));
-  if (!rows.length) return undefined;
-  return { ...rows[0].member, organisation: rows[0].org };
-};
-
-DatabaseStorage.prototype.getOrgMembersByOrg = async function (orgId: number): Promise<OrgMember[]> {
-  return db.select().from(orgMembers).where(eq(orgMembers.orgId, orgId)).orderBy(desc(orgMembers.createdAt));
-};
-
-DatabaseStorage.prototype.createOrgMember = async function (data: InsertOrgMember): Promise<OrgMember> {
-  const [member] = await db.insert(orgMembers).values(data).returning();
-  return member;
-};
-
-DatabaseStorage.prototype.updateOrgMember = async function (id: number, updates: OrgMemberUpdate): Promise<OrgMember | undefined> {
-  const updatePayload: Record<string, unknown> = {};
-  if ("userId" in updates) updatePayload["user_id"] = updates.userId;
-  if ("status" in updates) updatePayload["status"] = updates.status;
-  if ("inviteToken" in updates) updatePayload["invite_token"] = updates.inviteToken;
-  if ("role" in updates) updatePayload["role"] = updates.role;
-  if ("joinedAt" in updates) updatePayload["joined_at"] = updates.joinedAt;
-  const [member] = await db.update(orgMembers).set(updatePayload as typeof orgMembers.$inferInsert).where(eq(orgMembers.id, id)).returning();
-  return member;
-};
-
-DatabaseStorage.prototype.getOrgMemberByToken = async function (token: string): Promise<OrgMember | undefined> {
-  const [member] = await db.select().from(orgMembers).where(eq(orgMembers.inviteToken, token));
-  return member;
-};
-
-DatabaseStorage.prototype.getOrgMemberByEmail = async function (orgId: number, email: string): Promise<OrgMember | undefined> {
-  const [member] = await db.select().from(orgMembers)
-    .where(and(eq(orgMembers.orgId, orgId), eq(orgMembers.email, email.toLowerCase())));
-  return member;
-};
-
-DatabaseStorage.prototype.getOrgTeamStats = async function (this: DatabaseStorage, orgId: number): Promise<{ avgStreak: number; avgConsistency: number; activeCount: number; pendingCount: number }> {
-  const members = await db.select().from(orgMembers).where(eq(orgMembers.orgId, orgId));
-  const activeMembers = members.filter(m => m.status === "active" && m.userId !== null);
-  const pendingCount = members.filter(m => m.status === "pending").length;
-  if (activeMembers.length === 0) return { avgStreak: 0, avgConsistency: 0, activeCount: 0, pendingCount };
-
-  let totalStreak = 0;
-  let totalConsistency = 0;
-  for (const member of activeMembers) {
-    if (!member.userId) continue;
-    const [streak] = await db.select().from(streaks).where(eq(streaks.userId, member.userId));
-    totalStreak += streak?.currentStreak ?? 0;
-    const activeDays = await this.getRecentActiveDays(member.userId);
-    totalConsistency += Math.round((activeDays / 7) * 100);
-  }
-  return {
-    avgStreak: Math.round(totalStreak / activeMembers.length),
-    avgConsistency: Math.round(totalConsistency / activeMembers.length),
-    activeCount: activeMembers.length,
-    pendingCount,
-  };
-};
-
-DatabaseStorage.prototype.addOrgChallenge = async function (orgId: number, challengeId: number): Promise<void> {
-  await db.insert(orgChallenges).values({ orgId, challengeId }).onConflictDoNothing();
-};
-
-DatabaseStorage.prototype.getOrgChallengeIds = async function (orgId: number): Promise<number[]> {
-  const rows = await db.select().from(orgChallenges).where(eq(orgChallenges.orgId, orgId));
-  return rows.map(r => r.challengeId);
-};
 
 // ─── Streak computation helper ──────────────────────────────────────────────
 function computeHabitStreak(sortedDatesDesc: string[]): { currentStreak: number; longestStreak: number; lastDate: string | null } {
