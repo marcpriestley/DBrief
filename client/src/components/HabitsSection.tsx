@@ -522,6 +522,8 @@ function HabitCard({
           >
             {habit.todayCompleted ? (
               <Check className="h-4 w-4 text-white" />
+            ) : isProtected ? (
+              <span className="text-base leading-none">😊</span>
             ) : (
               <span className="text-base leading-none">{habit.emoji}</span>
             )}
@@ -531,8 +533,8 @@ function HabitCard({
         {/* Info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            {!habit.todayCompleted && <span className="text-sm" aria-hidden>{habit.emoji}</span>}
-            <span className={`text-sm font-medium truncate ${habit.todayCompleted ? "text-primary line-through opacity-60" : "text-foreground"}`}>
+            {!habit.todayCompleted && !isProtected && <span className="text-sm" aria-hidden>{habit.emoji}</span>}
+            <span className={`text-sm font-medium ${isProtected ? "" : "truncate"} ${habit.todayCompleted ? "text-primary line-through opacity-60" : "text-foreground"}`}>
               {habit.name}
             </span>
             {isRestDay && (

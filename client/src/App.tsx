@@ -368,10 +368,6 @@ function AuthenticatedRouter() {
 
   if (isLoading) return null;
 
-  // contentReady is still set (controls nothing visually now) but kept so
-  // the effect that dismisses the splash can reference isLoading cleanly.
-  void contentReady; // suppress unused-variable lint
-
   if (!user) {
     return <Welcome />;
   }
@@ -383,7 +379,12 @@ function AuthenticatedRouter() {
   const dateOfBirth = user?.userProfile?.dateOfBirth ?? null;
 
   return (
-    <div>
+    <div
+      style={{
+        opacity: contentReady ? 1 : 0,
+        transition: 'opacity 0.2s ease',
+      }}
+    >
       <MoodProvider value={{ openMood: () => setIsMoodOpen(true) }}>
         <Switch>
           <Route path="/" component={Dashboard} />
