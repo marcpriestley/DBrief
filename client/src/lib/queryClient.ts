@@ -1,4 +1,20 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { Capacitor } from "@capacitor/core";
+
+// On Android, the Capacitor WebView origin is https://localhost (the native bridge),
+// NOT the remote server URL. Relative paths like /api/auth/login resolve to
+// https://localhost/api/auth/login, which the bridge handles locally and returns
+// index.html (causing the "Unexpected token '<'" JSON error).
+// Fix: prepend the real server base URL on Android so every API call reaches
+// the deployed Express server.
+const ANDROID_API_BASE = "https://DBrief.replit.app";
+
+function resolveUrl(url: string): string {
+  if (Capacitor.getPlatform() === "android" && url.startsWith("/")) {
+    return `${ANDROID_API_BASE}${url}`;
+  }
+  return url;
+}
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -12,7 +28,7 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  const res = await fetch(url, {
+  const res = await fetch(resolveUrl(url), {
     method,
     headers: {
       "Accept": "application/json",
@@ -32,7 +48,7 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const res = await fetch(queryKey[0] as string, {
+    const res = await fetch(resolveUrl(queryKey[0] as string), {
       credentials: "include",
     });
 

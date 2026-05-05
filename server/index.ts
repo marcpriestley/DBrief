@@ -12,6 +12,25 @@ const app = express();
 // can read the real client IP from X-Forwarded-For without validation warnings.
 app.set("trust proxy", 1);
 
+// ── CORS for Capacitor native apps ────────────────────────────────────────────
+// On Android the WebView origin is https://localhost (the Capacitor bridge),
+// not the remote server URL. This middleware adds the headers that allow the
+// native app to make cross-origin API requests with session cookies.
+const NATIVE_ORIGINS = ["https://localhost", "capacitor://localhost", "http://localhost"];
+app.use((req, res, next) => {
+  const origin = req.headers.origin as string | undefined;
+  if (origin && NATIVE_ORIGINS.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Accept, Authorization");
+  }
+  if (req.method === "OPTIONS") {
+    return res.status(204).end();
+  }
+  next();
+});
+
 // ── Stripe webhook — MUST be registered BEFORE express.json() ─────────────
 // Stripe webhooks require the raw Buffer body for signature verification.
 // Registering after express.json() would parse the body as JSON, breaking verification.

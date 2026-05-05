@@ -37,5 +37,9 @@ export const sessionMiddleware = session({
     secure: process.env.NODE_ENV === "production",
     httpOnly: true,
     maxAge: 30 * 24 * 60 * 60 * 1000,
+    // SameSite=none is required for Capacitor Android, where the WebView origin is
+    // https://localhost (cross-origin relative to the deployed API server).
+    // Requires secure:true — only applied in production.
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
   },
 });
