@@ -434,8 +434,8 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
                   display: "flex",
                   alignItems: "center",
                   gap: "8px",
-                  backgroundColor: "var(--card)",
-                  border: "1px solid var(--primary)",
+                  backgroundColor: "hsl(var(--card))",
+                  border: "1px solid hsl(var(--primary))",
                   borderRadius: "999px",
                   padding: "8px 18px",
                   boxShadow: "0 4px 20px rgba(0,0,0,0.35)",
@@ -443,7 +443,7 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
                 }}
               >
                 <span style={{ fontSize: "1.1rem" }}>{goalToast.icon}</span>
-                <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground)" }}>
+                <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "hsl(var(--foreground))" }}>
                   {goalToast.text}
                 </span>
               </div>
@@ -530,7 +530,7 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
               >
                 <div
                   style={{
-                    backgroundColor: "var(--card)",
+                    backgroundColor: "hsl(var(--card))",
                     borderRadius: "1.5rem",
                     padding: "2.5rem 2.25rem 2rem",
                     textAlign: "center",
@@ -564,7 +564,7 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
                   <p style={{
                     fontSize: "1.25rem",
                     fontWeight: 800,
-                    color: "var(--foreground)",
+                    color: "hsl(var(--foreground))",
                     margin: 0,
                     letterSpacing: "-0.02em",
                   }}>
@@ -574,7 +574,7 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
                   {/* Subtitle */}
                   <p style={{
                     fontSize: "0.875rem",
-                    color: "var(--muted-foreground)",
+                    color: "hsl(var(--muted-foreground))",
                     marginTop: "0.4rem",
                     lineHeight: 1.4,
                   }}>
@@ -603,13 +603,13 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
                     <motion.div
                       animate={{ y: [0, -4, 0] }}
                       transition={{ repeat: Infinity, duration: 1.2, ease: "easeInOut" }}
-                      style={{ color: "var(--muted-foreground)", opacity: 0.45 }}
+                      style={{ color: "hsl(var(--muted-foreground))", opacity: 0.45 }}
                     >
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="18 15 12 9 6 15" />
                       </svg>
                     </motion.div>
-                    <span style={{ fontSize: "0.68rem", color: "var(--muted-foreground)", opacity: 0.4, letterSpacing: "0.04em" }}>
+                    <span style={{ fontSize: "0.68rem", color: "hsl(var(--muted-foreground))", opacity: 0.4, letterSpacing: "0.04em" }}>
                       SWIPE UP TO DISMISS
                     </span>
                   </div>

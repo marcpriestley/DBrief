@@ -440,12 +440,14 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
   const handleToggleDarkMode = (enabled: boolean) => {
     setDarkMode(enabled);
-    const bg = enabled ? "#141414" : "#f7f7f7";
+    const bg = enabled ? "#141414" : "#c1c5cc";
     if (enabled) {
+      document.documentElement.classList.remove("light");
       document.documentElement.classList.add("dark");
       localStorage.setItem("dbrief_theme", "dark");
     } else {
       document.documentElement.classList.remove("dark");
+      document.documentElement.classList.add("light");
       localStorage.setItem("dbrief_theme", "light");
     }
     // Keep --pre-bg in sync so the safe-area fill strips show the right colour

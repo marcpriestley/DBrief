@@ -499,7 +499,7 @@ function HabitCard({
       exit={{ opacity: 0, y: -8 }}
       className={`relative rounded-xl border transition-all ${
         isRestDay
-          ? "border-border/30 bg-muted/30 opacity-60"
+          ? "border-red-500/60 bg-red-500/5"
           : habit.todayCompleted
             ? "border-primary/30 bg-primary/5"
             : "border-border/50 bg-muted/40"
@@ -1509,7 +1509,7 @@ function MilestoneCelebration({
         transition={{ type: "spring", damping: 20, stiffness: 280 }}
         onClick={e => e.stopPropagation()}
         className={`bg-gradient-to-b ${copy.color} border border-primary/30 rounded-3xl p-8 text-center max-w-xs w-full shadow-2xl`}
-        style={{ background: "var(--card)" }}
+        style={{ background: "hsl(var(--card))" }}
       >
         <motion.div
           animate={{ scale: [1, 1.15, 1] }}

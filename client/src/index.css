@@ -3,48 +3,48 @@
 @tailwind utilities;
 
 :root {
-  --background: hsl(220, 10%, 78%);
-  --foreground: hsl(220, 25%, 7%);
-  --muted: hsl(220, 10%, 71%);
-  --muted-foreground: hsl(220, 10%, 28%);
-  --popover: hsl(220, 10%, 82%);
-  --popover-foreground: hsl(220, 25%, 7%);
-  --card: hsl(220, 10%, 78%);
-  --card-foreground: hsl(220, 25%, 7%);
-  --border: hsl(220, 8%, 58%);
-  --input: hsl(220, 8%, 60%);
-  --primary: hsl(40, 95%, 48%);
-  --primary-foreground: hsl(0, 0%, 8%);
-  --secondary: hsl(220, 10%, 73%);
-  --secondary-foreground: hsl(220, 25%, 7%);
-  --accent: hsl(40, 95%, 48%);
-  --accent-foreground: hsl(0, 0%, 8%);
-  --destructive: hsl(0, 72%, 51%);
-  --destructive-foreground: hsl(0, 0%, 100%);
-  --ring: hsl(40, 95%, 48%);
+  --background: 220 10% 78%;
+  --foreground: 220 25% 7%;
+  --muted: 220 10% 71%;
+  --muted-foreground: 220 10% 28%;
+  --popover: 220 10% 82%;
+  --popover-foreground: 220 25% 7%;
+  --card: 220 10% 78%;
+  --card-foreground: 220 25% 7%;
+  --border: 220 8% 55%;
+  --input: 220 8% 57%;
+  --primary: 40 95% 48%;
+  --primary-foreground: 0 0% 8%;
+  --secondary: 220 10% 73%;
+  --secondary-foreground: 220 25% 7%;
+  --accent: 40 95% 48%;
+  --accent-foreground: 0 0% 8%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+  --ring: 40 95% 48%;
   --radius: 0.75rem;
 }
 
 .dark {
-  --background: hsl(0, 0%, 8%);
-  --foreground: hsl(0, 0%, 97%);
-  --muted: hsl(0, 0%, 15%);
-  --muted-foreground: hsl(0, 0%, 62%);
-  --popover: hsl(0, 0%, 11%);
-  --popover-foreground: hsl(0, 0%, 97%);
-  --card: hsl(0, 0%, 12%);
-  --card-foreground: hsl(0, 0%, 97%);
-  --border: hsl(0, 0%, 28%);
-  --input: hsl(0, 0%, 26%);
-  --primary: hsl(40, 92%, 52%);
-  --primary-foreground: hsl(0, 0%, 8%);
-  --secondary: hsl(0, 0%, 14%);
-  --secondary-foreground: hsl(0, 0%, 95%);
-  --accent: hsl(40, 92%, 52%);
-  --accent-foreground: hsl(0, 0%, 8%);
-  --destructive: hsl(0, 62%, 40%);
-  --destructive-foreground: hsl(0, 0%, 100%);
-  --ring: hsl(40, 92%, 52%);
+  --background: 0 0% 8%;
+  --foreground: 0 0% 97%;
+  --muted: 0 0% 15%;
+  --muted-foreground: 0 0% 62%;
+  --popover: 0 0% 11%;
+  --popover-foreground: 0 0% 97%;
+  --card: 0 0% 12%;
+  --card-foreground: 0 0% 97%;
+  --border: 0 0% 28%;
+  --input: 0 0% 26%;
+  --primary: 40 92% 52%;
+  --primary-foreground: 0 0% 8%;
+  --secondary: 0 0% 14%;
+  --secondary-foreground: 0 0% 95%;
+  --accent: 40 92% 52%;
+  --accent-foreground: 0 0% 8%;
+  --destructive: 0 62% 40%;
+  --destructive-foreground: 0 0% 100%;
+  --ring: 40 92% 52%;
   --radius: 0.75rem;
 }
 
@@ -79,7 +79,7 @@ html.dark {
 body {
   height: 100%;
   overflow: hidden;             /* prevent native body/WKWebView scroll layer */
-  background-color: var(--background);
+  background-color: hsl(var(--background));
   /* Override @layer base env(safe-area-*) padding — safe-area handling is
      done exclusively inside #root (border-box + padding-bottom).  Without
      this override the body padding area peeks out as a white strip at the
@@ -121,17 +121,17 @@ html.dark #root {
    In dark mode: premium dark cockpit panel with amber glow.
    In light mode: same card surface as every other panel — unified grey. */
 .debrief-hero-card {
-  background: var(--card);
+  background: hsl(var(--card));
   border: 1px solid rgba(245, 158, 11, 0.30);
   box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.06), 0 1px 6px rgba(0, 0, 0, 0.07), 0 0 0 1px rgba(0, 0, 0, 0.03);
-  --foreground: hsl(220, 15%, 12%);
-  --muted-foreground: hsl(220, 8%, 38%);
+  --foreground: 220 25% 7%;
+  --muted-foreground: 220 10% 28%;
 }
 .dark .debrief-hero-card {
   background: linear-gradient(145deg, hsl(0, 0%, 11%) 0%, hsl(0, 0%, 9%) 60%, hsl(38, 92%, 6%) 100%);
   box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.08), 0 8px 32px rgba(245, 158, 11, 0.10);
-  --foreground: hsl(0, 0%, 93%);
-  --muted-foreground: hsl(0, 0%, 60%);
+  --foreground: 0 0% 93%;
+  --muted-foreground: 0 0% 60%;
 }
 
 

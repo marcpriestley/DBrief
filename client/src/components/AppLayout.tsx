@@ -446,13 +446,13 @@ function AppLayoutInner({ children }: AppLayoutProps) {
       <div
         aria-hidden="true"
         className="fixed top-0 left-0 right-0 pointer-events-none"
-        style={{ height: 'var(--sai-top, env(safe-area-inset-top, 0px))', backgroundColor: 'var(--background)', zIndex: 40 }}
+        style={{ height: 'var(--sai-top, env(safe-area-inset-top, 0px))', backgroundColor: 'hsl(var(--background))', zIndex: 40 }}
       />
 
       {/* ── Top header ─────────────────────────────────────────────────────── */}
       <header
         className="sticky top-0 z-50 border-b border-border/60"
-        style={{ paddingTop: 'var(--sai-top, env(safe-area-inset-top, 0px))', backgroundColor: 'var(--background)' }}
+        style={{ paddingTop: 'var(--sai-top, env(safe-area-inset-top, 0px))', backgroundColor: 'hsl(var(--background))' }}
       >
         <div className="max-w-2xl mx-auto px-4">
           <div className="flex justify-between items-center h-14">

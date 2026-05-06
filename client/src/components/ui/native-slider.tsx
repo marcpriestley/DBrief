@@ -170,7 +170,7 @@ export default function NativeSlider({
       {/* Track background */}
       <div
         className="absolute pointer-events-none rounded-full"
-        style={{ left: 14, right: 14, top: 10, height: 8, background: "var(--muted)" }}
+        style={{ left: 14, right: 14, top: 10, height: 8, background: "hsl(var(--muted))" }}
       />
       {/* Track fill */}
       <div

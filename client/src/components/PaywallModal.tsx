@@ -285,7 +285,7 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
           >
             <div
               className="relative mx-auto w-full max-w-lg rounded-t-3xl overflow-hidden flex flex-col"
-              style={{ maxHeight: '92dvh', background: 'var(--background)' }}
+              style={{ maxHeight: '92dvh', background: 'hsl(var(--background))' }}
             >
               {/* Amber header gradient */}
               <div
