@@ -270,7 +270,7 @@ export default function LongTermGoals() {
     return (
       <button
         onClick={() => { setIsExpanded(true); setShowAddForm(true); }}
-        className="w-full text-left bg-card flex items-center gap-3 p-3 rounded-xl border border-dashed border-border/50 shadow-sm hover:border-primary/40 hover:bg-muted/20 transition-all"
+        className="w-full text-left bg-card/70 backdrop-blur-sm flex items-center gap-3 p-3 rounded-xl border border-dashed border-border/50 shadow-sm hover:border-primary/40 hover:bg-muted/20 transition-all"
       >
         <div className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center shrink-0">
           <Target className="h-3.5 w-3.5 text-muted-foreground" />
@@ -295,7 +295,7 @@ export default function LongTermGoals() {
         )}
       </AnimatePresence>
 
-      <div className="bg-card rounded-xl border border-border/50 shadow-sm overflow-hidden">
+      <div className="bg-card/70 backdrop-blur-sm rounded-xl border border-border/50 shadow-sm overflow-hidden">
         <button
           onClick={() => setIsExpanded(!isExpanded)}
           className="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors"

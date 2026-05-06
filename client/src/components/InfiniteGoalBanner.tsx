@@ -80,7 +80,7 @@ export default function InfiniteGoalBanner() {
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <div className="bg-card border border-primary/30 rounded-2xl px-5 py-4 shadow-sm">
+        <div className="bg-card/70 backdrop-blur-sm border border-primary/30 rounded-2xl px-5 py-4 shadow-sm">
           <div className="flex items-start gap-3">
             <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
               <Compass className="h-4 w-4 text-primary" />
@@ -111,7 +111,7 @@ export default function InfiniteGoalBanner() {
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         onClick={() => setIsSetupOpen(true)}
-        className="w-full text-left bg-card border border-dashed border-primary/30 rounded-xl px-4 py-3 hover:border-primary/50 hover:bg-primary/5 transition-all"
+        className="w-full text-left bg-card/70 backdrop-blur-sm border border-dashed border-primary/30 rounded-xl px-4 py-3 hover:border-primary/50 hover:bg-primary/5 transition-all"
       >
         <div className="flex items-center gap-3">
           <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">

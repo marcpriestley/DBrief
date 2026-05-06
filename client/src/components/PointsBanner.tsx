@@ -111,7 +111,7 @@ export default function PointsBanner() {
   if (displayPoints === null) return null;
 
   return (
-    <div className="relative bg-card rounded-xl border border-border/50 shadow-sm px-4 py-2.5 flex items-center justify-between overflow-hidden">
+    <div className="relative bg-card/70 backdrop-blur-sm rounded-xl border border-border/50 shadow-sm px-4 py-2.5 flex items-center justify-between overflow-hidden">
       <AnimatePresence>
         {burst !== null && (
           <PointsBurst key={burst + Date.now()} delta={burst} onDone={() => setBurst(null)} />

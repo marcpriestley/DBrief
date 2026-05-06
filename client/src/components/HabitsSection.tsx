@@ -238,7 +238,7 @@ export default function HabitsSection() {
   ];
 
   return (
-    <div className="relative bg-card rounded-2xl border border-border/50 shadow-sm p-5">
+    <div className="relative bg-card/70 backdrop-blur-sm rounded-2xl border border-border/50 shadow-sm p-5">
       {/* Motivation flash — fixed toast at the bottom of the screen */}
       <AnimatePresence>
         {motivationFlash && (

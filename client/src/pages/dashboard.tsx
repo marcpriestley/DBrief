@@ -82,7 +82,7 @@ function DashboardContent() {
         >
           {dayView === "tomorrow" ? (
             <div className="space-y-4">
-              <div className="bg-card rounded-2xl border border-border/50 shadow-sm p-5">
+              <div className="bg-card/70 backdrop-blur-sm rounded-2xl border border-border/50 shadow-sm p-5">
                 <GoalsSection selectedDate={selectedDate} tomorrowMode />
               </div>
               <div className="text-center py-10 text-muted-foreground text-sm">
@@ -100,7 +100,7 @@ function DashboardContent() {
               </div>
 
               <AttentionRing active={needsGoals}>
-                <div className="bg-card rounded-2xl border border-border/50 shadow-sm p-5">
+                <div className="bg-card/70 backdrop-blur-sm rounded-2xl border border-border/50 shadow-sm p-5">
                   <GoalsSection selectedDate={selectedDate} />
                 </div>
               </AttentionRing>
