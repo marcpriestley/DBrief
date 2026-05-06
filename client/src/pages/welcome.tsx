@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, isNativeBundle } from "@/lib/queryClient";
 import { Eye, EyeOff, ArrowRight, Loader2 } from "lucide-react";
 import { SiApple, SiGoogle } from "react-icons/si";
 
@@ -49,9 +49,9 @@ export default function Welcome() {
   const [, setLocation] = useLocation();
 
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
-  const isNative = Capacitor.isNativePlatform();
-  const isIOS = Capacitor.getPlatform() === 'ios';
-  const isAndroid = Capacitor.getPlatform() === 'android';
+  const isNative = isNativeBundle;
+  const isIOS = isNativeBundle && Capacitor.getPlatform() === 'ios';
+  const isAndroid = isNativeBundle && Capacitor.getPlatform() !== 'ios';
 
   const authMutation = useMutation({
     mutationFn: async (data: { email: string; password: string; isLogin: boolean }) => {
