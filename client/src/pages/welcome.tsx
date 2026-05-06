@@ -50,6 +50,8 @@ export default function Welcome() {
 
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
   const isNative = Capacitor.isNativePlatform();
+  const isIOS = Capacitor.getPlatform() === 'ios';
+  const isAndroid = Capacitor.getPlatform() === 'android';
 
   const authMutation = useMutation({
     mutationFn: async (data: { email: string; password: string; isLogin: boolean }) => {
@@ -163,7 +165,7 @@ export default function Welcome() {
       return;
     }
 
-    if (isNative) {
+    if (isIOS) {
       // On native iOS, use ASWebAuthenticationSession via the HealthPlugin.
       // Uses the iOS OAuth client ID (separate from the web client ID) which
       // accepts the com.googleusercontent.apps.* custom URL scheme callback.
@@ -184,6 +186,7 @@ export default function Welcome() {
       return;
     }
 
+    // Web and Android — use Google Identity Services SDK (loads in both browser and Android WebView)
     if (!googleReady || !window.google?.accounts?.id) {
       if (window.google?.accounts?.id) {
         window.google.accounts.id.initialize({
@@ -329,15 +332,19 @@ export default function Welcome() {
               </div>
             </div>
 
-            {isNative ? (
+            {isIOS ? (
+              /* iOS native — Google via ASWebAuthenticationSession + Apple Sign-In */
               <div className="grid grid-cols-2 gap-2">
                 <Button
                   variant="outline"
                   onClick={handleGoogleLogin}
+                  disabled={googleLoading || googleMutation.isPending}
                   className="w-full h-9 text-xs"
                 >
-                  <SiGoogle className="h-3.5 w-3.5 mr-1.5" />
-                  Google
+                  {(googleLoading || googleMutation.isPending)
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    : <SiGoogle className="h-3.5 w-3.5 mr-1.5" />}
+                  {!googleLoading && !googleMutation.isPending && "Google"}
                 </Button>
                 <Button
                   variant="outline"
@@ -351,7 +358,21 @@ export default function Welcome() {
                   {!appleMutation.isPending && "Apple"}
                 </Button>
               </div>
+            ) : isAndroid ? (
+              /* Android native — Google via GIS SDK only (Apple Sign-In is iOS-only) */
+              <Button
+                variant="outline"
+                onClick={handleGoogleLogin}
+                disabled={googleLoading || googleMutation.isPending}
+                className="w-full h-9 text-xs"
+              >
+                {(googleLoading || googleMutation.isPending)
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <SiGoogle className="h-3.5 w-3.5 mr-1.5" />}
+                {!googleLoading && !googleMutation.isPending && "Sign in with Google"}
+              </Button>
             ) : (
+              /* Web — GIS prompt for Google, toast for Apple */
               <div className="grid grid-cols-2 gap-2">
                 <Button
                   variant="outline"
