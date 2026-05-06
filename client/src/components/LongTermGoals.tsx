@@ -270,7 +270,7 @@ export default function LongTermGoals() {
     return (
       <button
         onClick={() => { setIsExpanded(true); setShowAddForm(true); }}
-        className="w-full text-left flex items-center gap-3 p-3 rounded-xl border border-dashed border-border hover:border-primary/30 hover:bg-muted/30 transition-all"
+        className="w-full text-left bg-card flex items-center gap-3 p-3 rounded-xl border border-dashed border-border/50 shadow-sm hover:border-primary/40 hover:bg-muted/20 transition-all"
       >
         <div className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center shrink-0">
           <Target className="h-3.5 w-3.5 text-muted-foreground" />

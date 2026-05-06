@@ -252,7 +252,7 @@ export default function HabitsSection() {
             exit={{ opacity: 0, y: 24 }}
             transition={{ type: "spring", damping: 22, stiffness: 280 }}
             onClick={() => setMotivationFlash(null)}
-            className="fixed bottom-24 left-4 right-4 z-50 bg-primary text-black text-sm font-semibold rounded-2xl px-4 py-3.5 shadow-xl flex items-center gap-2.5 cursor-grab active:cursor-grabbing touch-none"
+            className="fixed bottom-24 left-4 right-4 z-50 bg-primary text-primary-foreground text-sm font-semibold rounded-2xl px-4 py-3.5 shadow-xl flex items-center gap-2.5 cursor-grab active:cursor-grabbing touch-none"
           >
             <span className="text-lg">⚡</span>
             <span className="leading-snug flex-1">{motivationFlash}</span>
@@ -281,7 +281,7 @@ export default function HabitsSection() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
             transition={{ type: "spring", damping: 20, stiffness: 300 }}
-            className="fixed bottom-24 left-4 right-4 z-50 bg-primary text-black rounded-2xl px-4 py-3.5 shadow-xl flex items-center gap-3"
+            className="fixed bottom-24 left-4 right-4 z-50 bg-primary text-primary-foreground rounded-2xl px-4 py-3.5 shadow-xl flex items-center gap-3"
           >
             <motion.span
               animate={{ rotate: [0, -15, 15, -10, 10, 0] }}
@@ -762,7 +762,7 @@ function SetupModal({
             <button
               onClick={isLast ? onSubmit : onNext}
               disabled={!canNext || isSubmitting}
-              className="flex-1 flex items-center justify-center gap-1.5 text-sm font-semibold text-black bg-primary rounded-xl py-2.5 disabled:opacity-40"
+              className="flex-1 flex items-center justify-center gap-1.5 text-sm font-semibold text-primary-foreground bg-primary rounded-xl py-2.5 disabled:opacity-40"
             >
               {isLast ? (
                 isSubmitting ? "Adding…" : "Add to Habit Lab"
@@ -1455,7 +1455,7 @@ function EditModal({
               reminderEndTime: reminderEnabled && reminderInterval ? reminderEndTime : null,
             } as any)}
             disabled={!name.trim() || isSaving}
-            className="w-full py-3 bg-primary text-black text-sm font-semibold rounded-xl disabled:opacity-40"
+            className="w-full py-3 bg-primary text-primary-foreground text-sm font-semibold rounded-xl disabled:opacity-40"
           >
             {isSaving ? "Saving…" : "Save changes"}
           </button>
@@ -1539,7 +1539,7 @@ function MilestoneCelebration({
 
         <button
           onClick={onClose}
-          className="w-full py-3 bg-primary text-black text-sm font-bold rounded-2xl"
+          className="w-full py-3 bg-primary text-primary-foreground text-sm font-bold rounded-2xl"
         >
           Keep building →
         </button>
