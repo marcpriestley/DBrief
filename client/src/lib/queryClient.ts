@@ -1,15 +1,16 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { Capacitor } from "@capacitor/core";
 
-// VITE_NATIVE_BUILD=true is set at build time when compiling for Android/iOS.
-// This is more reliable than any runtime detection (hostname, Capacitor.isNativePlatform, etc.)
-// because it is baked into the JS bundle and cannot be affected by bridge timing or
-// URL-scheme differences between Capacitor versions.
-// Build for Android/iOS with: VITE_NATIVE_BUILD=true npm run build
-const IS_NATIVE_BUILD = import.meta.env.VITE_NATIVE_BUILD === "true";
-const NATIVE_API_BASE = "https://DBrief.replit.app";
+// When running as a native app the WebView serves bundled assets from a local
+// scheme (capacitor://localhost or https://localhost).  Relative API paths like
+// /api/auth/login resolve against that local origin and the native layer
+// intercepts them, returning index.html instead of JSON.
+// Prefixing with the deployed server URL ensures the request goes over the
+// real network to the correct backend regardless of platform.
+const NATIVE_API_BASE = "https://dbrief.replit.app";
 
 function resolveUrl(url: string): string {
-  if (url.startsWith("/") && IS_NATIVE_BUILD) {
+  if (url.startsWith("/") && Capacitor.isNativePlatform()) {
     return `${NATIVE_API_BASE}${url}`;
   }
   return url;
