@@ -2292,8 +2292,8 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
           {isStreaming && streamingContent && (
             <motion.div
               ref={streamingMsgRef}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
               className="flex justify-start"
             >
               <div className="max-w-[85%] rounded-2xl rounded-bl-md px-4 py-2.5 text-sm leading-relaxed bg-muted text-foreground">

@@ -97,7 +97,7 @@ function NativeSlider({ value, onChange, min = 0, max = 100, color = "hsl(40, 95
   const handleCommit = () => { isDragging.current = false; lastHapticVal.current = null; };
 
   return (
-    <div className="relative" style={{ height: 28 }}>
+    <div className="relative" style={{ height: 28, touchAction: "none" }}>
       <div className="absolute pointer-events-none rounded-full" style={{ left: 14, right: 14, top: 10, height: 8, background: "hsl(var(--muted))" }} />
       <div className="absolute pointer-events-none rounded-full" style={{ left: 14, top: 10, height: 8, width: `calc(${pct / 100} * (100% - 28px))`, background: color }} />
       <div className="absolute pointer-events-none rounded-full" style={{ width: 28, height: 28, top: 0, left: `calc(${pct / 100} * (100% - 28px))`, background: color, border: "2px solid hsl(var(--background))", boxShadow: "0 2px 6px rgba(0,0,0,0.35)" }} />
@@ -107,11 +107,11 @@ function NativeSlider({ value, onChange, min = 0, max = 100, color = "hsl(40, 95
         min={min}
         max={max}
         step={1}
-        defaultValue={value}
+        value={displayValue}
         onChange={handleChange}
         onTouchEnd={handleCommit}
         onMouseUp={handleCommit}
-        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer", margin: 0, padding: 0, WebkitAppearance: "none" }}
+        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer", margin: 0, padding: 0, WebkitAppearance: "none", touchAction: "none" }}
       />
     </div>
   );
