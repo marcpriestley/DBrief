@@ -746,7 +746,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     },
   });
 
-  const sendMessage = async (text: string, attachment?: PendingAttachment) => {
+  const sendMessage = async (text: string, attachment?: PendingAttachment, onUserMessageId?: (id: number) => void) => {
     if (!text.trim() && !attachment) return;
     if (!debrief || isStreaming) return;
 
@@ -827,6 +827,12 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
             try {
               const data = JSON.parse(line.slice(6));
               if (data.done) break;
+              // The server emits userMessageId as the first SSE event after inserting the
+              // user message. Deliver it to the caller so they can bind Whisper correction
+              // to this specific message ID (each call gets its own local closure).
+              if (data.userMessageId && onUserMessageId) {
+                onUserMessageId(data.userMessageId);
+              }
               if (data.content) {
                 accumulated += data.content;
                 setStreamingContent(accumulated);
@@ -1131,6 +1137,14 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
       });
       if (started) {
         setUsingMediaRecorder(true);
+        // Also run Web Speech API alongside MediaRecorder to build a live transcript
+        // that can be used to fire the AI immediately on Submit — without waiting for Whisper.
+        // The live transcript populates voiceNoteTextRef; MediaRecorder captures the full
+        // audio for Whisper to produce an accurate transcript in the background.
+        voice.start(
+          (text) => { voiceNoteTextRef.current = text; },
+          { noSilenceStop: true, restartPollMs: 500, restartThresholdMs: 2500 },
+        );
         return;
       }
     }
@@ -1165,60 +1179,149 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     setVoiceNoteMode(false);
     setVoiceNoteSeconds(0);
 
-    // MediaRecorder path — stop recording, upload blob, transcribe with Whisper
+    // MediaRecorder path — hybrid: fire AI immediately with live transcript,
+    // run Whisper in the background, then silently correct if transcripts differ.
     if (usingMediaRecorder) {
       setUsingMediaRecorder(false);
-      setIsTranscribing(true);
-      try {
-        const result = await voiceNoteRecorder.stop();
-        if (!result || result.blob.size < 100) {
-          setIsTranscribing(false);
-          toast({
-            title: "No audio captured",
-            description: "Nothing was recorded — tap the mic and try again.",
-            variant: "destructive",
-          });
-          return;
-        }
-        const arrayBuffer = await result.blob.arrayBuffer();
-        const controller = new AbortController();
-        const fetchTimeout = setTimeout(() => controller.abort(), 30_000);
-        let response: Response;
+      // Stop Web Speech API that was running alongside MediaRecorder for live transcript
+      voice.stop();
+
+      // Capture live STT transcript at the moment Submit is tapped
+      const liveText = voiceNoteTextRef.current.trim();
+      voiceNoteTextRef.current = "";
+      setUserInput("");
+
+      // Snapshot the debrief ID before any awaits so it's stable for correction
+      const correctionDebriefId = debrief?.id ?? null;
+
+      // Stop the MediaRecorder to get the audio blob (runs in parallel with AI stream)
+      const recorderStopPromise = voiceNoteRecorder.stop();
+
+      if (liveText) {
+        // ── Fast path: live transcript available — fire AI immediately ──────────
+        haptic("medium");
+        warmAudioCtx();
+
+        // Per-call local variable — captures the DB message ID for THIS specific send.
+        // Not a shared ref, so concurrent/overlapping sends cannot overwrite each other.
+        let thisCallMessageId: number | null = null;
+
+        sendMessage(liveText, undefined, (id: number) => {
+          thisCallMessageId = id;
+        });
+
+        // Run Whisper in the background — don't await, don't block the AI stream
+        recorderStopPromise.then(async (result) => {
+          if (!result || result.blob.size < 100 || !correctionDebriefId) return;
+          try {
+            const arrayBuffer = await result.blob.arrayBuffer();
+            const controller = new AbortController();
+            const fetchTimeout = setTimeout(() => controller.abort(), 30_000);
+            let response: Response;
+            try {
+              response = await fetch("/api/voice-note/transcribe", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/octet-stream",
+                  "X-Mime-Type": result.mimeType,
+                },
+                body: arrayBuffer,
+                credentials: "include",
+                signal: controller.signal,
+              });
+            } finally {
+              clearTimeout(fetchTimeout);
+            }
+            if (!response.ok) return; // Whisper failed — live transcript is fine as-is
+            const data = await response.json();
+            const whisperText = data.text?.trim() ?? "";
+            if (!whisperText) return;
+            // Semantic comparison — ignore punctuation and casing differences.
+            // Only correct if the actual words differ, not just formatting.
+            const normalize = (s: string) =>
+              s.toLowerCase().replace(/[^\w\s]/g, "").replace(/\s+/g, " ").trim();
+            if (normalize(whisperText) === normalize(liveText)) return;
+            // Use the per-call message ID — bound to this invocation's closure only.
+            // If Whisper returned unusually fast and the SSE ID hasn't arrived yet,
+            // wait briefly (up to 3 s) before giving up.
+            if (!thisCallMessageId) {
+              await new Promise<void>((resolve) => {
+                const start = Date.now();
+                const poll = setInterval(() => {
+                  if (thisCallMessageId || Date.now() - start > 3000) {
+                    clearInterval(poll);
+                    resolve();
+                  }
+                }, 100);
+              });
+            }
+            if (!thisCallMessageId) return; // ID never arrived — skip correction safely
+            const patchRes = await fetch(`/api/debriefs/${correctionDebriefId}/messages/${thisCallMessageId}/correct-text`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify({ correctedText: whisperText }),
+            });
+            if (patchRes.ok) {
+              // Refresh query cache so the corrected text shows in the chat bubble
+              queryClient.invalidateQueries({ queryKey: ["/api/debriefs", selectedDate] });
+            }
+          } catch (err) {
+            // Whisper correction failed — live transcript remains, no regression
+            console.warn("[VoiceNote] Background Whisper correction failed:", err);
+          }
+        }).catch(() => {
+          // Recorder stop failed — nothing to transcribe, live text already sent
+        });
+      } else {
+        // ── Fallback path: no live transcript (Speech API unavailable or silent) ─
+        // Await Whisper before sending — show a brief non-blocking indicator
+        setIsTranscribing(true);
         try {
-          response = await fetch("/api/voice-note/transcribe", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/octet-stream",
-              "X-Mime-Type": result.mimeType,
-            },
-            body: arrayBuffer,
-            credentials: "include",
-            signal: controller.signal,
-          });
-        } finally {
-          clearTimeout(fetchTimeout);
+          const result = await recorderStopPromise;
+          if (!result || result.blob.size < 100) {
+            setIsTranscribing(false);
+            toast({
+              title: "No audio captured",
+              description: "Nothing was recorded — tap the mic and try again.",
+              variant: "destructive",
+            });
+            return;
+          }
+          const arrayBuffer = await result.blob.arrayBuffer();
+          const controller = new AbortController();
+          const fetchTimeout = setTimeout(() => controller.abort(), 30_000);
+          let response: Response;
+          try {
+            response = await fetch("/api/voice-note/transcribe", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/octet-stream",
+                "X-Mime-Type": result.mimeType,
+              },
+              body: arrayBuffer,
+              credentials: "include",
+              signal: controller.signal,
+            });
+          } finally {
+            clearTimeout(fetchTimeout);
+          }
+          if (!response.ok) throw new Error(`Transcribe HTTP ${response.status}`);
+          const data = await response.json();
+          const text = data.text?.trim() ?? "";
+          setIsTranscribing(false);
+          if (text) {
+            haptic("medium");
+            warmAudioCtx();
+            sendMessage(text);
+          } else {
+            toast({ title: "Nothing to transcribe", description: "The recording was silent — try again.", variant: "default" });
+          }
+        } catch (err) {
+          console.error("[VoiceNote] Transcription failed:", err);
+          setIsTranscribing(false);
+          toast({ title: "Transcription failed", description: "Couldn't process the recording. Please try again.", variant: "destructive" });
         }
-        if (!response.ok) {
-          throw new Error(`Transcribe HTTP ${response.status}`);
-        }
-        const data = await response.json();
-        const text = data.text?.trim() ?? "";
-        setIsTranscribing(false);
-        voiceNoteTextRef.current = "";
-        setUserInput("");
-        if (text) {
-          haptic("medium");
-          warmAudioCtx();
-          sendMessage(text);
-        } else {
-          toast({ title: "Nothing to transcribe", description: "The recording was silent — try again.", variant: "default" });
-        }
-      } catch (err) {
-        console.error("[VoiceNote] Transcription failed:", err);
-        setIsTranscribing(false);
-        voiceNoteTextRef.current = "";
-        setUserInput("");
-        toast({ title: "Transcription failed", description: "Couldn't process the recording. Please try again.", variant: "destructive" });
       }
       return;
     }
@@ -1233,7 +1336,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
       warmAudioCtx();
       sendMessage(text);
     }
-  }, [voice, voiceNoteRecorder, usingMediaRecorder, userInput, sendMessage]);
+  }, [voice, voiceNoteRecorder, usingMediaRecorder, userInput, sendMessage, debrief, selectedDate, queryClient]);
 
   // Keep the forward ref in sync so startVoiceNote's 5-min timeout always calls latest version
   submitVoiceNoteRef.current = submitVoiceNote;
@@ -2274,13 +2377,10 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
 
         <div className="px-4 pb-4 pt-2 flex-shrink-0">
             {isTranscribing ? (
-            /* Whisper transcription in progress */
-            <div className="flex items-center gap-3 bg-muted/50 rounded-xl border border-primary/20 p-3">
-              <Loader2 className="h-4 w-4 text-primary animate-spin shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-foreground">Transcribing your note…</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">This takes a few seconds</p>
-              </div>
+            /* Fallback-only: no live transcript — briefly preparing before sending */
+            <div className="flex items-center gap-2 py-1 px-0.5">
+              <Loader2 className="h-3.5 w-3.5 text-muted-foreground animate-spin shrink-0" />
+              <p className="text-xs text-muted-foreground">Preparing note…</p>
             </div>
           ) : voiceNoteMode ? (
             <div className="space-y-2">

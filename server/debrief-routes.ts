@@ -596,6 +596,48 @@ export function registerDebriefRoutes(app: Express): void {
     }
   });
 
+  // Silently correct a specific user message (Whisper correction path).
+  // Called after Whisper finishes processing audio — updates the stored text without
+  // re-triggering the AI or changing the conversation flow.
+  // The client obtains the messageId from the userMessageId SSE event emitted by /respond.
+  app.patch("/api/debriefs/:debriefId/messages/:messageId/correct-text", async (req: Request, res: Response) => {
+    const userId = requireAuth(req, res);
+    if (!userId) return;
+
+    try {
+      const debriefId = parseInt(req.params.debriefId);
+      const messageId = parseInt(req.params.messageId);
+      if (isNaN(debriefId) || isNaN(messageId)) {
+        return res.status(400).json({ error: "Invalid debrief or message ID" });
+      }
+
+      const { correctedText } = req.body;
+      if (typeof correctedText !== "string" || !correctedText.trim()) {
+        return res.status(400).json({ error: "correctedText is required" });
+      }
+
+      // Verify the message exists, belongs to this debrief, and is a user message
+      const [msg] = await db.select().from(debriefMessages)
+        .where(and(eq(debriefMessages.id, messageId), eq(debriefMessages.debriefId, debriefId)));
+      if (!msg) return res.status(404).json({ error: "Message not found" });
+      if (msg.role !== "user") return res.status(400).json({ error: "Can only correct user messages" });
+
+      // Verify debrief ownership
+      const [debrief] = await db.select().from(debriefs)
+        .where(and(eq(debriefs.id, debriefId), eq(debriefs.userId, userId)));
+      if (!debrief) return res.status(403).json({ error: "Forbidden" });
+
+      await db.update(debriefMessages)
+        .set({ content: encrypt(correctedText.trim()) })
+        .where(eq(debriefMessages.id, messageId));
+
+      res.json({ ok: true, messageId });
+    } catch (error) {
+      console.error("Error correcting debrief message:", error);
+      res.status(500).json({ error: "Failed to correct message" });
+    }
+  });
+
   // Delete a user message (and the immediately following AI response if present)
   app.delete("/api/debrief/messages/:messageId", async (req: Request, res: Response) => {
     const userId = requireAuth(req, res);
@@ -658,12 +700,12 @@ export function registerDebriefRoutes(app: Express): void {
       // Alias used throughout the tool-execution block below
       const date = debrief.date;
 
-      await db.insert(debriefMessages).values({
+      const [insertedUserMsg] = await db.insert(debriefMessages).values({
         debriefId,
         role: "user",
         content: encrypt(content || ""),
         ...(attachmentUrl ? { attachmentUrl, attachmentType: attachmentType || "image" } : {}),
-      });
+      }).returning({ id: debriefMessages.id });
 
       updateUserStreak(userId, date).catch(() => {});
 
@@ -693,6 +735,10 @@ export function registerDebriefRoutes(app: Express): void {
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
+
+      // Emit the user message ID immediately so the client can target it for
+      // Whisper correction without relying on "last user message" heuristics.
+      res.write(`data: ${JSON.stringify({ userMessageId: insertedUserMsg.id })}\n\n`);
 
       const debriefTools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
         {
