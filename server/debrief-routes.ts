@@ -725,6 +725,29 @@ export function registerDebriefRoutes(app: Express): void {
     }
   });
 
+  // Delete an entire debrief session (messages + the debrief record itself)
+  app.delete("/api/debriefs/:debriefId", async (req: Request, res: Response) => {
+    const userId = requireAuth(req, res);
+    if (!userId) return;
+    try {
+      const debriefId = parseInt(req.params.debriefId);
+      if (isNaN(debriefId)) return res.status(400).json({ error: "Invalid debrief ID" });
+
+      const [dbDebrief] = await db.select().from(debriefs)
+        .where(and(eq(debriefs.id, debriefId), eq(debriefs.userId, userId)));
+      if (!dbDebrief) return res.status(404).json({ error: "Debrief not found" });
+
+      // Cascade: delete all messages first, then the debrief record
+      await db.delete(debriefMessages).where(eq(debriefMessages.debriefId, debriefId));
+      await db.delete(debriefs).where(eq(debriefs.id, debriefId));
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting debrief:", error);
+      res.status(500).json({ error: "Failed to delete debrief" });
+    }
+  });
+
   // Delete a user message (and the immediately following AI response if present)
   app.delete("/api/debrief/messages/:messageId", async (req: Request, res: Response) => {
     const userId = requireAuth(req, res);

@@ -473,6 +473,39 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const [selectedMsgId, setSelectedMsgId] = useState<number | null>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Long-press to delete an entire debrief session
+  const [selectedDebriefId, setSelectedDebriefId] = useState<number | null>(null);
+  const longPressDebriefTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const deleteDebriefMutation = useMutation({
+    mutationFn: (debriefId: number) =>
+      apiRequest("DELETE", `/api/debriefs/${debriefId}`).then(r => r.json()),
+    onSuccess: () => {
+      haptic("success");
+      setSelectedDebriefId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/debriefs", selectedDate] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dates-with-data"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/streak"] });
+    },
+    onError: () => {
+      haptic("error");
+      setSelectedDebriefId(null);
+    },
+  });
+
+  const startDebriefLongPress = (debriefId: number) => {
+    longPressDebriefTimerRef.current = setTimeout(() => {
+      haptic("medium");
+      setSelectedDebriefId(debriefId);
+    }, 500);
+  };
+  const cancelDebriefLongPress = () => {
+    if (longPressDebriefTimerRef.current) {
+      clearTimeout(longPressDebriefTimerRef.current);
+      longPressDebriefTimerRef.current = null;
+    }
+  };
+
   const deleteMsgMutation = useMutation({
     mutationFn: (messageId: number) =>
       apiRequest("DELETE", `/api/debrief/messages/${messageId}`).then(r => r.json()),
@@ -1966,10 +1999,17 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                   const momentPhoto = userMsg?.attachmentUrl;
 
                   if (isMoment) {
+                    const isDebriefSelected = selectedDebriefId === d.id;
                     return (
-                      <div key={d.id} className="px-5 py-3">
+                      <div key={d.id} className={`px-5 py-3 transition-colors ${isDebriefSelected ? "bg-destructive/5" : ""}`}>
                         <button
-                          onClick={() => { haptic("select"); toggleSession(d.id); }}
+                          onClick={() => { if (isDebriefSelected) { setSelectedDebriefId(null); return; } haptic("select"); toggleSession(d.id); }}
+                          onTouchStart={() => startDebriefLongPress(d.id)}
+                          onTouchEnd={cancelDebriefLongPress}
+                          onTouchMove={cancelDebriefLongPress}
+                          onMouseDown={() => startDebriefLongPress(d.id)}
+                          onMouseUp={cancelDebriefLongPress}
+                          onMouseLeave={cancelDebriefLongPress}
                           className="w-full flex items-center gap-2 text-left"
                         >
                           <BookOpen className="h-3.5 w-3.5 text-primary/70 shrink-0" />
@@ -1986,7 +2026,22 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                             <ChevronDown className={`h-3 w-3 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
                           </span>
                         </button>
-                        {isExpanded && (
+                        {isDebriefSelected && (
+                          <div className="flex items-center justify-between mt-2 pt-2 border-t border-destructive/20">
+                            <span className="text-[11px] text-destructive/80">Delete this moment?</span>
+                            <div className="flex gap-2">
+                              <button onClick={() => setSelectedDebriefId(null)} className="text-[11px] text-muted-foreground px-2 py-1">Cancel</button>
+                              <button
+                                onClick={() => { haptic("medium"); deleteDebriefMutation.mutate(d.id); }}
+                                disabled={deleteDebriefMutation.isPending}
+                                className="text-[11px] font-semibold text-destructive px-2 py-1 rounded-md bg-destructive/10 hover:bg-destructive/20"
+                              >
+                                {deleteDebriefMutation.isPending ? "Deleting…" : "Delete"}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        {isExpanded && !isDebriefSelected && (
                           <div className="mt-3 space-y-3">
                             {momentText && (
                               <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{momentText}</p>
@@ -2004,10 +2059,17 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                     );
                   }
 
+                  const isDebriefSelected2 = selectedDebriefId === d.id;
                   return (
-                    <div key={d.id} className="px-5 py-3">
+                    <div key={d.id} className={`px-5 py-3 transition-colors ${isDebriefSelected2 ? "bg-destructive/5" : ""}`}>
                       <button
-                        onClick={() => { haptic("select"); toggleSession(d.id); }}
+                        onClick={() => { if (isDebriefSelected2) { setSelectedDebriefId(null); return; } haptic("select"); toggleSession(d.id); }}
+                        onTouchStart={() => startDebriefLongPress(d.id)}
+                        onTouchEnd={cancelDebriefLongPress}
+                        onTouchMove={cancelDebriefLongPress}
+                        onMouseDown={() => startDebriefLongPress(d.id)}
+                        onMouseUp={cancelDebriefLongPress}
+                        onMouseLeave={cancelDebriefLongPress}
                         className="w-full flex items-center gap-2 text-left"
                       >
                         <CheckCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
@@ -2023,6 +2085,21 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                           <ChevronDown className={`h-3 w-3 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
                         </span>
                       </button>
+                      {isDebriefSelected2 && (
+                        <div className="flex items-center justify-between mt-2 pt-2 border-t border-destructive/20">
+                          <span className="text-[11px] text-destructive/80">Delete this session?</span>
+                          <div className="flex gap-2">
+                            <button onClick={() => setSelectedDebriefId(null)} className="text-[11px] text-muted-foreground px-2 py-1">Cancel</button>
+                            <button
+                              onClick={() => { haptic("medium"); deleteDebriefMutation.mutate(d.id); }}
+                              disabled={deleteDebriefMutation.isPending}
+                              className="text-[11px] font-semibold text-destructive px-2 py-1 rounded-md bg-destructive/10 hover:bg-destructive/20"
+                            >
+                              {deleteDebriefMutation.isPending ? "Deleting…" : "Delete"}
+                            </button>
+                          </div>
+                        </div>
+                      )}
                       {isExpanded && (
                         <div className="mt-3 space-y-2">
                           {d.summary && (
@@ -2107,7 +2184,31 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
       }}
     >
       <CardContent className="p-0 flex flex-col flex-1 overflow-hidden">
-        <div className="px-3 py-2.5 border-b border-border/50 flex items-center gap-2 flex-shrink-0">
+        <div
+          className="px-3 py-2.5 border-b border-border/50 flex items-center gap-2 flex-shrink-0"
+          onTouchStart={() => startDebriefLongPress(debrief.id)}
+          onTouchEnd={cancelDebriefLongPress}
+          onTouchMove={cancelDebriefLongPress}
+          onMouseDown={() => startDebriefLongPress(debrief.id)}
+          onMouseUp={cancelDebriefLongPress}
+          onMouseLeave={cancelDebriefLongPress}
+        >
+          {selectedDebriefId === debrief.id ? (
+            <div className="flex items-center justify-between w-full">
+              <span className="text-[11px] text-destructive/80 font-medium">Delete this session?</span>
+              <div className="flex gap-2">
+                <button onClick={() => setSelectedDebriefId(null)} className="text-[11px] text-muted-foreground px-2 py-1">Cancel</button>
+                <button
+                  onClick={() => { haptic("medium"); deleteDebriefMutation.mutate(debrief.id); }}
+                  disabled={deleteDebriefMutation.isPending}
+                  className="text-[11px] font-semibold text-destructive px-2 py-1 rounded-md bg-destructive/10"
+                >
+                  {deleteDebriefMutation.isPending ? "Deleting…" : "Delete"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
           {/* Left: title + progress dots — shrinks to give room to buttons */}
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
@@ -2177,6 +2278,8 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
               </Button>
             )}
           </div>
+            </>
+          )}
         </div>
 
         <div ref={chatContainerRef} className="flex-1 min-h-0 px-5 py-4 space-y-3 overflow-y-auto overscroll-y-contain">
