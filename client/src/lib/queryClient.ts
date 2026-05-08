@@ -1,16 +1,15 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
-// In the native Android/iOS bundle the Capacitor WebView serves files from
-// https://localhost (androidScheme=https). Relative API paths like /api/auth/login
-// resolve against https://localhost and are intercepted by the native layer which
-// returns index.html instead of JSON. We detect this reliably by checking
-// window.location.hostname at runtime — no dependency on the Capacitor JS bridge.
+// In the native Android/iOS bundle the Capacitor WebView serves local assets.
+// Relative API paths like /api/auth/login get intercepted by the native layer
+// and return index.html instead of JSON. We detect native context via the
+// Capacitor bridge object (most reliable — works regardless of server.url or
+// androidScheme settings) and rewrite API paths to the absolute production URL.
 const NATIVE_API_BASE = "https://dbrief.replit.app";
 
 export const isNativeBundle =
-  import.meta.env.PROD &&
   typeof window !== "undefined" &&
-  window.location.hostname === "localhost";
+  (window as any).Capacitor?.isNativePlatform?.() === true;
 
 function resolveUrl(url: string): string {
   if (url.startsWith("/") && isNativeBundle) {
