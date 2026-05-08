@@ -844,20 +844,25 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                 if (!hasScrolledToStreamStart.current) {
                   hasScrolledToStreamStart.current = true;
                   lockScrollAfterStreamRef.current = true;
-                  // Double-rAF: first frame = React commit (streaming bubble in DOM),
-                  // second frame = browser paint (framer-motion ref attached).
-                  // We can then scroll to the exact top of the streaming bubble.
-                  requestAnimationFrame(() => requestAnimationFrame(() => {
+                  // Helper that scrolls the chat container so the streaming bubble
+                  // sits 8px from the top of the visible area. Retries up to
+                  // maxAttempts times (16ms apart) so framer-motion has time to
+                  // attach the ref before we give up.
+                  const pinStreamingBubble = (attempt = 0) => {
                     const c = chatContainerRef.current;
                     const el = streamingMsgRef.current;
                     if (!c) return;
                     if (el) {
                       const targetScrollTop = c.scrollTop + (el.getBoundingClientRect().top - c.getBoundingClientRect().top) - 8;
                       c.scrollTop = Math.max(0, Math.min(targetScrollTop, c.scrollHeight - c.clientHeight));
-                    } else {
-                      c.scrollTop = c.scrollHeight;
+                    } else if (attempt < 8) {
+                      // Ref not yet attached — retry after one animation frame
+                      requestAnimationFrame(() => pinStreamingBubble(attempt + 1));
                     }
-                  }));
+                    // If we exhausted retries, do NOT fall back to scrollHeight —
+                    // that would scroll to the bottom and hide the response start.
+                  };
+                  requestAnimationFrame(() => requestAnimationFrame(() => pinStreamingBubble()));
                 }
                 // Speak the first complete sentence immediately (minimum latency TTS)
                 if (tts.enabled && ttsFirstSentenceRef.current === 0) {
@@ -1052,17 +1057,18 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
               if (!hasScrolledToStreamStart.current) {
                 hasScrolledToStreamStart.current = true;
                 lockScrollAfterStreamRef.current = true;
-                requestAnimationFrame(() => requestAnimationFrame(() => {
+                const pinStreamingBubble2 = (attempt = 0) => {
                   const c = chatContainerRef.current;
                   const el = streamingMsgRef.current;
                   if (!c) return;
                   if (el) {
                     const targetScrollTop = c.scrollTop + (el.getBoundingClientRect().top - c.getBoundingClientRect().top) - 8;
                     c.scrollTop = Math.max(0, Math.min(targetScrollTop, c.scrollHeight - c.clientHeight));
-                  } else {
-                    c.scrollTop = c.scrollHeight;
+                  } else if (attempt < 8) {
+                    requestAnimationFrame(() => pinStreamingBubble2(attempt + 1));
                   }
-                }));
+                };
+                requestAnimationFrame(() => requestAnimationFrame(() => pinStreamingBubble2()));
               }
               if (tts.enabled && !tts.speaking && !hadTtsResponseRef.current) {
                 const end = findFirstSentenceEnd(accumulated);

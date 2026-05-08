@@ -1024,6 +1024,17 @@ If the user gives you a rough idea, refine it. If they're unsure, ask one pointe
     }
   });
 
+  app.post("/api/daily-goals/:id/rollover", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { id } = req.params;
+      const result = await storage.rolloverGoalToTomorrow(parseInt(id), userId);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to rollover goal" });
+    }
+  });
+
   app.get("/api/daily-goals-range", async (req, res) => {
     try {
       const userId = getUserId(req);

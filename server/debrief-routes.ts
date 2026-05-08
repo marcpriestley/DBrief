@@ -60,10 +60,15 @@ export async function gatherDayContext(userId: number, date: string) {
   windowStart.setDate(windowStart.getDate() - 30);
   const windowStartStr = windowStart.toISOString().split("T")[0];
 
+  // 7-day window for recent mood history
+  const moodWindowStart = new Date(date + "T12:00:00");
+  moodWindowStart.setDate(moodWindowStart.getDate() - 7);
+  const moodWindowStartStr = moodWindowStart.toISOString().split("T")[0];
+
   const [
     scores, metrics, goals, moods, entries,
     infiniteGoalRows, ltGoals, userHabits, todayHabitLogs,
-    historicalScores, recentDebriefs, activeParticipations,
+    historicalScores, recentDebriefs, activeParticipations, recentMoods,
   ] = await Promise.all([
     db.select().from(dailyScores).where(and(eq(dailyScores.userId, userId), eq(dailyScores.date, date))),
     db.select().from(userMetrics).where(and(eq(userMetrics.userId, userId), eq(userMetrics.isActive, true))),
@@ -80,12 +85,12 @@ export async function gatherDayContext(userId: number, date: string) {
       gte(dailyScores.date, windowStartStr),
       lt(dailyScores.date, date),
     )),
-    // Last 4 completed debriefs before today (for continuity context)
+    // Last 7 completed debriefs before today (for continuity context)
     db.select().from(debriefs).where(and(
       eq(debriefs.userId, userId),
       eq(debriefs.isComplete, true),
       lt(debriefs.date, date),
-    )).orderBy(desc(debriefs.date)).limit(4),
+    )).orderBy(desc(debriefs.date)).limit(7),
     // Active challenges the user is participating in
     db.select({ challenge: challenges, participation: challengeParticipants })
       .from(challengeParticipants)
@@ -95,6 +100,12 @@ export async function gatherDayContext(userId: number, date: string) {
         eq(challengeParticipants.status, "joined"),
         gte(challenges.endDate, date),
       )),
+    // Last 7 days of mood check-ins (excluding today, already covered by moods above)
+    db.select().from(moodCheckins).where(and(
+      eq(moodCheckins.userId, userId),
+      gte(moodCheckins.date, moodWindowStartStr),
+      lt(moodCheckins.date, date),
+    )).orderBy(desc(moodCheckins.date)),
   ]);
 
   // Exclude zero scores — a value of 0 almost always means the user didn't log that
@@ -203,11 +214,20 @@ export async function gatherDayContext(userId: number, date: string) {
     return `"${c.title}" (${typeNote}, ends ${c.endDate})`;
   });
 
+  // Recent mood trend (last 7 days excluding today)
+  const DAY_NAMES_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const recentMoodSummary = recentMoods.length > 0
+    ? recentMoods.map(m => {
+        const d = new Date(m.date + "T12:00:00");
+        return `${DAY_NAMES_SHORT[d.getDay()]}: ${m.value}/100${m.label ? ` (${m.label})` : ""}`;
+      }).join(", ")
+    : "";
+
   return {
     scoreMap, goalSummary, moodAvg, journalContent,
     hasScores: loggedScores.length > 0, hasGoals: goals.length > 0, hasMoods: moods.length > 0,
     infiniteGoalContent, longTermGoalsList, isWeeklyAlignmentDay, habitSummary,
-    dayName, recentDebriefContext, challengeContextParts,
+    dayName, recentDebriefContext, challengeContextParts, recentMoodSummary,
   };
 }
 
@@ -390,7 +410,7 @@ TELEMETRY — use this data as your starting point. Each score is shown with the
 ${context.hasScores ? `Performance scores:\n  ${context.scoreMap}` : "No scores logged — don't mention scores."}
 
 ${context.goalSummary}
-${context.moodAvg}
+${context.moodAvg}${context.recentMoodSummary ? `\nMOOD HISTORY (last 7 days): ${context.recentMoodSummary}` : ""}
 ${context.journalContent ? `Session notes: "${context.journalContent}"` : ""}${infiniteGoalSection}${ltGoalsSection}${habitsSection}${challengesSection}${recentHistorySection}
 
 CONVERSATION STRUCTURE:

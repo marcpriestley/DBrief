@@ -80,6 +80,7 @@ export interface IStorage {
   getGoalsForDateRange(userId: number, startDate: string, endDate: string): Promise<DailyGoal[]>;
   ensureDailyGoals(userId: number, date: string): Promise<DailyGoal[]>;
   toggleDailyGoal(id: number, userId: number): Promise<DailyGoal | undefined>;
+  rolloverGoalToTomorrow(goalId: number, userId: number): Promise<{ tomorrowDate: string; alreadyExists: boolean }>;
 
   // Journal attachment methods
   getAttachmentsByEntry(journalEntryId: number): Promise<JournalAttachment[]>;
@@ -1139,6 +1140,29 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(dailyGoals.id, id), eq(dailyGoals.userId, userId)))
       .returning();
     return updated;
+  }
+
+  async rolloverGoalToTomorrow(goalId: number, userId: number): Promise<{ tomorrowDate: string; alreadyExists: boolean }> {
+    const [goal] = await db.select().from(dailyGoals)
+      .where(and(eq(dailyGoals.id, goalId), eq(dailyGoals.userId, userId)));
+    if (!goal) throw new Error("Goal not found");
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
+    const existing = await db.select().from(dailyGoals).where(and(
+      eq(dailyGoals.userId, userId),
+      eq(dailyGoals.date, tomorrowStr),
+      eq(dailyGoals.goalTemplateId, goal.goalTemplateId),
+    )).limit(1);
+    if (existing.length > 0) return { tomorrowDate: tomorrowStr, alreadyExists: true };
+    await db.insert(dailyGoals).values({
+      userId,
+      date: tomorrowStr,
+      goalTemplateId: goal.goalTemplateId,
+      title: goal.title,
+      completed: false,
+    });
+    return { tomorrowDate: tomorrowStr, alreadyExists: false };
   }
 
   async getAttachmentsByEntry(journalEntryId: number): Promise<JournalAttachment[]> {

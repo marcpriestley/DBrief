@@ -359,7 +359,8 @@ function AuthenticatedRouter() {
       setTimeout(() => splash.remove(), 400);
     }
     // 3. Reveal React content only after splash has fully cleared.
-    const t = setTimeout(() => setContentReady(true), 370);
+    // 420ms gives the 350ms CSS fade + 70ms buffer so no two logos overlap.
+    const t = setTimeout(() => setContentReady(true), 420);
     return () => clearTimeout(t);
   }, [isLoading]);
 

@@ -2,10 +2,10 @@ import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence, useMotionValue, useTransform, animate } from "framer-motion";
-import { Check, Plus, X, Trash2, Edit2 } from "lucide-react";
+import { Check, Plus, X, Trash2, Edit2, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient as qc } from "@/lib/queryClient";
 import { haptic, hapticSequence } from "@/lib/haptics";
 import type { DailyGoal, GoalTemplate } from "@shared/schema";
 
@@ -184,6 +184,21 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
     },
   });
 
+  const rolloverMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("POST", `/api/daily-goals/${id}/rollover`);
+      return res.json() as Promise<{ tomorrowDate: string; alreadyExists: boolean }>;
+    },
+    onSuccess: (data) => {
+      haptic("success");
+      qc.invalidateQueries({ queryKey: ["/api/daily-goals", data.tomorrowDate] });
+      setGoalToast({ icon: "→", text: data.alreadyExists ? "Already on tomorrow's list" : "Rolled to tomorrow" });
+      if (goalToastTimerRef.current) clearTimeout(goalToastTimerRef.current);
+      goalToastTimerRef.current = setTimeout(() => setGoalToast(null), 2000);
+    },
+    onError: () => haptic("error"),
+  });
+
   const updateTemplateMutation = useMutation({
     mutationFn: async ({ id, title }: { id: number; title: string }) => {
       const res = await apiRequest("PUT", `/api/goal-templates/${id}`, { title });
@@ -334,6 +349,16 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
 
               {!isEditing && (
                 <div className="flex items-center gap-1">
+                  {!goal.completed && (
+                    <button
+                      onClick={() => { haptic("light"); rolloverMutation.mutate(goal.id); }}
+                      disabled={rolloverMutation.isPending}
+                      className="p-1 text-muted-foreground/40 hover:text-primary transition-colors"
+                      title="Roll over to tomorrow"
+                    >
+                      <ArrowRight className="h-3 w-3" />
+                    </button>
+                  )}
                   <button
                     onClick={() => { setEditingId(goal.goalTemplateId); setEditTitle(goal.title); }}
                     className="p-1 text-muted-foreground/40 hover:text-foreground"

@@ -533,7 +533,6 @@ function HabitCard({
         {/* Info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            {!habit.todayCompleted && !isProtected && <span className="text-sm" aria-hidden>{habit.emoji}</span>}
             <span className={`text-sm font-medium ${isProtected ? "" : "truncate"} ${habit.todayCompleted ? "text-primary line-through opacity-60" : "text-foreground"}`}>
               {habit.name}
             </span>
