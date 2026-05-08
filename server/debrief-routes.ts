@@ -55,10 +55,15 @@ async function getOrgPersonaName(userId: number): Promise<string | null> {
 }
 
 export async function gatherDayContext(userId: number, date: string) {
-  // 30-day window ending the day before the debrief date (for averages / history)
+  // 30-day window for per-metric averages shown alongside today's scores
   const windowStart = new Date(date + "T12:00:00");
   windowStart.setDate(windowStart.getDate() - 30);
   const windowStartStr = windowStart.toISOString().split("T")[0];
+
+  // 90-day window for day-of-week pattern analysis
+  const patternWindowStart = new Date(date + "T12:00:00");
+  patternWindowStart.setDate(patternWindowStart.getDate() - 90);
+  const patternWindowStartStr = patternWindowStart.toISOString().split("T")[0];
 
   // 7-day window for recent mood history
   const moodWindowStart = new Date(date + "T12:00:00");
@@ -68,7 +73,7 @@ export async function gatherDayContext(userId: number, date: string) {
   const [
     scores, metrics, goals, moods, entries,
     infiniteGoalRows, ltGoals, userHabits, todayHabitLogs,
-    historicalScores, recentDebriefs, activeParticipations, recentMoods,
+    historicalScores, recentDebriefs, activeParticipations, recentMoods, patternScores,
   ] = await Promise.all([
     db.select().from(dailyScores).where(and(eq(dailyScores.userId, userId), eq(dailyScores.date, date))),
     db.select().from(userMetrics).where(and(eq(userMetrics.userId, userId), eq(userMetrics.isActive, true))),
@@ -106,6 +111,13 @@ export async function gatherDayContext(userId: number, date: string) {
       gte(moodCheckins.date, moodWindowStartStr),
       lt(moodCheckins.date, date),
     )).orderBy(desc(moodCheckins.date)),
+    // 90-day scores for day-of-week pattern detection (excludes today)
+    db.select({ date: dailyScores.date, metricName: dailyScores.metricName, value: dailyScores.value })
+      .from(dailyScores).where(and(
+        eq(dailyScores.userId, userId),
+        gte(dailyScores.date, patternWindowStartStr),
+        lt(dailyScores.date, date),
+      )),
   ]);
 
   // Exclude zero scores — a value of 0 almost always means the user didn't log that
@@ -223,11 +235,44 @@ export async function gatherDayContext(userId: number, date: string) {
       }).join(", ")
     : "";
 
+  // Day-of-week pattern analysis (90-day window)
+  // Groups scores by metric + day-of-week, computes averages, surfaces patterns
+  // where a specific weekday's average differs from the metric's overall average by ≥12 points.
+  const DOW_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  let dowPatternLines: string[] = [];
+  if (patternScores.length >= 14) { // need at least 2 weeks of data to be meaningful
+    const byMetric: Record<string, { overall: number[]; byDay: number[][] }> = {};
+    for (const s of patternScores) {
+      if (s.value <= 0) continue;
+      const dow = new Date(s.date + "T12:00:00").getDay();
+      if (!byMetric[s.metricName]) byMetric[s.metricName] = { overall: [], byDay: [[], [], [], [], [], [], []] };
+      byMetric[s.metricName].overall.push(s.value);
+      byMetric[s.metricName].byDay[dow].push(s.value);
+    }
+    for (const [metric, data] of Object.entries(byMetric)) {
+      if (data.overall.length < 10) continue; // need enough data points
+      const overallAvg = data.overall.reduce((a, b) => a + b, 0) / data.overall.length;
+      for (let d = 0; d < 7; d++) {
+        if (data.byDay[d].length < 3) continue; // need at least 3 occurrences per weekday
+        const dayAvg = data.byDay[d].reduce((a, b) => a + b, 0) / data.byDay[d].length;
+        const diff = dayAvg - overallAvg;
+        if (Math.abs(diff) >= 12) {
+          const direction = diff < 0 ? "lower" : "higher";
+          const unit = METRIC_UNITS[metric] ?? "/100";
+          dowPatternLines.push(
+            `${metric} is consistently ${direction} on ${DOW_NAMES[d]}s (avg ${Math.round(dayAvg)}${unit === "/100" ? "" : ` ${unit}`} vs overall ${Math.round(overallAvg)}${unit === "/100" ? "" : ` ${unit}`}, n=${data.byDay[d].length})`
+          );
+        }
+      }
+    }
+  }
+  const dowPatternSummary = dowPatternLines.length > 0 ? dowPatternLines.join("; ") : "";
+
   return {
     scoreMap, goalSummary, moodAvg, journalContent,
     hasScores: loggedScores.length > 0, hasGoals: goals.length > 0, hasMoods: moods.length > 0,
     infiniteGoalContent, longTermGoalsList, isWeeklyAlignmentDay, habitSummary,
-    dayName, recentDebriefContext, challengeContextParts, recentMoodSummary,
+    dayName, recentDebriefContext, challengeContextParts, recentMoodSummary, dowPatternSummary,
   };
 }
 
@@ -407,7 +452,7 @@ ${timingContext}
 
 TELEMETRY — use this data as your starting point. Each score is shown with the driver's own 30-day average so you can identify outliers relative to THEIR baseline, not against arbitrary benchmarks or other metrics. Never compare metrics against each other. A score below average is only worth exploring if it's meaningful in context.
 (Only reference a metric if it appears below — missing = not logged, NOT a zero.)
-${context.hasScores ? `Performance scores:\n  ${context.scoreMap}` : "No scores logged — don't mention scores."}
+${context.hasScores ? `Performance scores:\n  ${context.scoreMap}` : "No scores logged — don't mention scores."}${context.dowPatternSummary ? `\n\nLONG-RANGE PATTERNS (90-day day-of-week analysis — statistically significant only): ${context.dowPatternSummary}\nThese are real structural patterns in the data, not random variation. Reference them when relevant — e.g. if today's scores align with a known weak day, say so. Don't force it if it's not relevant.` : ""}
 
 ${context.goalSummary}
 ${context.moodAvg}${context.recentMoodSummary ? `\nMOOD HISTORY (last 7 days): ${context.recentMoodSummary}` : ""}

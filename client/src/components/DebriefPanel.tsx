@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { haptic } from "@/lib/haptics";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { MessageCircle, Send, CheckCircle, Flag, Loader2, RotateCcw, Mic, MicOff, ArrowRight, Volume2, VolumeX, Square, ChevronDown, Trash2, Keyboard, BookOpen, X, Paperclip } from "lucide-react";
+import { MessageCircle, Send, CheckCircle, Flag, Loader2, RotateCcw, Mic, MicOff, ArrowRight, Volume2, VolumeX, Square, ChevronDown, Trash2, Keyboard, BookOpen, X, Paperclip, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiRequest } from "@/lib/queryClient";
@@ -1840,12 +1840,12 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
             </p>
           </div>
 
-          {/* Two options */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* Three options */}
+          <div className="space-y-2.5">
             <Button
-              onClick={() => { haptic("medium"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: false, userLed: true }); }}
+              onPointerDown={(e) => { e.preventDefault(); if (startDebriefMutation.isPending) return; haptic("medium"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: false, userLed: true }); }}
               disabled={startDebriefMutation.isPending}
-              className="h-12 text-sm font-bold rounded-xl"
+              className="w-full h-12 text-sm font-bold rounded-xl"
               style={{ background: 'hsl(38,92%,50%)', color: '#0a0a0a', touchAction: 'manipulation' }}
             >
               {startDebriefMutation.isPending ? (
@@ -1854,23 +1854,29 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                 <><MessageCircle className="h-4 w-4 mr-1.5" />New session</>
               )}
             </Button>
-            <Button
-              onClick={() => { haptic("light"); setShowQuickLog(true); }}
-              variant="outline"
-              className="h-12 text-sm font-medium rounded-xl border-border/40 text-foreground"
-              style={{ touchAction: 'manipulation' }}
-            >
-              <BookOpen className="h-4 w-4 mr-1.5" />Log a moment
-            </Button>
+            <div className="grid grid-cols-2 gap-2.5">
+              <Button
+                onPointerDown={(e) => { e.preventDefault(); haptic("light"); setShowQuickLog(true); }}
+                variant="outline"
+                className="h-11 text-xs font-medium rounded-xl border-border/40 text-foreground"
+                style={{ touchAction: 'manipulation' }}
+              >
+                <BookOpen className="h-3.5 w-3.5 mr-1.5" />Log a moment
+              </Button>
+              <Button
+                onPointerDown={(e) => { e.preventDefault(); if (startDebriefMutation.isPending) return; haptic("light"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: false, userLed: false }); }}
+                disabled={startDebriefMutation.isPending}
+                variant="outline"
+                className="h-11 text-xs font-medium rounded-xl border-primary/30 text-primary/80 hover:bg-primary/5"
+                style={{ touchAction: 'manipulation' }}
+              >
+                <Zap className="h-3.5 w-3.5 mr-1.5" />Engineer prompt
+              </Button>
+            </div>
+            <p className="text-center text-[10px] text-muted-foreground/40 leading-tight">
+              Engineer prompt — your AI analyses your data and opens the session
+            </p>
           </div>
-          <button
-            onClick={() => { haptic("light"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: false, userLed: false }); }}
-            disabled={startDebriefMutation.isPending}
-            className="w-full text-center text-[11px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
-            style={{ touchAction: 'manipulation' }}
-          >
-            Let your engineer start you off with a prompt →
-          </button>
         </div>
 
         {quickLogOverlay}
@@ -1900,11 +1906,11 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                   : `Add another reflection for ${dateLabel}.`}
               </p>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2.5">
               <Button
-                onClick={() => { haptic("medium"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: true, userLed: true }); }}
+                onPointerDown={(e) => { e.preventDefault(); if (startDebriefMutation.isPending) return; haptic("medium"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: true, userLed: true }); }}
                 disabled={startDebriefMutation.isPending}
-                className="h-12 text-sm font-bold rounded-xl"
+                className="w-full h-12 text-sm font-bold rounded-xl"
                 style={{ background: 'hsl(38,92%,50%)', color: '#0a0a0a', touchAction: 'manipulation' }}
               >
                 {startDebriefMutation.isPending ? (
@@ -1913,23 +1919,29 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                   <><MessageCircle className="h-4 w-4 mr-1.5" />New session</>
                 )}
               </Button>
-              <Button
-                onClick={() => { haptic("light"); setShowQuickLog(true); }}
-                variant="outline"
-                className="h-12 text-sm font-medium rounded-xl border-border/40 text-foreground"
-                style={{ touchAction: 'manipulation' }}
-              >
-                <BookOpen className="h-4 w-4 mr-1.5" />Log a moment
-              </Button>
+              <div className="grid grid-cols-2 gap-2.5">
+                <Button
+                  onPointerDown={(e) => { e.preventDefault(); haptic("light"); setShowQuickLog(true); }}
+                  variant="outline"
+                  className="h-11 text-xs font-medium rounded-xl border-border/40 text-foreground"
+                  style={{ touchAction: 'manipulation' }}
+                >
+                  <BookOpen className="h-3.5 w-3.5 mr-1.5" />Log a moment
+                </Button>
+                <Button
+                  onPointerDown={(e) => { e.preventDefault(); if (startDebriefMutation.isPending) return; haptic("light"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: true, userLed: false }); }}
+                  disabled={startDebriefMutation.isPending}
+                  variant="outline"
+                  className="h-11 text-xs font-medium rounded-xl border-primary/30 text-primary/80 hover:bg-primary/5"
+                  style={{ touchAction: 'manipulation' }}
+                >
+                  <Zap className="h-3.5 w-3.5 mr-1.5" />Engineer prompt
+                </Button>
+              </div>
+              <p className="text-center text-[10px] text-muted-foreground/40 leading-tight">
+                Engineer prompt — your AI analyses your data and opens the session
+              </p>
             </div>
-            <button
-              onClick={() => { haptic("light"); warmAudioCtx(); startDebriefMutation.mutate({ fresh: true, userLed: false }); }}
-              disabled={startDebriefMutation.isPending}
-              className="w-full text-center text-[11px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
-              style={{ touchAction: 'manipulation' }}
-            >
-              Let your engineer start you off with a prompt →
-            </button>
           </div>
 
           {quickLogOverlay}
