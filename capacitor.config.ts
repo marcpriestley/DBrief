@@ -4,16 +4,12 @@ const config: CapacitorConfig = {
   appId: 'com.dbrief.app',
   appName: 'DBrief',
   webDir: 'dist/public',
-  // server.url points the native WebView at the deployed server for both iOS
-  // and Android.  This is required on Android because the WebView intercepts
-  // ALL requests to the configured hostname (including /api/* calls) and tries
-  // to serve them from the bundle — returning the SPA's index.html instead of
-  // JSON.  iOS's WKWebView lets non-file requests fall through to the network,
-  // so it happened to work there, but Android does not.  With server.url set,
-  // the WebView loads the real deployed app and all relative API paths resolve
-  // correctly to the production server.
+  // No server.url — the WebView loads from https://localhost (androidScheme below).
+  // queryClient.ts detects hostname === "localhost" at runtime and prepends
+  // https://dbrief.replit.app to every /api/* call, sending them directly to the
+  // production server without going through the Capacitor asset bridge.
   server: {
-    url: 'https://dbrief.replit.app',
+    androidScheme: 'https',
     cleartext: false,
   },
   ios: {
