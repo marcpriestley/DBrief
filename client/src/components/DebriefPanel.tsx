@@ -892,6 +892,9 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                 if (data.actions.some((a: any) => (a.type === "add_habit" || a.type === "remove_habit") && a.success)) {
                   queryClient.invalidateQueries({ queryKey: ["/api/habits"] });
                 }
+                if (data.actions.some((a: any) => a.type === "suggest_metric" && a.success)) {
+                  queryClient.invalidateQueries({ queryKey: ["/api/user-metrics"] });
+                }
               }
             } catch {}
           }

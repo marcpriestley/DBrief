@@ -273,6 +273,7 @@ export async function gatherDayContext(userId: number, date: string) {
     hasScores: loggedScores.length > 0, hasGoals: goals.length > 0, hasMoods: moods.length > 0,
     infiniteGoalContent, longTermGoalsList, isWeeklyAlignmentDay, habitSummary,
     dayName, recentDebriefContext, challengeContextParts, recentMoodSummary, dowPatternSummary,
+    trackedMetricNames: metrics.map(m => m.name),
   };
 }
 
@@ -390,20 +391,36 @@ export function buildSystemPrompt(context: Awaited<ReturnType<typeof gatherDayCo
   const timeOfDay = currentHour < 12 ? "morning" : currentHour < 17 ? "afternoon" : "evening";
   const timeLabel = `${debriefDayName}, ${currentHour}:${String(now.getMinutes()).padStart(2, "0")} (${timeOfDay})`;
 
+  // Rich temporal context — month, season, day-of-month
+  const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const SEASONS: Record<number,string> = {0:"winter",1:"winter",2:"spring",3:"spring",4:"spring",5:"summer",6:"summer",7:"summer",8:"autumn",9:"autumn",10:"autumn",11:"winter"};
+  const monthName = MONTH_NAMES[now.getMonth()];
+  const season = SEASONS[now.getMonth()];
+  const dayOfMonth = now.getDate();
+  // Week-of-month is useful for "start of month" vs "end of month" framing
+  const weekOfMonth = Math.ceil(dayOfMonth / 7);
+  const monthPhase = dayOfMonth <= 7 ? "early" : dayOfMonth <= 14 ? "mid-early" : dayOfMonth <= 21 ? "mid-late" : "late";
+
   // Determine timing context from the ACTUAL date being debriefed, not from journalPreference.
   // journalPreference only affects smart default tab — not whether the AI says "today" or "yesterday".
   let timingContext: string;
   if (isToday) {
     const dayStillOpen = currentHour < 20;
-    const morningCaveat = currentHour < 11
-      ? `\nMORNING DEBRIEF CAVEAT: It is early in the day (${currentHour}:xx). Activity metrics like Steps, Active Energy, Exercise Minutes, Flights Climbed, and Walking Distance reflect what has accumulated SO FAR — they will grow throughout the day. Do NOT question, flag, or comment on low values for these metrics. They are expected to be low at this hour. Sleep and recovery metrics (Sleep Score, HRV, Resting Heart Rate) are valid because they reflect the night just completed.`
-      : "";
-    timingContext = `This is TODAY's debrief — ${timeLabel}.${morningCaveat}
+    let morningCaveat = "";
+    if (currentHour < 11) {
+      morningCaveat = `\nMORNING DEBRIEF CAVEAT: It is ${currentHour}:${String(now.getMinutes()).padStart(2,"0")} — early in the day. Two important caveats:
+(1) ACTIVITY METRICS (Steps, Active Energy, Exercise Minutes, Flights Climbed, Walking Distance) reflect accumulation SO FAR and will grow throughout the day. Do NOT flag or comment on low values for these — they are expected at this hour.
+(2) SUBJECTIVE SCORES (Energy, Mood, Focus, Motivation, Stress, and similar) logged this early are a snapshot of the driver's current state, not necessarily a reflection of the full day. A 45 on energy at 7am often looks very different by 3pm. Acknowledge this where relevant — don't treat early morning scores as final verdicts on the day.
+Sleep and recovery metrics (Sleep Score, HRV, Resting Heart Rate) ARE valid — they reflect the completed night.`;
+    } else if (currentHour < 14) {
+      morningCaveat = `\nMID-MORNING NOTE: Scores logged before midday represent the morning state. Activity and subjective metrics may still shift significantly before day's end.`;
+    }
+    timingContext = `This is TODAY's debrief — ${timeLabel} — ${monthName} ${dayOfMonth} (${season}, week ${weekOfMonth} of the month).${morningCaveat}
 ${dayStillOpen
   ? `IMPORTANT: The day is still in progress. For any daily goals not yet marked complete, treat them as still achievable — do NOT ask why they weren't done or imply failure. Note what's been done and encourage completing the remaining goals before end of day. Phrase open goals as in-progress, not missed.`
   : `It is late in the day — remaining open goals are unlikely to be completed today. You can analyse them as session outcomes.`}`;
   } else if (isYesterday) {
-    timingContext = `This is a debrief for YESTERDAY (${debriefDayName}) — a completed session. Frame it as a post-race review. Treat all uncompleted goals as session outcomes to reflect on and learn from.`;
+    timingContext = `This is a debrief for YESTERDAY (${debriefDayName}, ${monthName} ${new Date(date + "T12:00:00").getDate()}) — a completed session. Frame it as a post-race review. Treat all uncompleted goals as session outcomes to reflect on and learn from.`;
   } else {
     timingContext = `This is a retrospective debrief for ${debriefDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} — a historical session. Frame it as reviewing archived telemetry from a past race.`;
   }
@@ -469,18 +486,23 @@ Every response you give is complete in itself — sharp, insightful, and worth e
 - Do NOT invite the driver to continue or go deeper — the app handles that.
 - 2-4 sentences. No lists. No headers. Every word earns its place.
 
+TEMPORAL AWARENESS — USE THIS TO MAKE RESPONSES FEEL HUMAN AND SPECIFIC:
+You know the exact date, time, day of week, and season. Use this naturally — not robotically — to add specificity:
+- Day of week: Mondays often carry accumulated weekend residue (sleep debt, dietary changes). Fridays carry different pressure than Tuesdays. If a pattern fits the day, reference it.
+- Month/season: ${monthName} is ${season}. Seasonal factors (light, temperature, activity volume, social load) are real performance variables. Reference them when they're plausible explanations.
+- Time of day: You're talking at ${currentHour}:${String(now.getMinutes()).padStart(2,"0")}. This matters for how to frame what's still possible today.
+- Phase of month: It's the ${monthPhase} part of the month (day ${dayOfMonth}). End-of-month pressure, deadline proximity, or fresh-start energy at month-beginning can be worth naming.
+Don't force temporal references into every response. Use them when they genuinely explain something in the data or conversation.
+
 APP TOOLS — USE THESE STRATEGICALLY, NOT REFLEXIVELY:
 You have direct access to these actions. Use them only when the conversation naturally surfaces a clear need — never force them:
 - add_habit: when the driver mentions wanting to build a recurring behaviour (e.g. "I want to start meditating every morning").
 - add_daily_goal: when they want to commit to something specific for their job list. Keep titles short and actionable.
 - add_long_term_goal: when a bigger objective emerges from the conversation (e.g. a milestone or outcome they're aiming for over weeks/months).
+- suggest_metric: when a variable keeps surfacing in conversation that isn't being tracked yet (e.g. stress, social energy, caffeine, hydration, creativity, alcohol, screen time). Only suggest ONE metric per session. Only suggest it if the driver's answer clearly signals this variable matters to their performance. Do NOT suggest metrics they already track — their current dashboard: ${context.trackedMetricNames.length > 0 ? context.trackedMetricNames.join(", ") : "none set up yet"}.
 - edit_daily_goal / edit_habit: when the driver wants to rename or adjust an existing goal or habit.
 - remove_daily_goal / remove_habit / remove_long_term_goal: when the driver explicitly wants to delete something.
-Beyond direct actions, you can also suggest (in natural language — not a list) things the driver could do inside the app:
-- "Tracking your sleep score daily would give us a proper baseline — you can add it in Settings."
-- "Given what you've said about energy crashes, adding an Energy circle to your daily scores could surface patterns."
-- "A habit streak for X would help make this stick."
-Only suggest when it's genuinely useful and follows from what they've shared. Never suggest more than one thing at a time. Don't mention features unprompted.
+Beyond direct actions, you can also suggest (in natural language — not a list) things the driver could do inside the app. Only suggest when it's genuinely useful and follows from what they've shared. Never suggest more than one thing at a time. Don't mention features unprompted.
 
 TOOL USAGE PROTOCOL — CRITICAL:
 NEVER call a tool silently on the first mention. Always resolve ambiguity through one conversational question first, then call the tool immediately once the answer is clear.
@@ -928,6 +950,23 @@ export function registerDebriefRoutes(app: Express): void {
             },
           },
         },
+        {
+          type: "function",
+          function: {
+            name: "suggest_metric",
+            description: "Add a new custom metric to the user's daily Performance Telemetry dashboard. Use when a variable keeps surfacing in conversation that isn't tracked yet — e.g. stress, social energy, caffeine, hydration, creativity, alcohol, screen time. Only call ONCE per session, only when the driver clearly signals this variable matters to their performance. Do NOT duplicate metrics already on their dashboard.",
+            parameters: {
+              type: "object",
+              properties: {
+                name: { type: "string", description: "Short, clear metric name for the dashboard circle (e.g. 'Stress', 'Social Energy', 'Hydration', 'Creativity')" },
+                description: { type: "string", description: "One sentence on why this is worth tracking for this driver" },
+                color: { type: "string", description: "Hex color for the circle (e.g. '#EF4444' for stress, '#06B6D4' for hydration, '#8B5CF6' for creativity)" },
+                maxValue: { type: "number", description: "Max scale value — 100 for subjective scores (default), higher for absolute metrics" },
+              },
+              required: ["name"],
+            },
+          },
+        },
       ];
 
       const stream = await openai.chat.completions.create({
@@ -1072,6 +1111,26 @@ export function registerDebriefRoutes(app: Express): void {
               } else {
                 actions.push({ type: "remove_daily_goal", params, success: false, message: `Goal not found: ${params.title}` });
               }
+            }
+          } else if (tc.name === "suggest_metric") {
+            const existingMetrics = await db.select().from(userMetrics)
+              .where(and(eq(userMetrics.userId, userId), eq(userMetrics.isActive, true)));
+            const alreadyExists = existingMetrics.some(m => m.name.toLowerCase() === (params.name || "").toLowerCase());
+            if (alreadyExists) {
+              actions.push({ type: "suggest_metric", params, success: false, message: `Metric already tracked: ${params.name}` });
+            } else {
+              // Pick a sensible default color if not provided
+              const defaultColor = params.color || "#8B5CF6";
+              const maxVal = typeof params.maxValue === "number" ? params.maxValue : 100;
+              await db.insert(userMetrics).values({
+                userId,
+                name: params.name,
+                color: defaultColor,
+                maxValue: maxVal,
+                isActive: true,
+                sortOrder: existingMetrics.length,
+              });
+              actions.push({ type: "suggest_metric", params, success: true, message: `Added metric: ${params.name}` });
             }
           } else if (tc.name === "add_habit") {
             const existingHabits = await db.select().from(habits)
@@ -1447,6 +1506,21 @@ export const REALTIME_TOOLS: Array<{ type: "function"; name: string; description
   },
   {
     type: "function",
+    name: "suggest_metric",
+    description: "Add a new custom metric to the user's daily Performance Telemetry dashboard. Use this when a variable keeps coming up in conversation that isn't being tracked yet — for example stress, social energy, caffeine, hydration, creativity, alcohol, screen time, or any personal variable that would generate useful data over time. Only call ONCE per session. Only call when the driver's responses clearly signal this variable influences their performance. Do NOT suggest metrics already on their dashboard.",
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Short, clear metric name shown on the dashboard circle (e.g. 'Stress', 'Social Energy', 'Hydration', 'Creativity', 'Caffeine')" },
+        description: { type: "string", description: "One sentence explaining why this metric is worth tracking for this driver specifically" },
+        color: { type: "string", description: "Hex color for the dashboard circle — pick something thematically fitting (e.g. '#EF4444' for stress, '#06B6D4' for hydration, '#8B5CF6' for creativity)" },
+        maxValue: { type: "number", description: "Max scale value. Use 100 for all subjective 0-100 scores (default). Only use higher values for absolute measures (e.g. 3000 for caffeine in mg)." },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    type: "function",
     name: "add_habit",
     description: "Add a new habit to the user's Habit Lab. Only call after confirming the name.",
     parameters: {
@@ -1579,6 +1653,18 @@ export async function executeDebriefTool(toolName: string, args: Record<string, 
       }
     }
     return { success: false, message: `Goal not found: ${args.title}` };
+  }
+
+  if (toolName === "suggest_metric") {
+    const existingMetrics = await db.select().from(userMetrics).where(and(eq(userMetrics.userId, userId), eq(userMetrics.isActive, true)));
+    const alreadyExists = existingMetrics.some(m => m.name.toLowerCase() === (args.name || "").toLowerCase());
+    if (alreadyExists) return { success: false, message: `Metric already tracked: ${args.name}` };
+    const defaultColor = args.color || "#8B5CF6";
+    const maxVal = typeof args.maxValue === "number" ? args.maxValue : 100;
+    await db.insert(userMetrics).values({
+      userId, name: args.name, color: defaultColor, maxValue: maxVal, isActive: true, sortOrder: existingMetrics.length,
+    });
+    return { success: true, message: `Added metric: ${args.name}` };
   }
 
   if (toolName === "add_habit") {
