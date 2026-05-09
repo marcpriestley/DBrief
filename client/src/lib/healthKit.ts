@@ -17,9 +17,10 @@ export function isNativeAndroid(): boolean {
   return Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android";
 }
 
-/** True if this is any native platform that can access health data */
+/** True if this is a native platform that can access health data.
+ *  HealthKit is iOS-only — Android Health Connect is not yet wired up. */
 export function isNativeHealth(): boolean {
-  return isNativeIOS() || isNativeAndroid();
+  return isNativeIOS();
 }
 
 // Extended data type strings (matching the enhanced Swift plugin)
