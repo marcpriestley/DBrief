@@ -194,14 +194,16 @@
          Relative /api/* paths would be intercepted by the native WebView and
          served as index.html.  This patch runs before any bundle and rewrites
          those paths to the production server.
-         Guard: hostname=localhost + port="" = Capacitor native WebView only.
-         Web dev (port 5000) and production (dbrief.replit.app host) are skipped. -->
+         Guard: hostname=localhost = Capacitor native WebView only.
+         Production (dbrief.replit.app) is excluded by the hostname check. -->
     <script>
     (function () {
       var BASE = 'https://dbrief.replit.app';
       var h = window.location.hostname;
-      var p = window.location.port;
-      if (h === 'localhost' && p === '') {
+      // Activate only in Capacitor native WebView (hostname = localhost,
+      // no Replit/production origin). Rewrites /api/* to the production server
+      // so Capacitor's asset bridge doesn't intercept them as local requests.
+      if (h === 'localhost') {
         var _fetch = window.fetch.bind(window);
         window.fetch = function (url, opts) {
           if (typeof url === 'string' && url.charAt(0) === '/') {
