@@ -189,6 +189,36 @@
       </div>
     </div>
     <div id="root"></div>
+    <!-- ── Native API proxy ──────────────────────────────────────────────────
+         Capacitor Android serves local assets from https://localhost (no port).
+         Relative /api/* paths would be intercepted by the native WebView and
+         served as index.html.  This patch runs before any bundle and rewrites
+         those paths to the production server.
+         Guard: hostname=localhost + port="" = Capacitor native WebView only.
+         Web dev (port 5000) and production (dbrief.replit.app host) are skipped. -->
+    <script>
+    (function () {
+      var BASE = 'https://dbrief.replit.app';
+      var h = window.location.hostname;
+      var p = window.location.port;
+      if (h === 'localhost' && p === '') {
+        var _fetch = window.fetch.bind(window);
+        window.fetch = function (url, opts) {
+          if (typeof url === 'string' && url.charAt(0) === '/') {
+            url = BASE + url;
+          }
+          return _fetch(url, opts);
+        };
+        var _XHRopen = XMLHttpRequest.prototype.open;
+        XMLHttpRequest.prototype.open = function (method, url) {
+          if (typeof url === 'string' && url.charAt(0) === '/') {
+            url = BASE + url;
+          }
+          return _XHRopen.apply(this, arguments);
+        };
+      }
+    })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
     <script type="text/javascript" src="https://replit.com/public/js/replit-dev-banner.js"></script>
   </body>
