@@ -4,11 +4,12 @@ const config: CapacitorConfig = {
   appId: 'com.dbrief.app',
   appName: 'DBrief',
   webDir: 'dist/public',
-  // No server.url — the WebView loads from https://localhost (androidScheme below).
-  // queryClient.ts detects hostname === "localhost" at runtime and prepends
-  // https://dbrief.replit.app to every /api/* call, sending them directly to the
-  // production server without going through the Capacitor asset bridge.
   server: {
+    // Load directly from the production server so all API calls are same-origin.
+    // This bypasses Capacitor's asset bridge entirely and avoids all CORS /
+    // URL-rewriting issues on Android.  The local web assets are still bundled
+    // in the APK as a fallback but the WebView will load from this URL.
+    url: 'https://dbrief.replit.app',
     androidScheme: 'https',
     cleartext: false,
   },
