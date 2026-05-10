@@ -65,12 +65,27 @@
           window.webkit !== null &&
           typeof window.webkit.messageHandlers !== 'undefined'
         );
+        var isAndroid = /Android/i.test(navigator.userAgent);
+
+        // ── iOS (WKWebView) ──────────────────────────────────────────────────
         // Only Face ID iPhones have a home indicator (screen height >= 812 in
         // device-independent pixels). Older iPhones with Touch ID have a home
         // button so no home-indicator zone needs to be covered.
         var isFaceIdNative = isWKWebView && window.screen.height >= 812;
-        var saibFallback   = isFaceIdNative ? '34px' : '0px';
+        var saibFallback    = isFaceIdNative ? '34px' : '0px';
         var saibTopFallback = isFaceIdNative ? '47px' : '0px';
+
+        // ── Android (Capacitor WebView) ───────────────────────────────────────
+        // overlaysWebView:true makes the status bar transparent and overlap the
+        // web content. env(safe-area-inset-top) can return 0 on some Android
+        // versions / OEM WebViews, so we use a hard minimum of 28px — the
+        // standard status bar height on Android (24 dp on normal DPI, up to
+        // 28 dp on Samsung high-DPI screens).
+        if (isAndroid) {
+          saibTopFallback = '28px';
+          saibFallback    = '0px';
+        }
+
         // max(env(), fallback): on native Capacitor where env()=0 this resolves
         // to the fallback; in a browser where env() returns the real value it
         // resolves to the real value (always >= fallback or both are 0).
