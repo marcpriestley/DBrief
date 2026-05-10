@@ -1,4 +1,5 @@
 import { Capacitor, registerPlugin } from "@capacitor/core";
+import { resolveUrl } from "@/lib/queryClient";
 import { Health } from "capacitor-health";
 
 // Local Capacitor plugin compiled directly into the app target — bypasses SPM caching.
@@ -444,7 +445,7 @@ export async function syncHealthData(dateStr: string, enabledMetricNames: string
   if (results.length === 0 && clearedMetricNames.length === 0) return { synced: 0, metrics: [] };
 
   try {
-    const res = await fetch("/api/health/sync", {
+    const res = await fetch(resolveUrl("/api/health/sync"), {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },

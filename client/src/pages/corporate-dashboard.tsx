@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, resolveUrl} from "@/lib/queryClient";
 import { haptic } from "@/lib/haptics";
 import type { OrgMember } from "@shared/schema";
 
@@ -74,7 +74,7 @@ export default function CorporateDashboard() {
   const { data, isLoading } = useQuery<DashboardData>({
     queryKey: ["/api/corporate/dashboard"],
     queryFn: (): Promise<DashboardData> =>
-      fetch("/api/corporate/dashboard", { credentials: "include" }).then(r => {
+      fetch(resolveUrl("/api/corporate/dashboard"), { credentials: "include" }).then(r => {
         if (!r.ok) throw new Error("Failed to load dashboard");
         return r.json();
       }),

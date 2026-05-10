@@ -676,7 +676,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
 
   const startDebriefMutation = useMutation({
     mutationFn: async (opts: { fresh?: boolean; userLed?: boolean } = {}) => {
-      const response = await fetch("/api/debriefs/start", {
+      const response = await fetch(resolveUrl("/api/debriefs/start"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -1261,7 +1261,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
             const fetchTimeout = setTimeout(() => controller.abort(), 30_000);
             let response: Response;
             try {
-              response = await fetch("/api/voice-note/transcribe", {
+              response = await fetch(resolveUrl("/api/voice-note/transcribe"), {
                 method: "POST",
                 headers: {
                   "Content-Type": "application/octet-stream",
@@ -1335,7 +1335,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
           const fetchTimeout = setTimeout(() => controller.abort(), 30_000);
           let response: Response;
           try {
-            response = await fetch("/api/voice-note/transcribe", {
+            response = await fetch(resolveUrl("/api/voice-note/transcribe"), {
               method: "POST",
               headers: {
                 "Content-Type": "application/octet-stream",

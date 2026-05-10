@@ -241,7 +241,7 @@ function AppLayoutInner({ children }: AppLayoutProps) {
   // picked up immediately on the next load.
   useEffect(() => {
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    fetch("/api/user/timezone", {
+    fetch(resolveUrl("/api/user/timezone"), {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -350,7 +350,7 @@ function AppLayoutInner({ children }: AppLayoutProps) {
       const today = localDateStr(new Date());
       const yesterday = localDateStr(new Date(Date.now() - 86400000));
       try {
-        const metricsRes = await fetch("/api/user-metrics", { credentials: "include" });
+        const metricsRes = await fetch(resolveUrl("/api/user-metrics"), { credentials: "include" });
         const metrics: Array<{ name: string; isActive: boolean }> = await metricsRes.json();
         const names = metrics.filter(m => m.isActive).map(m => m.name);
         await Promise.all([

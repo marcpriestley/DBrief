@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, resolveUrl} from "@/lib/queryClient";
 import ProfileQuestions from "./ProfileQuestions";
 import { PROFILE_QUESTIONS } from "@/lib/profileData";
 import { Input } from "@/components/ui/input";
@@ -59,7 +59,7 @@ export default function OnboardingFlow({ username }: OnboardingFlowProps) {
     setHandleStatus("checking");
     debounceRef.current = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/users/check-handle?handle=${encodeURIComponent(raw)}`);
+        const res = await fetch(resolveUrl(`/api/users/check-handle?handle=${encodeURIComponent(raw)}`);
         const data = await res.json();
         setHandleStatus(data.available ? "available" : "taken");
       } catch {

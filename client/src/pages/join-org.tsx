@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, resolveUrl} from "@/lib/queryClient";
 
 interface InvitePreview {
   orgName: string;
@@ -32,7 +32,7 @@ export default function JoinOrg({ token }: { token: string }) {
   const { data: user, refetch: refetchUser } = useQuery<any>({
     queryKey: ["/api/auth/me"],
     queryFn: async () => {
-      const r = await fetch("/api/auth/me", { credentials: "include" });
+      const r = await fetch(resolveUrl("/api/auth/me"), { credentials: "include" });
       if (r.status === 401) return null;
       return r.json();
     },
@@ -42,7 +42,7 @@ export default function JoinOrg({ token }: { token: string }) {
   const { data: invite, isLoading: inviteLoading } = useQuery<InvitePreview>({
     queryKey: ["/api/corporate/join", token],
     queryFn: () =>
-      fetch(`/api/corporate/join/${token}`, { credentials: "include" }).then(r => {
+      fetch(resolveUrl(`/api/corporate/join/${token}`), { credentials: "include" }).then(r => {
         if (!r.ok) throw new Error("Invite not found");
         return r.json();
       }),

@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, resolveUrl } from "@/lib/queryClient";
 import {
   Bell, BellOff, AlertCircle, CheckCircle2, Heart, Plus, Check, Info,
   User, Map, RefreshCw, KeyRound, ChevronDown, Sun, Moon, Trash2,
@@ -359,7 +359,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     setHandleStatus("checking");
     handleDebounceRef.current = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/users/check-handle?handle=${encodeURIComponent(raw)}`);
+        const res = await fetch(resolveUrl(`/api/users/check-handle?handle=${encodeURIComponent(raw)}`));
         const data = await res.json();
         setHandleStatus(data.available ? "available" : "taken");
       } catch { setHandleStatus("idle"); }
@@ -531,11 +531,11 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       if (!('serviceWorker' in navigator) || !('PushManager' in window)) throw new Error('Push notifications not supported');
       const registration = await navigator.serviceWorker.register('/sw.js');
       await navigator.serviceWorker.ready;
-      const vapidRes = await fetch('/api/push/vapid-public-key', { credentials: "include" });
+      const vapidRes = await fetch(resolveUrl('/api/push/vapid-public-key'), { credentials: "include" });
       if (!vapidRes.ok) throw new Error('Push notifications not available');
       const { publicKey } = await vapidRes.json();
       const subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey) });
-      await fetch('/api/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(subscription) });
+      await fetch(resolveUrl('/api/push/subscribe'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(subscription) });
       toast({ title: "Notifications enabled", description: "You'll receive daily reminders." });
     } catch (error) {
       console.error('Push subscription error:', error);

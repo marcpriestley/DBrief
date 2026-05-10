@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, CheckCircle2, XCircle, Radio } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, resolveUrl} from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 const SNOOZE_KEY = "callsign_snoozed_until";
@@ -42,7 +42,7 @@ export default function CallsignPromptModal({ open, onClose }: { open: boolean; 
     setStatus("checking");
     const t = setTimeout(async () => {
       try {
-        const r = await fetch(`/api/users/check-handle?handle=${encodeURIComponent(clean)}`);
+        const r = await fetch(resolveUrl(`/api/users/check-handle?handle=${encodeURIComponent(clean)}`);
         const { available } = await r.json();
         setStatus(available ? "available" : "taken");
       } catch { setStatus("idle"); }

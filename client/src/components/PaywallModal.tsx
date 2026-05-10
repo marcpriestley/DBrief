@@ -7,7 +7,7 @@ import { haptic } from "@/lib/haptics";
 import { Capacitor } from "@capacitor/core";
 import { Browser } from "@capacitor/browser";
 import { App as CapApp } from "@capacitor/app";
-import { queryClient } from "@/lib/queryClient";
+import { queryClient, resolveUrl} from "@/lib/queryClient";
 
 interface PaywallModalProps {
   isOpen: boolean;
@@ -44,7 +44,7 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
     setCheckoutUrl(null);
     setFetchError(false);
     setTapped(false);
-    fetch("/api/subscription/checkout", {
+    fetch(resolveUrl("/api/subscription/checkout"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ native: isNative }),
@@ -95,7 +95,7 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
     pollRef.current = setInterval(async () => {
       if (Date.now() > deadline) { stopPolling(); setTapped(false); return; }
       try {
-        const me = await fetch("/api/auth/me").then(r => r.json());
+        const me = await fetch(resolveUrl("/api/auth/me")).then(r => r.json());
         if (me.subscriptionStatus === "premium" || me.subscriptionStatus === "beta") {
           handlePremiumDetected();
         }
@@ -177,8 +177,8 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
         // checkout-signal has finished writing to the DB.
         const checkPremium = async (): Promise<boolean> => {
           try {
-            await fetch("/api/subscription/sync", { method: "POST" }).catch(() => {});
-            const me = await fetch("/api/auth/me").then(r => r.json());
+            await fetch(resolveUrl("/api/subscription/sync"), { method: "POST" }).catch(() => {});
+            const me = await fetch(resolveUrl("/api/auth/me")).then(r => r.json());
             if (me.subscriptionStatus === "premium" || me.subscriptionStatus === "beta") {
               try { localStorage.removeItem("dbrief_sub_pending"); } catch (_) {}
               handlePremiumDetected();
@@ -219,7 +219,7 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
     setFetchError(false);
     setLinkLoading(true);
     setCheckoutUrl(null);
-    fetch("/api/subscription/checkout", {
+    fetch(resolveUrl("/api/subscription/checkout"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ native: isNative }),

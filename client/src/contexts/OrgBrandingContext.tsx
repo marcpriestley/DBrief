@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import { resolveUrl } from "@/lib/queryClient";
 import { useQuery } from "@tanstack/react-query";
 
 export interface OrgBranding {
@@ -20,7 +21,7 @@ export function OrgBrandingProvider({ children }: { children: React.ReactNode })
     queryKey: ["/api/corporate/membership"],
     queryFn: async () => {
       if (!CORPORATE_ENABLED) return null;
-      const res = await fetch("/api/corporate/membership", { credentials: "include" });
+      const res = await fetch(resolveUrl("/api/corporate/membership"), { credentials: "include" });
       if (!res.ok) return null;
       return res.json();
     },

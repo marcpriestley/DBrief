@@ -8,7 +8,7 @@ import {
 import AppLayout from "@/components/AppLayout";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, resolveUrl} from "@/lib/queryClient";
 import type { ConnectionPublicStats, LeaderboardEntry } from "@shared/schema";
 import { haptic } from "@/lib/haptics";
 import ChallengesTab from "@/components/ChallengesTab";
@@ -373,7 +373,7 @@ export default function SquadPage() {
 
   const { data: leaderboard = [], isLoading: boardLoading } = useQuery<LeaderboardEntry[]>({
     queryKey: ["/api/squad/leaderboard", sortBy],
-    queryFn: () => fetch(`/api/squad/leaderboard?sortBy=${sortBy}`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetch(resolveUrl(`/api/squad/leaderboard?sortBy=${sortBy}`), { credentials: "include" }).then(r => r.json()),
     enabled: activeTab === "board",
     staleTime: 30000,
   });
@@ -381,7 +381,7 @@ export default function SquadPage() {
   const { data: searchResults = [] } = useQuery<{ id: number; driverHandle: string | null; displayName: string | null }[]>({
     queryKey: ["/api/users/search", debouncedQ],
     queryFn: () => debouncedQ.length >= 2
-      ? fetch(`/api/users/search?q=${encodeURIComponent(debouncedQ)}`, { credentials: "include" }).then(r => r.json())
+      ? fetch(resolveUrl(`/api/users/search?q=${encodeURIComponent(debouncedQ)}`), { credentials: "include" }).then(r => r.json())
       : Promise.resolve([]),
     enabled: debouncedQ.length >= 2,
     staleTime: 15000,

@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
+import { resolveUrl } from "@/lib/queryClient";
 
 const TTS_STORAGE_KEY = "dbrief_tts_enabled";
 const TTS_VOICE_KEY = "dbrief_tts_voice";
@@ -97,7 +98,7 @@ export function useTTS() {
         buffer = await preFetched;
         if (ac.signal.aborted) return;
       } else {
-        const res = await fetch("/api/tts", {
+        const res = await fetch(resolveUrl("/api/tts"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
@@ -170,7 +171,7 @@ export function useTTS() {
     if (!text.trim()) return;
     buttonCacheRef.current = {
       text,
-      buffer: fetch("/api/tts", {
+      buffer: fetch(resolveUrl("/api/tts"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -196,7 +197,7 @@ export function useTTS() {
   const preFetchAudio = useCallback((text: string) => {
     if (!enabled || !text.trim()) return;
     const ac = abortRef.current;
-    pendingBufferRef.current = fetch("/api/tts", {
+    pendingBufferRef.current = fetch(resolveUrl("/api/tts"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",

@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { resolveUrl } from "@/lib/queryClient";
 import { Capacitor } from "@capacitor/core";
 
 // ── iOS APNs registration state ────────────────────────────────────────────
@@ -7,7 +8,7 @@ let pendingApnsToken: string | null = null;
 
 async function sendTokenToServer(token: string): Promise<boolean> {
   try {
-    const res = await fetch("/api/push/register-apns", {
+    const res = await fetch(resolveUrl("/api/push/register-apns"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
@@ -39,7 +40,7 @@ let pendingFcmToken: string | null = null;
 
 async function sendFcmTokenToServer(token: string): Promise<boolean> {
   try {
-    const res = await fetch("/api/push/register-fcm", {
+    const res = await fetch(resolveUrl("/api/push/register-fcm"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
@@ -174,7 +175,7 @@ export function clearBadge() {
   const now = Date.now();
   if (now - lastBadgeClear < 30_000) return;
   lastBadgeClear = now;
-  fetch("/api/push/clear-badge", { method: "POST", credentials: "include" }).catch(() => {});
+  fetch(resolveUrl("/api/push/clear-badge"), { method: "POST", credentials: "include" }).catch(() => {});
 }
 
 // Set up notification tap listener (called once after registration)

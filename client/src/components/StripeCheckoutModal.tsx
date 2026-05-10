@@ -3,7 +3,7 @@ import { loadStripe } from "@stripe/stripe-js";
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
 import { motion, AnimatePresence } from "framer-motion";
 import { X } from "lucide-react";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, resolveUrl} from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 interface Props {
@@ -16,7 +16,7 @@ let stripePromise: ReturnType<typeof loadStripe> | null = null;
 
 async function getStripe() {
   if (!stripePromise) {
-    const res = await fetch("/api/subscription/publishable-key");
+    const res = await fetch(resolveUrl("/api/subscription/publishable-key");
     const { publishableKey } = await res.json();
     stripePromise = loadStripe(publishableKey);
   }
@@ -47,7 +47,7 @@ export default function StripeCheckoutModal({ isOpen, onClose }: Props) {
   const handleComplete = useCallback(async () => {
     // Small delay — give the webhook a moment to fire and update the DB.
     await new Promise(r => setTimeout(r, 2000));
-    await fetch("/api/subscription/sync", { method: "POST" });
+    await fetch(resolveUrl("/api/subscription/sync"), { method: "POST" });
     queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
     toast({
       title: "Welcome to DBrief App Premium",
