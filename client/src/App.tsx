@@ -1,7 +1,7 @@
 import { Switch, Route } from "wouter";
-import { queryClient, getQueryFn, apiRequest } from "./lib/queryClient";
+import { queryClient, getQueryFn, apiRequest, resolveUrl, IS_NATIVE_BUILD } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Component } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Dashboard from "@/pages/dashboard";
@@ -30,6 +30,31 @@ import { Capacitor } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
 
 const CORPORATE_ENABLED = import.meta.env.VITE_CORPORATE_TIER_ENABLED === "true";
+
+// Error boundary — catches component crashes and shows the error on-screen
+// instead of a blank white page. Essential for diagnosing Android crashes.
+class ErrorBoundary extends Component<
+  { children: React.ReactNode },
+  { error: string | null }
+> {
+  constructor(props: any) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(err: Error) {
+    return { error: `${err.message}\n\n${err.stack ?? ""}` };
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: 16, background: "#b00", color: "#fff", fontSize: 11, whiteSpace: "pre-wrap", wordBreak: "break-all", overflowY: "auto", maxHeight: "100vh" }}>
+          {"CRASH:\n" + this.state.error}
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // ── Status-bar: overlay + light-icon style ──────────────────────────────────
 // StatusBar is bundled into every Capacitor 8 iOS shell by default (Swift
@@ -432,9 +457,11 @@ function App() {
 
   // Version-check: detect when WKWebView has served a stale cached HTML page and
   // force a hard navigation reload to pick up the latest JS bundle.
-  // In development the server returns "dev" — always matches, never reloads.
+  // Skipped on native Android/iOS builds — those always serve fresh local assets
+  // and the reload would interfere with the CapacitorHttp request routing.
   useEffect(() => {
-    fetch("/api/version", { cache: "no-store" })
+    if (IS_NATIVE_BUILD) return;
+    fetch(resolveUrl("/api/version"), { cache: "no-store" })
       .then(r => r.json())
       .then(({ version }: { version: string }) => {
         const stored = localStorage.getItem("build-version");
@@ -453,16 +480,18 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
-        <Switch>
-          <Route path="/privacy" component={PrivacyPolicy} />
-          <Route path="/terms" component={TermsOfService} />
-          {CORPORATE_ENABLED && (
-            <Route path="/join/:token">
-              {(params: { token: string }) => <JoinOrg token={params.token} />}
-            </Route>
-          )}
-          <Route component={AuthenticatedRouter} />
-        </Switch>
+        <ErrorBoundary>
+          <Switch>
+            <Route path="/privacy" component={PrivacyPolicy} />
+            <Route path="/terms" component={TermsOfService} />
+            {CORPORATE_ENABLED && (
+              <Route path="/join/:token">
+                {(params: { token: string }) => <JoinOrg token={params.token} />}
+              </Route>
+            )}
+            <Route component={AuthenticatedRouter} />
+          </Switch>
+        </ErrorBoundary>
       </TooltipProvider>
     </QueryClientProvider>
   );

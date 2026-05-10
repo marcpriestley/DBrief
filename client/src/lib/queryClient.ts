@@ -3,7 +3,7 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 // NATIVE_BUILD is baked in at compile time when building for Android/iOS.
 // Set VITE_NATIVE_BUILD=true in the environment before running `npm run build`
 // for a native Capacitor release.  Web builds leave this undefined/false.
-const IS_NATIVE_BUILD = import.meta.env.VITE_NATIVE_BUILD === "true";
+export const IS_NATIVE_BUILD = import.meta.env.VITE_NATIVE_BUILD === "true";
 const NATIVE_API_BASE = "https://dbrief.replit.app";
 
 // Runtime fallback: still try to detect Capacitor at call time so that
@@ -18,7 +18,7 @@ function checkNative(): boolean {
 
 export const isNativeBundle = IS_NATIVE_BUILD || checkNative();
 
-function resolveUrl(url: string): string {
+export function resolveUrl(url: string): string {
   if (url.startsWith("/") && checkNative()) {
     return `${NATIVE_API_BASE}${url}`;
   }
