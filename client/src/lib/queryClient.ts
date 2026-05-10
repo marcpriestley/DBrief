@@ -22,6 +22,21 @@ function checkNative(): boolean {
 // Exported for components that read it at render time (after bridge loads)
 export const isNativeBundle = checkNative();
 
+// TEMPORARY DIAGNOSTIC — remove after Android debugging
+if (typeof window !== "undefined") {
+  setTimeout(() => {
+    const cap = (window as any).Capacitor;
+    const info = [
+      `hostname: ${window.location.hostname}`,
+      `href: ${window.location.href}`,
+      `isNative(): ${cap?.isNativePlatform?.()}`,
+      `checkNative: ${checkNative()}`,
+      `resolveUrl: ${resolveUrl("/api/auth/login")}`,
+    ].join("\n");
+    alert("DBrief Diag\n" + info);
+  }, 3000);
+}
+
 function resolveUrl(url: string): string {
   if (url.startsWith("/") && checkNative()) {
     return `${NATIVE_API_BASE}${url}`;
