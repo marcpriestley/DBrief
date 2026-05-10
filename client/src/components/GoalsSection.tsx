@@ -5,7 +5,7 @@ import { motion, AnimatePresence, useMotionValue, useTransform, animate } from "
 import { Check, Plus, X, Trash2, Edit2, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { apiRequest, queryClient as qc } from "@/lib/queryClient";
+import { apiRequest, resolveUrl, queryClient as qc } from "@/lib/queryClient";
 import { haptic, hapticSequence } from "@/lib/haptics";
 import type { DailyGoal, GoalTemplate } from "@shared/schema";
 
@@ -81,7 +81,7 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
 
   const { data: goals = [], isLoading } = useQuery<DailyGoal[]>({
     queryKey: ["/api/daily-goals", selectedDate],
-    queryFn: () => fetch(`/api/daily-goals/${selectedDate}`, { credentials: "include", cache: "no-store" }).then(r => r.json()),
+    queryFn: () => fetch(resolveUrl(`/api/daily-goals/${selectedDate}`), { credentials: "include", cache: "no-store" }).then(r => r.json()),
   });
 
   const { data: templates = [] } = useQuery<GoalTemplate[]>({

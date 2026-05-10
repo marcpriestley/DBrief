@@ -612,7 +612,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   // Active = an in-progress debrief that has at least one AI response (moments never qualify).
   // OR it's the specific user-led session we just started this session (tracked by ID).
   const debrief =
-    safeDebriefs.find(d => !d.isComplete && d.messages.some((m: any) => m.role === "assistant")) ??
+    safeDebriefs.find(d => !d.isComplete && (d.messages || []).some((m: any) => m.role === "assistant")) ??
     (userLedDebriefId
       ? safeDebriefs.find(d => d.id === userLedDebriefId && !d.isComplete) ?? null
       : null);
@@ -620,9 +620,9 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   // Also exclude sessions with no visible content (0-message abandoned starters or all-blank messages).
   const completedDebriefs = safeDebriefs.filter(d => {
     if (d.id === debrief?.id) return false;
-    if (!d.isComplete && !d.messages.some((m: any) => m.role === "assistant")) {
+    if (!d.isComplete && !(d.messages || []).some((m: any) => m.role === "assistant")) {
       // It's a "moment" — only show it if at least one message has real content or an attachment
-      const hasContent = d.messages.some(
+      const hasContent = (d.messages || []).some(
         (m: any) => (m.content && m.content.trim().length > 0) || m.attachmentUrl
       );
       if (!hasContent) return false;
@@ -634,7 +634,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const assistantMessageCount = debrief?.messages?.filter(m => m.role === "assistant").length || 0;
 
   // Show End Session / Go Deeper after every completed AI response
-  const lastMsg = debrief?.messages?.[debrief.messages.length - 1];
+  const lastMsg = debrief?.messages?.slice(-1)[0];
   const showCheckpoint =
     !!debrief &&
     !debrief.isComplete &&
@@ -653,7 +653,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   useEffect(() => {
     if (!userLedDebriefId) return;
     const d = safeDebriefs.find(s => s.id === userLedDebriefId);
-    if (d && (d.isComplete || d.messages.some((m: any) => m.role === "assistant"))) {
+    if (d && (d.isComplete || (d.messages || []).some((m: any) => m.role === "assistant"))) {
       setUserLedDebriefId(null);
     }
   }, [safeDebriefs, userLedDebriefId]);
@@ -1990,11 +1990,12 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
               {(() => {
                 let sessionCount = 0;
                 return completedDebriefs.map((d) => {
-                  const isMoment = !d.messages.some((m: any) => m.role === "assistant");
+                  const msgs = d.messages || [];
+                  const isMoment = !msgs.some((m: any) => m.role === "assistant");
                   if (!isMoment) sessionCount++;
                   const isExpanded = expandedSessions.has(d.id);
-                  const sessionText = d.messages.filter((m: any) => m.role === "assistant").map((m: any) => m.content).join(" ");
-                  const userMsg = d.messages.find((m: any) => m.role === "user");
+                  const sessionText = msgs.filter((m: any) => m.role === "assistant").map((m: any) => m.content).join(" ");
+                  const userMsg = msgs.find((m: any) => m.role === "user");
                   const momentText = userMsg?.content || "";
                   const momentPhoto = userMsg?.attachmentUrl;
 
@@ -2106,7 +2107,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                             <p className="text-xs text-muted-foreground italic leading-relaxed pb-2 border-b border-border/30">{d.summary}</p>
                           )}
                           <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                            {d.messages.map((msg: any) => (
+                            {(d.messages || []).map((msg: any) => (
                               <div key={msg.id} className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
                                 <div className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${
                                   msg.role === "user"
@@ -2227,7 +2228,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
               // when the user taps the speaker immediately after a response.
               const lastAiMsg =
                 lastStreamedAiMsgRef.current ||
-                (debrief.messages.filter(m => m.role === "assistant").slice(-1)[0]?.content ?? "");
+                ((debrief.messages || []).filter(m => m.role === "assistant").slice(-1)[0]?.content ?? "");
               const handleSpeaker = () => {
                 haptic("select");
                 if (tts.speaking) {
@@ -2283,24 +2284,24 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
         </div>
 
         <div ref={chatContainerRef} className="flex-1 min-h-0 px-5 py-4 space-y-3 overflow-y-auto overscroll-y-contain">
-          {debrief.messages.length === 0 && !isStreaming && (
+          {(debrief.messages || []).length === 0 && !isStreaming && (
             <p className="text-sm text-muted-foreground text-center py-4">
               Your session, your opening. What's on your mind?
             </p>
           )}
 
-          {!showAllMessages && debrief.messages.length > VISIBLE_MESSAGES && (
+          {!showAllMessages && (debrief.messages || []).length > VISIBLE_MESSAGES && (
             <button
               onClick={() => setShowAllMessages(true)}
               className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
             >
               <ChevronDown className="h-3.5 w-3.5" />
-              Show {debrief.messages.length - VISIBLE_MESSAGES} earlier messages
+              Show {(debrief.messages || []).length - VISIBLE_MESSAGES} earlier messages
             </button>
           )}
 
           <AnimatePresence initial={false}>
-            {(showAllMessages ? debrief.messages : debrief.messages.slice(-VISIBLE_MESSAGES)).map((msg) => {
+            {(showAllMessages ? (debrief.messages || []) : (debrief.messages || []).slice(-VISIBLE_MESSAGES)).map((msg) => {
               const isSelected = selectedMsgId === msg.id;
               const isUser = msg.role === "user";
               return (
@@ -2767,10 +2768,11 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
       {(() => {
         let sessionCount = 0;
         return completedDebriefs.map((d) => {
-          const isMoment = !d.messages.some((m: any) => m.role === "assistant");
+          const msgs2 = d.messages || [];
+          const isMoment = !msgs2.some((m: any) => m.role === "assistant");
           if (!isMoment) sessionCount++;
           const isExpanded = expandedSessions.has(d.id);
-          const userMsg = d.messages.find((m: any) => m.role === "user");
+          const userMsg = msgs2.find((m: any) => m.role === "user");
           const momentText = userMsg?.content || "";
           const momentPhoto = userMsg?.attachmentUrl;
 
@@ -2841,7 +2843,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
                       <p className="text-xs text-muted-foreground italic leading-relaxed pb-2 border-b border-border/20">{d.summary}</p>
                     )}
                     <div className="space-y-2 max-h-[280px] overflow-y-auto">
-                      {d.messages.map((msg: any) => (
+                      {(d.messages || []).map((msg: any) => (
                         <div key={msg.id} className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
                           <div className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${
                             msg.role === "user"

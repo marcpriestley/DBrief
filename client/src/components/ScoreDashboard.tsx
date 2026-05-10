@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, resolveUrl } from "@/lib/queryClient";
 import type { DailyScore, UserMetric } from "@shared/schema";
 import { Heart, Edit, Plus, Settings, Trash2, X, Lock } from "lucide-react";
 import MetricTrendChart from "./MetricTrendChart";
@@ -156,7 +156,7 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
 
   const { data: scores = [] } = useQuery<DailyScore[]>({
     queryKey: ["/api/daily-scores", selectedDate],
-    queryFn: () => fetch(`/api/daily-scores/${selectedDate}`, { credentials: "include" }).then(res => res.json()),
+    queryFn: () => fetch(resolveUrl(`/api/daily-scores/${selectedDate}`), { credentials: "include" }).then(res => res.json()),
     staleTime: 0,
   });
 

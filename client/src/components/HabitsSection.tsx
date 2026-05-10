@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, resolveUrl } from "@/lib/queryClient";
 import { useDateContext } from "@/contexts/DateContext";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Flame, X, ChevronRight, ChevronLeft, Check, Settings2, Trash2, Bell, BellOff, Repeat, Trophy } from "lucide-react";
@@ -126,7 +126,7 @@ export default function HabitsSection() {
 
   const { data: habits = [], isLoading } = useQuery<HabitWithStatus[]>({
     queryKey: ["/api/habits", selectedDate],
-    queryFn: () => fetch(`/api/habits?date=${selectedDate}`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetch(resolveUrl(`/api/habits?date=${selectedDate}`), { credentials: "include" }).then(r => r.json()),
   });
 
   const dueHabits = habits.filter(h => h.dueToday !== false);

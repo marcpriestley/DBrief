@@ -1,6 +1,7 @@
 import { useLocation, Link } from "wouter";
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { resolveUrl } from "@/lib/queryClient";
 import { Settings, LogOut, Smile, ChevronLeft, LayoutDashboard, CalendarDays, TrendingUp, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -194,7 +195,7 @@ function AppLayoutInner({ children }: AppLayoutProps) {
   const { data: challenges = [] } = useQuery<any[]>({
     queryKey: ["/api/challenges"],
     queryFn: () =>
-      fetch(`/api/challenges?date=${new Date().toLocaleDateString("en-CA")}`, { credentials: "include" }).then(r => r.json()),
+      fetch(resolveUrl(`/api/challenges?date=${new Date().toLocaleDateString("en-CA")}`), { credentials: "include" }).then(r => r.json()),
     refetchInterval: 120000,
   });
   const todayCh = new Date().toLocaleDateString("en-CA");
@@ -211,7 +212,7 @@ function AppLayoutInner({ children }: AppLayoutProps) {
   const { data: todayMoods = [], isLoading: moodsLoading } = useQuery<any[]>({
     queryKey: ["/api/mood-checkins", todayStr],
     queryFn: async () => {
-      const r = await fetch(`/api/mood-checkins/${todayStr}`, { credentials: "include" });
+      const r = await fetch(resolveUrl(`/api/mood-checkins/${todayStr}`), { credentials: "include" });
       if (!r.ok) return [];
       const data = await r.json();
       return Array.isArray(data) ? data : [];

@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
+import { resolveUrl } from "@/lib/queryClient";
 import AppLayout from "@/components/AppLayout";
 import ScoreDashboard from "@/components/ScoreDashboard";
 import DebriefPanel from "@/components/DebriefPanel";
@@ -37,7 +38,7 @@ function DashboardContent() {
   const { data: debriefs = [] } = useQuery<any[]>({
     queryKey: ["/api/debriefs", selectedDate],
     queryFn: async () => {
-      const res = await fetch(`/api/debriefs/${selectedDate}`, { credentials: "include" });
+      const res = await fetch(resolveUrl(`/api/debriefs/${selectedDate}`), { credentials: "include" });
       if (!res.ok) return [];
       const d = await res.json();
       return Array.isArray(d) ? d : (d ? [d] : []);
@@ -47,17 +48,17 @@ function DashboardContent() {
 
   const { data: goals = [] } = useQuery<any[]>({
     queryKey: ["/api/daily-goals", selectedDate],
-    queryFn: () => fetch(`/api/daily-goals/${selectedDate}`, { credentials: "include", cache: "no-store" }).then(r => r.json()),
+    queryFn: () => fetch(resolveUrl(`/api/daily-goals/${selectedDate}`), { credentials: "include", cache: "no-store" }).then(r => r.json()),
   });
 
   const { data: habits = [] } = useQuery<any[]>({
     queryKey: ["/api/habits", selectedDate],
-    queryFn: () => fetch(`/api/habits?date=${selectedDate}`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetch(resolveUrl(`/api/habits?date=${selectedDate}`), { credentials: "include" }).then(r => r.json()),
   });
 
   const { data: scores = [] } = useQuery<any[]>({
     queryKey: ["/api/daily-scores", selectedDate],
-    queryFn: () => fetch(`/api/daily-scores/${selectedDate}`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetch(resolveUrl(`/api/daily-scores/${selectedDate}`), { credentials: "include" }).then(r => r.json()),
     staleTime: 0,
   });
 
