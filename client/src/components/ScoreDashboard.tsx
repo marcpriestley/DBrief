@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { haptic } from "@/lib/haptics";
 import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { Heart, Edit, Plus, Settings, Trash2, X, Lock } from "lucide-react";
 import MetricTrendChart from "./MetricTrendChart";
 import { useSubscription } from "@/hooks/useSubscription";
 import { usePaywall } from "@/contexts/PaywallContext";
+import NativeSlider from "@/components/ui/native-slider";
 
 const FREE_METRIC_LIMIT = 3;
 
@@ -63,57 +64,6 @@ function NativeOverlay({ open, onClose, title, description, children, scrollable
         </div>
       )}
     </AnimatePresence>
-  );
-}
-
-function NativeSlider({ value, onChange, min = 0, max = 100, color = "hsl(40, 95%, 48%)" }: {
-  value: number; onChange: (v: number) => void; min?: number; max?: number; color?: string;
-}) {
-  const [displayValue, setDisplayValue] = useState(value);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const isDragging = useRef(false);
-  const lastHapticVal = useRef<number | null>(null);
-
-  const pct = max === min ? 0 : Math.max(0, Math.min(100, ((displayValue - min) / (max - min)) * 100));
-
-  useEffect(() => {
-    if (!isDragging.current) {
-      setDisplayValue(value);
-      if (inputRef.current) inputRef.current.value = String(value);
-    }
-  }, [value]);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = Number(e.target.value);
-    isDragging.current = true;
-    setDisplayValue(v);
-    onChange(v);
-    if (lastHapticVal.current === null || Math.abs(v - lastHapticVal.current) >= 5) {
-      haptic("light");
-      lastHapticVal.current = v;
-    }
-  };
-
-  const handleCommit = () => { isDragging.current = false; lastHapticVal.current = null; };
-
-  return (
-    <div className="relative" style={{ height: 28, touchAction: "none" }}>
-      <div className="absolute pointer-events-none rounded-full" style={{ left: 14, right: 14, top: 10, height: 8, background: "hsl(var(--muted))" }} />
-      <div className="absolute pointer-events-none rounded-full" style={{ left: 14, top: 10, height: 8, width: `calc(${pct / 100} * (100% - 28px))`, background: color }} />
-      <div className="absolute pointer-events-none rounded-full" style={{ width: 28, height: 28, top: 0, left: `calc(${pct / 100} * (100% - 28px))`, background: color, border: "2px solid hsl(var(--background))", boxShadow: "0 2px 6px rgba(0,0,0,0.35)" }} />
-      <input
-        ref={inputRef}
-        type="range"
-        min={min}
-        max={max}
-        step={1}
-        value={displayValue}
-        onChange={handleChange}
-        onTouchEnd={handleCommit}
-        onMouseUp={handleCommit}
-        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer", margin: 0, padding: 0, WebkitAppearance: "none", touchAction: "none" }}
-      />
-    </div>
   );
 }
 

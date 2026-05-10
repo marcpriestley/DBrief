@@ -6,6 +6,7 @@ import { Smile, Frown, Meh, Heart, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, resolveUrl } from "@/lib/queryClient";
+import NativeSlider from "@/components/ui/native-slider";
 
 interface MoodCheckinModalProps {
   open: boolean;
@@ -39,56 +40,6 @@ function getTimeOfDayLabel(): string {
   if (hour < 12) return "morning";
   if (hour < 17) return "afternoon";
   return "evening";
-}
-
-function MoodSlider({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  const [displayValue, setDisplayValue] = useState(value);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const isDragging = useRef(false);
-  const lastHapticVal = useRef<number | null>(null);
-
-  const pct = Math.max(0, Math.min(100, displayValue));
-  const color = getMoodColor(displayValue);
-
-  useEffect(() => {
-    if (!isDragging.current) {
-      setDisplayValue(value);
-      if (inputRef.current) inputRef.current.value = String(value);
-    }
-  }, [value]);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = Number(e.target.value);
-    isDragging.current = true;
-    setDisplayValue(v);
-    onChange(v);
-    if (lastHapticVal.current === null || Math.abs(v - lastHapticVal.current) >= 5) {
-      haptic("light");
-      lastHapticVal.current = v;
-    }
-  };
-
-  const handleCommit = () => { isDragging.current = false; lastHapticVal.current = null; };
-
-  return (
-    <div className="relative w-full" style={{ height: 28, touchAction: "none" }}>
-      <div className="absolute pointer-events-none rounded-full" style={{ left: 14, right: 14, top: 10, height: 8, background: "hsl(var(--muted))" }} />
-      <div className="absolute pointer-events-none rounded-full" style={{ left: 14, top: 10, height: 8, width: `calc(${pct / 100} * (100% - 28px))`, background: color }} />
-      <div className="absolute pointer-events-none rounded-full" style={{ width: 28, height: 28, top: 0, left: `calc(${pct / 100} * (100% - 28px))`, background: color, border: "2px solid hsl(0,0%,8%)", boxShadow: "0 2px 6px rgba(0,0,0,0.35)" }} />
-      <input
-        ref={inputRef}
-        type="range"
-        min={0}
-        max={100}
-        step={1}
-        value={displayValue}
-        onChange={handleChange}
-        onMouseUp={handleCommit}
-        onTouchEnd={handleCommit}
-        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer", margin: 0, padding: 0, WebkitAppearance: "none", touchAction: "none" }}
-      />
-    </div>
-  );
 }
 
 export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProps) {
@@ -199,7 +150,7 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
 
               {/* Native slider — reliable drag on iOS WKWebView */}
               <div className="px-2">
-                <MoodSlider value={moodValue} onChange={setMoodValue} />
+                <NativeSlider value={moodValue} onChange={setMoodValue} color={moodColor} />
                 <div className="flex justify-between mt-1 text-[10px] text-muted-foreground">
                   <span>0</span>
                   <span>50</span>
