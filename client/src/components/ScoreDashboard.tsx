@@ -164,7 +164,7 @@ export default function ScoreDashboard({ selectedDate }: ScoreDashboardProps) {
     queryKey: ["/api/metric-history", selectedMetric?.name],
     queryFn: () => {
       if (!selectedMetric) return Promise.resolve([]);
-      return fetch(`/api/metric-history/${selectedMetric.name}?days=14`, { credentials: "include" }).then(res => res.json());
+      return fetch(resolveUrl(`/api/metric-history/${selectedMetric.name}?days=14`), { credentials: "include" }).then(res => res.json());
     },
     enabled: !!selectedMetric,
   });

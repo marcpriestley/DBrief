@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, resolveUrl } from "@/lib/queryClient";
 import { formatDate } from "@/lib/dateUtils";
 import { useUpload } from "@/hooks/use-upload";
 import type { JournalEntry, DailyScore, UserMetric, JournalAttachment } from "@shared/schema";
@@ -37,7 +37,7 @@ export default function JournalPanel({ selectedDate, onVoiceRecord }: JournalPan
   const { data: currentEntry } = useQuery<JournalEntry | null>({
     queryKey: ["/api/journal-entries", selectedDate],
     queryFn: async () => {
-      const response = await fetch(`/api/journal-entries/${selectedDate}`, { credentials: "include" });
+      const response = await fetch(resolveUrl(`/api/journal-entries/${selectedDate}`), { credentials: "include" });
       if (!response.ok) return null;
       return response.json();
     },
@@ -55,7 +55,7 @@ export default function JournalPanel({ selectedDate, onVoiceRecord }: JournalPan
     queryKey: ["/api/journal-attachments", currentEntry?.id],
     queryFn: async () => {
       if (!currentEntry?.id) return [];
-      const response = await fetch(`/api/journal-attachments/${currentEntry.id}`, { credentials: "include" });
+      const response = await fetch(resolveUrl(`/api/journal-attachments/${currentEntry.id}`), { credentials: "include" });
       if (!response.ok) return [];
       return response.json();
     },

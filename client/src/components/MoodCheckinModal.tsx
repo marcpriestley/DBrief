@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Smile, Frown, Meh, Heart, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, resolveUrl } from "@/lib/queryClient";
 
 interface MoodCheckinModalProps {
   open: boolean;
@@ -106,7 +106,7 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
   const { data: todayCheckins } = useQuery<Array<{ value: number; label: string }>>({
     queryKey: ["/api/mood-checkins", todayStr],
     queryFn: async () => {
-      const res = await fetch(`/api/mood-checkins/${todayStr}`, { credentials: "include" });
+      const res = await fetch(resolveUrl(`/api/mood-checkins/${todayStr}`), { credentials: "include" });
       return res.json();
     },
     enabled: open,

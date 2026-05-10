@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useSpeechToText } from "@/hooks/useSpeechToText";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, resolveUrl } from "@/lib/queryClient";
 import type { JournalEntry } from "@shared/schema";
 
 interface VoiceRecordingModalProps {
@@ -27,7 +27,7 @@ export default function VoiceRecordingModal({
   const { data: currentEntry } = useQuery<JournalEntry | null>({
     queryKey: ["/api/journal-entries", selectedDate],
     queryFn: async () => {
-      const response = await fetch(`/api/journal-entries/${selectedDate}`, { credentials: "include" });
+      const response = await fetch(resolveUrl(`/api/journal-entries/${selectedDate}`), { credentials: "include" });
       if (!response.ok) return null;
       return response.json();
     },

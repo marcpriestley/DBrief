@@ -8,7 +8,7 @@ import {
   Search, UserPlus, Building2, Loader2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, resolveUrl } from "@/lib/queryClient";
 import type { ChallengeWithProgress, ChallengeLeaderboard, ChallengeParticipantStats } from "@shared/schema";
 import { haptic } from "@/lib/haptics";
 import { Input } from "@/components/ui/input";
@@ -70,7 +70,7 @@ function ChallengeLeaderboardSheet({
   const { data, isLoading } = useQuery<ChallengeLeaderboard>({
     queryKey: ["/api/challenges", challengeId, "leaderboard"],
     queryFn: () =>
-      fetch(`/api/challenges/${challengeId}/leaderboard`, { credentials: "include" }).then(r => r.json()),
+      fetch(resolveUrl(`/api/challenges/${challengeId}/leaderboard`), { credentials: "include" }).then(r => r.json()),
     staleTime: 15000,
     refetchInterval: 15000,
   });
@@ -475,7 +475,7 @@ function ChallengeCard({
   const { data: pendingInvites = [] } = useQuery<{ userId: number; username: string; displayName: string | null }[]>({
     queryKey: ["/api/challenges", challenge.id, "invited"],
     queryFn: async () => {
-      const res = await fetch(`/api/challenges/${challenge.id}/invited`, { credentials: "include" });
+      const res = await fetch(resolveUrl(`/api/challenges/${challenge.id}/invited`), { credentials: "include" });
       if (!res.ok) return [];
       return res.json();
     },
@@ -1545,7 +1545,7 @@ export default function ChallengesTab({
   const { data: challenges = [], isLoading } = useQuery<ChallengeWithProgress[]>({
     queryKey: ["/api/challenges"],
     queryFn: () =>
-      fetch(`/api/challenges?date=${localToday()}`, { credentials: "include" }).then(r => r.json()),
+      fetch(resolveUrl(`/api/challenges?date=${localToday()}`), { credentials: "include" }).then(r => r.json()),
     staleTime: 10000,
     refetchInterval: 15000, // Poll every 15 s so joins/accepts appear quickly
   });

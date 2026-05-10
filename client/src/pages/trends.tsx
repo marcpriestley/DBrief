@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TrendingUp, Sparkles, Loader2, Smile, Sun, Coffee, Moon } from "lucide-react";
 import AppLayout from "@/components/AppLayout";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, resolveUrl } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { DailyScore, UserMetric, AIInsight, DailyGoal, MoodCheckin } from "@shared/schema";
 import PerformancePatterns from "@/components/PerformancePatterns";
@@ -176,18 +176,18 @@ export default function TrendsEnhanced() {
 
   const { data: goalsRange = [] } = useQuery<DailyGoal[]>({
     queryKey: ["/api/daily-goals-range", goalsStartDate, goalsEndDate],
-    queryFn: () => fetch(`/api/daily-goals-range?startDate=${goalsStartDate}&endDate=${goalsEndDate}`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetch(resolveUrl(`/api/daily-goals-range?startDate=${goalsStartDate}&endDate=${goalsEndDate}`), { credentials: "include" }).then(r => r.json()),
   });
 
   const { data: moodCheckins = [] } = useQuery<MoodCheckin[]>({
     queryKey: ["/api/mood-checkins-range", goalsStartDate, goalsEndDate],
-    queryFn: () => fetch(`/api/mood-checkins-range?startDate=${goalsStartDate}&endDate=${goalsEndDate}`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetch(resolveUrl(`/api/mood-checkins-range?startDate=${goalsStartDate}&endDate=${goalsEndDate}`), { credentials: "include" }).then(r => r.json()),
   });
 
   const pointsDays = timeRange === "all" ? 365 : parseInt(timeRange);
   const { data: dailyPointsData = [] } = useQuery<{ date: string; points: number }[]>({
     queryKey: ["/api/me/daily-points", pointsDays],
-    queryFn: () => fetch(`/api/me/daily-points?days=${pointsDays}`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetch(resolveUrl(`/api/me/daily-points?days=${pointsDays}`), { credentials: "include" }).then(r => r.json()),
   });
 
   const { data: pointsSummary } = useQuery<{ points: number; weeklyPoints: number }>({

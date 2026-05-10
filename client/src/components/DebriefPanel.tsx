@@ -597,7 +597,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
   const { data: allDebriefs = [], isLoading } = useQuery<Debrief[]>({
     queryKey: ["/api/debriefs", selectedDate],
     queryFn: async () => {
-      const response = await fetch(`/api/debriefs/${selectedDate}`, { credentials: "include" });
+      const response = await fetch(resolveUrl(`/api/debriefs/${selectedDate}`), { credentials: "include" });
       if (!response.ok) return [];
       const data = await response.json();
       return Array.isArray(data) ? data : (data ? [data] : []);
@@ -830,7 +830,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     });
 
     try {
-      const response = await fetch(`/api/debriefs/${debrief.id}/respond`, {
+      const response = await fetch(resolveUrl(`/api/debriefs/${debrief.id}/respond`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -1062,7 +1062,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     tts.cancel();
 
     try {
-      const response = await fetch(`/api/debriefs/${debrief.id}/go-deeper`, {
+      const response = await fetch(resolveUrl(`/api/debriefs/${debrief.id}/go-deeper`), {
         method: "POST",
         credentials: "include",
       });
@@ -1298,7 +1298,7 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
               });
             }
             if (!thisCallMessageId) return; // ID never arrived — skip correction safely
-            const patchRes = await fetch(`/api/debriefs/${correctionDebriefId}/messages/${thisCallMessageId}/correct-text`, {
+            const patchRes = await fetch(resolveUrl(`/api/debriefs/${correctionDebriefId}/messages/${thisCallMessageId}/correct-text`), {
               method: "PATCH",
               headers: { "Content-Type": "application/json" },
               credentials: "include",
