@@ -221,6 +221,25 @@
       }
     })();
     </script>
+    <script>
+    // Catch ALL JS errors (including module load failures) and show them on
+    // screen instead of a blank white page. Works before React loads.
+    window.__dbriefErrors = [];
+    function showError(text) {
+      window.__dbriefErrors.push(text);
+      var d = document.createElement('div');
+      d.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:#8b0000;color:#fff;padding:16px;font:11px/1.5 monospace;white-space:pre-wrap;word-break:break-all;overflow-y:auto;z-index:9999999';
+      d.textContent = text;
+      document.body.appendChild(d);
+    }
+    window.onerror = function(msg, src, line, col, err) {
+      showError('JS ERROR\n' + msg + '\n' + (src||'') + ':' + (line||'') + '\n' + (err && err.stack ? err.stack : ''));
+    };
+    window.addEventListener('unhandledrejection', function(e) {
+      var r = e.reason;
+      showError('UNHANDLED PROMISE REJECTION\n' + (r && r.stack ? r.stack : String(r)));
+    });
+    </script>
     <script type="module" src="/src/main.tsx"></script>
     <script type="text/javascript" src="https://replit.com/public/js/replit-dev-banner.js"></script>
   </body>
