@@ -9,6 +9,16 @@ import { Browser } from "@capacitor/browser";
 import { App as CapApp } from "@capacitor/app";
 import { queryClient, resolveUrl } from "@/lib/queryClient";
 
+function getAuthTokenPayload(): { userId?: number; checkoutToken?: string } {
+  try {
+    const me = queryClient.getQueryData<any>(["/api/auth/me"]);
+    if (me?.id && me?.checkoutToken) {
+      return { userId: me.id, checkoutToken: me.checkoutToken };
+    }
+  } catch (_) {}
+  return {};
+}
+
 interface PaywallModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -50,11 +60,12 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
   const browserListenerRef = useRef<{ remove: () => void } | null>(null);
 
   async function _doCheckoutFetch(selectedPlan: Plan): Promise<string | null> {
+    const authPayload = getAuthTokenPayload();
     const r = await fetch(resolveUrl("/api/subscription/checkout"), {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ native: isNative, plan: selectedPlan }),
+      body: JSON.stringify({ native: isNative, plan: selectedPlan, ...authPayload }),
     });
     if (!r.ok) return null;
     const { url } = await r.json();

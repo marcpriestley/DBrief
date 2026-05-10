@@ -31,6 +31,27 @@ import { generateWeeklyReport, generatePerformancePatterns } from "./weekly-repo
 import { db } from "./db";
 import { eq, and, desc, gte } from "drizzle-orm";
 import { encrypt, decrypt } from "./encryption";
+import { createHmac } from "crypto";
+
+// ── Checkout token ─────────────────────────────────────────────────────────
+// A stateless, short-lived token included in /api/auth/me responses so that
+// native apps (Android/iOS) can authenticate the checkout request via the
+// request body instead of a session cookie (which Android WebView sometimes
+// fails to send cross-origin).
+// Valid for up to 2 hourly slots (~2 hours). No DB required.
+const _tokenSecret = process.env.SESSION_SECRET ?? "dbrief-session-secret-key";
+export function generateCheckoutToken(userId: number): string {
+  const slot = Math.floor(Date.now() / 3_600_000);
+  return createHmac("sha256", _tokenSecret).update(`${userId}:${slot}`).digest("hex");
+}
+export function verifyCheckoutToken(userId: number, token: string): boolean {
+  const slot = Math.floor(Date.now() / 3_600_000);
+  for (const s of [slot, slot - 1]) {
+    const expected = createHmac("sha256", _tokenSecret).update(`${userId}:${s}`).digest("hex");
+    if (expected === token) return true;
+  }
+  return false;
+}
 
 const openai = new OpenAI({ 
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -299,6 +320,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         subscriptionStatus: user.subscriptionStatus ?? 'free',
         isPremium: user.subscriptionStatus === 'premium' || user.subscriptionStatus === 'beta' || orgIsPremium,
         subscriptionCurrentPeriodEnd: user.subscriptionCurrentPeriodEnd ?? null,
+        checkoutToken: generateCheckoutToken(user.id),
         ...(orgInfo ? { orgId: orgInfo.orgId, orgRole: orgInfo.orgRole, orgName: orgInfo.orgName } : {}),
       });
     } catch (error) {
