@@ -223,9 +223,17 @@ export default function Welcome() {
     }
   };
 
+  // TEMP DEBUG — remove after Android fix
+  const _cap = (window as any).Capacitor;
+  const _debugInfo = `host:${window.location.hostname} | native:${_cap?.isNativePlatform?.()} | plat:${_cap?.getPlatform?.()} | checkNative:${isNativeBundle}`;
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-sm">
+      {/* TEMP DEBUG BANNER */}
+      <div style={{position:'fixed',top:0,left:0,right:0,background:'red',color:'white',padding:'6px 8px',fontSize:'10px',zIndex:99999,wordBreak:'break-all',lineHeight:'1.4'}}>
+        {_debugInfo}
+      </div>
+      <div className="w-full max-w-sm" style={{marginTop:40}}>
         <div className="text-center mb-8">
           <div className="w-14 h-14 rounded-2xl overflow-hidden mx-auto mb-4 shadow-lg shadow-primary/20">
             <img src="/dbrief-logo.jpeg" alt="DBrief App" className="w-full h-full object-cover" />
