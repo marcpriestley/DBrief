@@ -59,7 +59,7 @@ export default function OnboardingFlow({ username }: OnboardingFlowProps) {
     setHandleStatus("checking");
     debounceRef.current = setTimeout(async () => {
       try {
-        const res = await fetch(resolveUrl(`/api/users/check-handle?handle=${encodeURIComponent(raw)}`);
+        const res = await fetch(resolveUrl(`/api/users/check-handle?handle=${encodeURIComponent(raw)}`));
         const data = await res.json();
         setHandleStatus(data.available ? "available" : "taken");
       } catch {

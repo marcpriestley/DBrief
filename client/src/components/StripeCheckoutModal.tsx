@@ -16,7 +16,7 @@ let stripePromise: ReturnType<typeof loadStripe> | null = null;
 
 async function getStripe() {
   if (!stripePromise) {
-    const res = await fetch(resolveUrl("/api/subscription/publishable-key");
+    const res = await fetch(resolveUrl("/api/subscription/publishable-key"));
     const { publishableKey } = await res.json();
     stripePromise = loadStripe(publishableKey);
   }

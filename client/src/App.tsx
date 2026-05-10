@@ -125,7 +125,7 @@ function AuthenticatedRouter() {
         // call checkout-signal to instantly sync the subscription without waiting for webhook.
         const sessionId = params.get("session_id");
         if (sessionId) {
-          fetch(resolveUrl(`/api/subscription/checkout-signal?session_id=${encodeURIComponent(sessionId)}`).catch(() => {});
+          fetch(resolveUrl(`/api/subscription/checkout-signal?session_id=${encodeURIComponent(sessionId)}`)).catch(() => {});
         }
         queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
         queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
@@ -170,7 +170,7 @@ function AuthenticatedRouter() {
       // Immediately sync via session ID (no webhook wait).
       if (sessionId) {
         try {
-          await fetch(resolveUrl(`/api/subscription/checkout-signal?session_id=${encodeURIComponent(sessionId)}`);
+          await fetch(resolveUrl(`/api/subscription/checkout-signal?session_id=${encodeURIComponent(sessionId)}`));
         } catch (_) {}
       } else {
         try { await fetch(resolveUrl("/api/subscription/sync"), { method: "POST" }); } catch (_) {}

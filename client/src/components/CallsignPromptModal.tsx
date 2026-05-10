@@ -42,7 +42,7 @@ export default function CallsignPromptModal({ open, onClose }: { open: boolean; 
     setStatus("checking");
     const t = setTimeout(async () => {
       try {
-        const r = await fetch(resolveUrl(`/api/users/check-handle?handle=${encodeURIComponent(clean)}`);
+        const r = await fetch(resolveUrl(`/api/users/check-handle?handle=${encodeURIComponent(clean)}`));
         const { available } = await r.json();
         setStatus(available ? "available" : "taken");
       } catch { setStatus("idle"); }
