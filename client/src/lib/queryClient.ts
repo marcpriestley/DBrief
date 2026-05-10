@@ -1,41 +1,22 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
-// In the native Android/iOS bundle the Capacitor WebView serves local assets.
-// Relative API paths like /api/auth/login get intercepted by the native layer
-// and return index.html instead of JSON.
-//
-// We detect native context lazily on EVERY request (not once at module load)
-// so there are no race conditions with Capacitor bridge initialisation.
-// Two checks in order:
-//  1. Capacitor.isNativePlatform() — authoritative once the bridge has loaded
-//  2. hostname === "localhost" — reliable fallback (Capacitor Android serves
-//     from https://localhost when no server.url is set)
+// NATIVE_BUILD is baked in at compile time when building for Android/iOS.
+// Set VITE_NATIVE_BUILD=true in the environment before running `npm run build`
+// for a native Capacitor release.  Web builds leave this undefined/false.
+const IS_NATIVE_BUILD = import.meta.env.VITE_NATIVE_BUILD === "true";
 const NATIVE_API_BASE = "https://dbrief.replit.app";
 
+// Runtime fallback: still try to detect Capacitor at call time so that
+// hot-reloading dev mode works when served on a phone via a real IP.
 function checkNative(): boolean {
+  if (IS_NATIVE_BUILD) return true;
   if (typeof window === "undefined") return false;
   if ((window as any).Capacitor?.isNativePlatform?.() === true) return true;
   if (window.location.hostname === "localhost") return true;
   return false;
 }
 
-// Exported for components that read it at render time (after bridge loads)
-export const isNativeBundle = checkNative();
-
-// TEMPORARY DIAGNOSTIC — remove after Android debugging
-if (typeof window !== "undefined") {
-  setTimeout(() => {
-    const cap = (window as any).Capacitor;
-    const info = [
-      `hostname: ${window.location.hostname}`,
-      `href: ${window.location.href}`,
-      `isNative(): ${cap?.isNativePlatform?.()}`,
-      `checkNative: ${checkNative()}`,
-      `resolveUrl: ${resolveUrl("/api/auth/login")}`,
-    ].join("\n");
-    alert("DBrief Diag\n" + info);
-  }, 3000);
-}
+export const isNativeBundle = IS_NATIVE_BUILD || checkNative();
 
 function resolveUrl(url: string): string {
   if (url.startsWith("/") && checkNative()) {
