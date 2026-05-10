@@ -161,33 +161,35 @@ function AuthenticatedRouter() {
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
     let handle: { remove: () => void } | null = null;
-    CapApp.addListener("appUrlOpen", async (event) => {
-      if (!event.url.includes("checkout-done")) return;
-      let url: URL;
-      try { url = new URL(event.url); } catch (_) { return; }
-      const resultParam = url.searchParams.get("result");
-      const sessionId = url.searchParams.get("session_id");
-      // Immediately sync via session ID (no webhook wait).
-      if (sessionId) {
-        try {
-          await fetch(resolveUrl(`/api/subscription/checkout-signal?session_id=${encodeURIComponent(sessionId)}`));
-        } catch (_) {}
-      } else {
-        try { await fetch(resolveUrl("/api/subscription/sync"), { method: "POST" }); } catch (_) {}
-      }
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
-      if (resultParam === "success") {
-        // Small delay so the invalidated query refetches before we show the toast.
-        await new Promise(r => setTimeout(r, 600));
-        try {
-          const me = await fetch(resolveUrl("/api/auth/me")).then(r => r.json());
-          if (me.subscriptionStatus === "premium" || me.subscriptionStatus === "beta") {
-            toast({ title: "Welcome to DBrief App Premium", description: "Your features are now unlocked. Full throttle." });
-          }
-        } catch (_) {}
-      }
-    }).then(h => { handle = h; });
+    try {
+      CapApp.addListener("appUrlOpen", async (event) => {
+        if (!event.url.includes("checkout-done")) return;
+        let url: URL;
+        try { url = new URL(event.url); } catch (_) { return; }
+        const resultParam = url.searchParams.get("result");
+        const sessionId = url.searchParams.get("session_id");
+        if (sessionId) {
+          try {
+            await fetch(resolveUrl(`/api/subscription/checkout-signal?session_id=${encodeURIComponent(sessionId)}`));
+          } catch (_) {}
+        } else {
+          try { await fetch(resolveUrl("/api/subscription/sync"), { method: "POST" }); } catch (_) {}
+        }
+        queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
+        if (resultParam === "success") {
+          await new Promise(r => setTimeout(r, 600));
+          try {
+            const me = await fetch(resolveUrl("/api/auth/me")).then(r => r.json());
+            if (me.subscriptionStatus === "premium" || me.subscriptionStatus === "beta") {
+              toast({ title: "Welcome to DBrief App Premium", description: "Your features are now unlocked. Full throttle." });
+            }
+          } catch (_) {}
+        }
+      }).then(h => { handle = h; }).catch(() => {});
+    } catch (_) {
+      // App plugin not registered in this native build — deep-link handling unavailable
+    }
     return () => { handle?.remove(); };
   }, []);
 

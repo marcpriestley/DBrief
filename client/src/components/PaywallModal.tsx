@@ -110,25 +110,25 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
   useEffect(() => {
     if (!isOpen || !isNative) return;
     let listener: { remove: () => void } | null = null;
-    CapApp.addListener("appUrlOpen", (event) => {
-      if (event.url.includes("checkout-done") && event.url.includes("result=success")) {
-        listener?.remove();
-        stopPolling();
-        browserListenerRef.current?.remove();
-        browserListenerRef.current = null;
-        setTapped(false);
-        // Optimistic update — makes isPremium: true immediately so no
-        // downstream component re-opens the paywall before the refetch lands.
-        queryClient.setQueryData(["/api/auth/me"], (old: any) =>
-          old ? { ...old, isPremium: true, subscriptionStatus: "premium" } : old
-        );
-        onClose();
-        // Full refetch runs in the background to get the authoritative value.
-        // Toast is shown by App.tsx's appUrlOpen handler (avoids duplicates).
-        queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-        queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
-      }
-    }).then(h => { listener = h; });
+    try {
+      CapApp.addListener("appUrlOpen", (event) => {
+        if (event.url.includes("checkout-done") && event.url.includes("result=success")) {
+          listener?.remove();
+          stopPolling();
+          browserListenerRef.current?.remove();
+          browserListenerRef.current = null;
+          setTapped(false);
+          queryClient.setQueryData(["/api/auth/me"], (old: any) =>
+            old ? { ...old, isPremium: true, subscriptionStatus: "premium" } : old
+          );
+          onClose();
+          queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
+        }
+      }).then(h => { listener = h; }).catch(() => {});
+    } catch (_) {
+      // App plugin not registered in this native build — deep-link handling unavailable
+    }
     return () => { listener?.remove(); };
   }, [isOpen, isNative]);
 
