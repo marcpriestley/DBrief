@@ -49,13 +49,16 @@ export default function Welcome() {
   const [, setLocation] = useLocation();
 
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
-  // Use Capacitor.getPlatform() directly — reliable regardless of whether the
-  // WebView loads from localhost (local bundle) or dbrief.replit.app (server.url).
-  // isNativeBundle can be false when server.url is set and hostname != localhost.
-  const _platform = Capacitor.getPlatform(); // 'android' | 'ios' | 'web'
-  const isNative = _platform !== 'web';
-  const isIOS = _platform === 'ios';
-  const isAndroid = _platform === 'android';
+  // Platform detection: use both Capacitor.getPlatform() AND navigator.userAgent.
+  // When server.url is set in capacitor.config, the WebView loads a remote URL and
+  // Capacitor's bridge may not inject window.Capacitor properly — so getPlatform()
+  // can return 'web' even on a real Android/iOS device. The UA is always reliable.
+  const _capPlatform = Capacitor.getPlatform(); // 'android' | 'ios' | 'web'
+  const _uaAndroid = /Android/i.test(navigator.userAgent);
+  const _uaIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !_uaAndroid;
+  const isNative = _capPlatform !== 'web' || _uaAndroid || _uaIOS;
+  const isIOS = _capPlatform === 'ios' || _uaIOS;
+  const isAndroid = _capPlatform === 'android' || _uaAndroid;
 
   const authMutation = useMutation({
     mutationFn: async (data: { email: string; password: string; isLogin: boolean }) => {
