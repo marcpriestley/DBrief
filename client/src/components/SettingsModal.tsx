@@ -18,7 +18,7 @@ import { apiRequest, resolveUrl } from "@/lib/queryClient";
 import {
   Bell, BellOff, AlertCircle, CheckCircle2, Heart, Plus, Check, Info,
   User, Map, RefreshCw, KeyRound, ChevronDown, Sun, Moon, Trash2,
-  XCircle, Loader2, Watch, Lock,
+  XCircle, Loader2, Watch, Lock, CreditCard, AlertTriangle,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { haptic } from "@/lib/haptics";
@@ -384,6 +384,36 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     try { localStorage.setItem("dbrief_has_wearable", v ? "true" : "false"); } catch {}
   };
 
+  // Subscription management
+  const { data: me } = useQuery<any>({ queryKey: ["/api/auth/me"], enabled: isOpen });
+  const { data: subDetails } = useQuery<{
+    plan: 'monthly' | 'annual' | null;
+    periodStart: string | null;
+    periodEnd: string | null;
+    cancelPreview: { monthsUsed: number; refundPence: number; refundFormatted: string; noRefund: boolean } | null;
+  }>({
+    queryKey: ["/api/subscription/details"],
+    enabled: isOpen && (me?.isPremium === true),
+    staleTime: 60_000,
+  });
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [cancelConfirmed, setCancelConfirmed] = useState(false);
+  const cancelMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/subscription/cancel"),
+    onSuccess: async (res) => {
+      const data = await res.json();
+      setCancelDialogOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/subscription/details"] });
+      if (data.refundIssued) {
+        toast({ title: "Subscription cancelled", description: `Refund of ${data.refundIssued.formatted} issued to your original payment method within 5–10 business days.` });
+      } else {
+        toast({ title: "Subscription cancelled", description: "Your access continues until the end of the current period." });
+      }
+    },
+    onError: () => toast({ title: "Error", description: "Could not cancel subscription. Please try again.", variant: "destructive" }),
+  });
+
   // Danger zone — account deletion
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
@@ -748,6 +778,112 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   <ProfileQuestionsSettings ref={profileRef} />
                 </div>
               </SettingsSection>
+
+              {/* ── Subscription ─────────────────────────────── */}
+              {me?.isPremium && (
+                <SettingsSection title="Subscription" icon={<CreditCard className="h-4 w-4" />}>
+                  <div className="space-y-3">
+                    {/* Plan badge */}
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-semibold">
+                          DBrief Premium
+                          {subDetails?.plan && (
+                            <span className="ml-2 text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">
+                              {subDetails.plan === 'annual' ? 'Annual' : 'Monthly'}
+                            </span>
+                          )}
+                        </p>
+                        {subDetails?.periodEnd && (
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            {subDetails.plan === 'monthly' && subDetails.cancelPreview === null
+                              ? `Renews ${new Date(subDetails.periodEnd).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`
+                              : `Active until ${new Date(subDetails.periodEnd).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`}
+                          </p>
+                        )}
+                      </div>
+                      <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0" />
+                    </div>
+
+                    {/* Annual refund policy note */}
+                    {subDetails?.plan === 'annual' && (
+                      <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2.5">
+                        <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed">
+                          The annual discount applies when you complete all 12 months. If you cancel early, a refund is calculated based on months remaining at the monthly rate (£5.99/mo).
+                        </p>
+                        {subDetails.cancelPreview && !subDetails.cancelPreview.noRefund && (
+                          <p className="text-[11px] font-semibold text-amber-800 dark:text-amber-300 mt-1">
+                            Cancel now → refund of {subDetails.cancelPreview.refundFormatted}
+                            <span className="font-normal text-amber-600 dark:text-amber-400"> ({subDetails.cancelPreview.monthsUsed} month{subDetails.cancelPreview.monthsUsed !== 1 ? 's' : ''} used)</span>
+                          </p>
+                        )}
+                        {subDetails.cancelPreview?.noRefund && (
+                          <p className="text-[11px] font-semibold text-amber-800 dark:text-amber-300 mt-1">
+                            You've used {subDetails.cancelPreview.monthsUsed} months — no refund remaining.
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Actions */}
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 text-xs"
+                        onClick={() => {
+                          haptic("select");
+                          setCancelDialogOpen(true);
+                          setCancelConfirmed(false);
+                        }}
+                      >
+                        Cancel subscription
+                      </Button>
+                    </div>
+
+                    {/* Cancel confirmation dialog */}
+                    {cancelDialogOpen && (
+                      <div className="rounded-xl border border-border bg-muted/40 p-4 space-y-3">
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
+                          <div className="space-y-1">
+                            <p className="text-sm font-semibold text-destructive">Confirm cancellation</p>
+                            {subDetails?.plan === 'annual' && subDetails.cancelPreview ? (
+                              subDetails.cancelPreview.noRefund ? (
+                                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                                  You've used {subDetails.cancelPreview.monthsUsed} months of your annual plan — the full £49.99 has been earned at the monthly rate. No refund is due.
+                                </p>
+                              ) : (
+                                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                                  You'll receive a <strong>{subDetails.cancelPreview.refundFormatted}</strong> refund — the difference between £49.99 paid and {subDetails.cancelPreview.monthsUsed} month{subDetails.cancelPreview.monthsUsed !== 1 ? 's' : ''} at £5.99/mo. Allow 5–10 business days.
+                                </p>
+                              )
+                            ) : (
+                              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                                Your premium access continues until the end of the current billing period. No further charges will be made.
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => setCancelDialogOpen(false)}>
+                            Keep premium
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            className="flex-1 text-xs"
+                            disabled={cancelMutation.isPending}
+                            onClick={() => { haptic("heavy"); cancelMutation.mutate(); }}
+                          >
+                            {cancelMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Yes, cancel"}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </SettingsSection>
+              )}
 
               {/* ── Notifications ────────────────────────────── */}
               <SettingsSection title="Notifications & Reminders" icon={<Bell className="h-4 w-4" />}>
