@@ -49,20 +49,50 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const browserListenerRef = useRef<{ remove: () => void } | null>(null);
 
-  function fetchCheckoutUrl(selectedPlan: Plan) {
-    setFetchError(false);
-    setLinkLoading(true);
-    setCheckoutUrl(null);
-    fetch(resolveUrl("/api/subscription/checkout"), {
+  async function _doCheckoutFetch(selectedPlan: Plan): Promise<string | null> {
+    const r = await fetch(resolveUrl("/api/subscription/checkout"), {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ native: isNative, plan: selectedPlan }),
-    })
-      .then(r => r.json())
-      .then(({ url }) => { if (url) setCheckoutUrl(url); else setFetchError(true); })
-      .catch(() => setFetchError(true))
-      .finally(() => setLinkLoading(false));
+    });
+    if (!r.ok) return null;
+    const { url } = await r.json();
+    return url ?? null;
+  }
+
+  function fetchCheckoutUrl(selectedPlan: Plan) {
+    setFetchError(false);
+    setLinkLoading(true);
+    setCheckoutUrl(null);
+
+    // Android WebView's cookie store for cross-origin session cookies can take a moment
+    // to become available after login. Retry silently up to 3 times before surfacing
+    // an error to the user.
+    const delays = [0, 1200, 2500];
+    let attempt = 0;
+
+    const tryFetch = async () => {
+      const delay = delays[attempt] ?? 0;
+      if (delay > 0) await new Promise(res => setTimeout(res, delay));
+      try {
+        const url = await _doCheckoutFetch(selectedPlan);
+        if (url) {
+          setCheckoutUrl(url);
+          setLinkLoading(false);
+          return;
+        }
+      } catch (_) {}
+      attempt++;
+      if (attempt < delays.length) {
+        tryFetch();
+      } else {
+        setFetchError(true);
+        setLinkLoading(false);
+      }
+    };
+
+    tryFetch();
   }
 
   useEffect(() => {
