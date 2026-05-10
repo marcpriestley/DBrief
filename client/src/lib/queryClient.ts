@@ -8,10 +8,14 @@ const NATIVE_API_BASE = "https://dbrief.replit.app";
 
 // Runtime fallback: still try to detect Capacitor at call time so that
 // hot-reloading dev mode works when served on a phone via a real IP.
+// NOTE: when server.url is set in capacitor.config.ts the WebView loads from
+// dbrief.replit.app (hostname != localhost), so we also check Capacitor.getPlatform().
 function checkNative(): boolean {
   if (IS_NATIVE_BUILD) return true;
   if (typeof window === "undefined") return false;
   if ((window as any).Capacitor?.isNativePlatform?.() === true) return true;
+  const platform = (window as any).Capacitor?.getPlatform?.();
+  if (platform === "android" || platform === "ios") return true;
   if (window.location.hostname === "localhost") return true;
   return false;
 }

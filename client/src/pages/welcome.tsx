@@ -49,9 +49,13 @@ export default function Welcome() {
   const [, setLocation] = useLocation();
 
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
-  const isNative = isNativeBundle;
-  const isIOS = isNativeBundle && Capacitor.getPlatform() === 'ios';
-  const isAndroid = isNativeBundle && Capacitor.getPlatform() !== 'ios';
+  // Use Capacitor.getPlatform() directly — reliable regardless of whether the
+  // WebView loads from localhost (local bundle) or dbrief.replit.app (server.url).
+  // isNativeBundle can be false when server.url is set and hostname != localhost.
+  const _platform = Capacitor.getPlatform(); // 'android' | 'ios' | 'web'
+  const isNative = _platform !== 'web';
+  const isIOS = _platform === 'ios';
+  const isAndroid = _platform === 'android';
 
   const authMutation = useMutation({
     mutationFn: async (data: { email: string; password: string; isLogin: boolean }) => {
