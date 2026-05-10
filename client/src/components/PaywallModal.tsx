@@ -7,13 +7,15 @@ import { haptic } from "@/lib/haptics";
 import { Capacitor } from "@capacitor/core";
 import { Browser } from "@capacitor/browser";
 import { App as CapApp } from "@capacitor/app";
-import { queryClient, resolveUrl} from "@/lib/queryClient";
+import { queryClient, resolveUrl } from "@/lib/queryClient";
 
 interface PaywallModalProps {
   isOpen: boolean;
   onClose: () => void;
   featureName?: string;
 }
+
+type Plan = "monthly" | "annual";
 
 const PREMIUM_FEATURES = [
   { icon: CircleDot, label: "Unlimited Metric Tracking", desc: "Track as many performance metrics as you need — free accounts are capped at 3" },
@@ -25,10 +27,20 @@ const PREMIUM_FEATURES = [
   { icon: Zap,       label: "Live Voice Debrief",        desc: "Real-time AI conversation — coming soon" },
 ];
 
+function getPaymentMethods(): string {
+  const ua = navigator.userAgent.toLowerCase();
+  const isAndroid = ua.includes("android");
+  const isIOS = /iphone|ipad|ipod/.test(ua);
+  if (isAndroid) return "Card · Google Pay · and more";
+  if (isIOS) return "Apple Pay · Card · Klarna · and more";
+  return "Card · Apple Pay · Google Pay · and more";
+}
+
 export default function PaywallModal({ isOpen, onClose, featureName }: PaywallModalProps) {
   const { toast } = useToast();
   const isNative = Capacitor.isNativePlatform();
 
+  const [plan, setPlan] = useState<Plan>("monthly");
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
   const [linkLoading, setLinkLoading] = useState(false);
   const [fetchError, setFetchError] = useState(false);
@@ -37,26 +49,35 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const browserListenerRef = useRef<{ remove: () => void } | null>(null);
 
-  // Fetch a personalised checkout session URL each time the modal opens.
+  function fetchCheckoutUrl(selectedPlan: Plan) {
+    setFetchError(false);
+    setLinkLoading(true);
+    setCheckoutUrl(null);
+    fetch(resolveUrl("/api/subscription/checkout"), {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ native: isNative, plan: selectedPlan }),
+    })
+      .then(r => r.json())
+      .then(({ url }) => { if (url) setCheckoutUrl(url); else setFetchError(true); })
+      .catch(() => setFetchError(true))
+      .finally(() => setLinkLoading(false));
+  }
+
   useEffect(() => {
     if (!isOpen) return;
-    setLinkLoading(true);
     setCheckoutUrl(null);
     setFetchError(false);
     setTapped(false);
-    fetch(resolveUrl("/api/subscription/checkout"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ native: isNative }),
-    })
-      .then(r => r.json())
-      .then(({ url }) => {
-        if (url) setCheckoutUrl(url);
-        else setFetchError(true);
-      })
-      .catch(() => setFetchError(true))
-      .finally(() => setLinkLoading(false));
-  }, [isOpen, isNative]);
+    fetchCheckoutUrl(plan);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setTapped(false);
+    fetchCheckoutUrl(plan);
+  }, [plan]);
 
   function stopPolling() {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
@@ -67,16 +88,11 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
     browserListenerRef.current?.remove();
     browserListenerRef.current = null;
     setTapped(false);
-    // Optimistically update the cache BEFORE closing the modal so that any
-    // premium-gated component that renders immediately after onClose() sees
-    // isPremium: true and does NOT re-open the paywall.
     queryClient.setQueryData(["/api/auth/me"], (old: any) =>
       old ? { ...old, isPremium: true, subscriptionStatus: "premium" } : old
     );
-    // Close the modal and dismiss the SFSafariViewController.
     onClose();
     Browser.close().catch(() => {});
-    // Then kick off a real refetch so the full user object is up-to-date.
     queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
     queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
     toast({
@@ -87,15 +103,11 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
 
   function startPolling() {
     stopPolling();
-    // Poll every 3 s for up to 10 minutes.
-    // The checkout-return page calls /api/subscription/checkout-signal which
-    // instantly marks the user premium in the DB — so the first poll after
-    // payment confirmation will detect it, typically within 3 seconds.
     const deadline = Date.now() + 10 * 60 * 1000;
     pollRef.current = setInterval(async () => {
       if (Date.now() > deadline) { stopPolling(); setTapped(false); return; }
       try {
-        const me = await fetch(resolveUrl("/api/auth/me")).then(r => r.json());
+        const me = await fetch(resolveUrl("/api/auth/me"), { credentials: "include" }).then(r => r.json());
         if (me.subscriptionStatus === "premium" || me.subscriptionStatus === "beta") {
           handlePremiumDetected();
         }
@@ -103,10 +115,6 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
     }, 3000);
   }
 
-  // When the dbrief:// URL scheme fires (iOS intercepts the checkout-return
-  // redirect), the system closes SFSafariViewController and fires appUrlOpen.
-  // We listen here so the modal closes immediately on that event, before
-  // App.tsx's handler even runs — no polling tick needed.
   useEffect(() => {
     if (!isOpen || !isNative) return;
     let listener: { remove: () => void } | null = null;
@@ -126,9 +134,7 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
           queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
         }
       }).then(h => { listener = h; }).catch(() => {});
-    } catch (_) {
-      // App plugin not registered in this native build — deep-link handling unavailable
-    }
+    } catch (_) {}
     return () => { listener?.remove(); };
   }, [isOpen, isNative]);
 
@@ -147,20 +153,10 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
     };
   }, []);
 
-  // ── Native checkout ───────────────────────────────────────────────────────
-  // Opens the full Stripe Checkout in SFSafariViewController (Apple Pay,
-  // Klarna, card). The checkout-return page calls /api/subscription/checkout-signal
-  // which syncs the subscription instantly, so the background poll detects
-  // premium within 3 s and calls Browser.close() to return the user to the app.
-  // Once the dbrief:// URL scheme is registered in Xcode, the checkout-return
-  // page redirects to dbrief://checkout-done and iOS closes the browser
-  // automatically — no polling or Browser.close() needed at all.
   async function handleNativeCheckout() {
     if (!checkoutUrl || tapped) return;
     haptic("medium");
     setTapped(true);
-    // Mark a pending subscription in localStorage so that if WKWebView is
-    // killed/restarted while Safari is open, App.tsx will sync on next launch.
     try { localStorage.setItem("dbrief_sub_pending", "1"); } catch (_) {}
     browserListenerRef.current?.remove();
     try {
@@ -169,16 +165,10 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
         browserListenerRef.current = null;
         stopPolling();
         setTapped(false);
-        // User closed the in-app browser (tapped native "Done" button, or the
-        // deep-link wasn't registered so auto-return didn't fire).
-        // checkout-return page calls checkout-signal BEFORE showing the "Done"
-        // hint, so the DB should already be updated. Retry up to 4 times
-        // (0 s, 2 s, 4 s, 8 s) to handle the race where Done is tapped before
-        // checkout-signal has finished writing to the DB.
         const checkPremium = async (): Promise<boolean> => {
           try {
-            await fetch(resolveUrl("/api/subscription/sync"), { method: "POST" }).catch(() => {});
-            const me = await fetch(resolveUrl("/api/auth/me")).then(r => r.json());
+            await fetch(resolveUrl("/api/subscription/sync"), { method: "POST", credentials: "include" }).catch(() => {});
+            const me = await fetch(resolveUrl("/api/auth/me"), { credentials: "include" }).then(r => r.json());
             if (me.subscriptionStatus === "premium" || me.subscriptionStatus === "beta") {
               try { localStorage.removeItem("dbrief_sub_pending"); } catch (_) {}
               handlePremiumDetected();
@@ -188,8 +178,6 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
           return false;
         };
         if (!(await checkPremium())) {
-          // Retry with back-off — covers the race where Done fires before
-          // the checkout-signal API call has finished updating the DB.
           const delays = [2000, 4000, 8000];
           for (const delay of delays) {
             await new Promise(r => setTimeout(r, delay));
@@ -206,7 +194,6 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
     }
   }
 
-  // ── Web checkout ──────────────────────────────────────────────────────────
   async function handleWebSubscribe() {
     haptic("medium");
     if (!checkoutUrl || tapped) return;
@@ -215,32 +202,21 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
     window.location.href = checkoutUrl;
   }
 
-  function fetchCheckoutUrl() {
-    setFetchError(false);
-    setLinkLoading(true);
-    setCheckoutUrl(null);
-    fetch(resolveUrl("/api/subscription/checkout"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ native: isNative }),
-    })
-      .then(r => r.json())
-      .then(({ url }) => { if (url) setCheckoutUrl(url); else setFetchError(true); })
-      .catch(() => setFetchError(true))
-      .finally(() => setLinkLoading(false));
-  }
-
   function renderCTA() {
     if (fetchError) {
       return (
         <Button
           className="w-full h-12 text-base font-bold rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg"
-          onClick={fetchCheckoutUrl}
+          onClick={() => fetchCheckoutUrl(plan)}
         >
           Tap to retry
         </Button>
       );
     }
+    const label = plan === "annual"
+      ? (linkLoading ? "Loading…" : tapped ? "Opening checkout…" : "Unlock Premium — £49.99 / year")
+      : (linkLoading ? "Loading…" : tapped ? "Opening checkout…" : "Unlock Premium — £5.99 / month");
+
     if (isNative) {
       return (
         <Button
@@ -248,7 +224,7 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
           onClick={handleNativeCheckout}
           disabled={linkLoading || !checkoutUrl || tapped}
         >
-          {linkLoading ? "Loading…" : tapped ? "Opening checkout…" : "Unlock Premium — £5.99 / month"}
+          {label}
         </Button>
       );
     }
@@ -258,7 +234,7 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
         onClick={handleWebSubscribe}
         disabled={tapped || linkLoading || !checkoutUrl}
       >
-        {tapped || linkLoading ? "Opening checkout…" : "Unlock Premium — £5.99 / month"}
+        {label}
       </Button>
     );
   }
@@ -314,12 +290,50 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
                   </span>
                 </div>
 
-                <div className="mt-4 flex items-end justify-center gap-1">
-                  <span className="text-4xl font-black text-white leading-none">£5.99</span>
-                  <span className="text-sm text-amber-200 mb-1">/ month</span>
+                {/* Plan toggle */}
+                <div className="mt-4 flex items-center justify-center gap-2">
+                  <button
+                    onClick={() => setPlan("monthly")}
+                    className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${
+                      plan === "monthly"
+                        ? "bg-white text-amber-900"
+                        : "bg-white/20 text-amber-100 hover:bg-white/30"
+                    }`}
+                  >
+                    Monthly
+                  </button>
+                  <button
+                    onClick={() => setPlan("annual")}
+                    className={`relative px-4 py-1.5 rounded-full text-sm font-bold transition-all ${
+                      plan === "annual"
+                        ? "bg-white text-amber-900"
+                        : "bg-white/20 text-amber-100 hover:bg-white/30"
+                    }`}
+                  >
+                    Annual
+                    <span className="absolute -top-2 -right-2 bg-green-400 text-green-900 text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wide">
+                      -30%
+                    </span>
+                  </button>
                 </div>
 
-                <p className="mt-1.5 text-xs text-amber-200/70">Cancel anytime · No minimum term</p>
+                {plan === "monthly" ? (
+                  <div className="mt-3 flex items-end justify-center gap-1">
+                    <span className="text-4xl font-black text-white leading-none">£5.99</span>
+                    <span className="text-sm text-amber-200 mb-1">/ month</span>
+                  </div>
+                ) : (
+                  <div className="mt-3 flex items-end justify-center gap-1">
+                    <span className="text-4xl font-black text-white leading-none">£49.99</span>
+                    <span className="text-sm text-amber-200 mb-1">/ year</span>
+                  </div>
+                )}
+
+                <p className="mt-1.5 text-xs text-amber-200/70">
+                  {plan === "annual"
+                    ? "Equivalent to £4.17/month · Save ~30% · Cancel anytime"
+                    : "Cancel anytime · No minimum term"}
+                </p>
               </div>
 
               {/* Features list */}
@@ -348,7 +362,7 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
               >
                 {renderCTA()}
                 <p className="text-center text-[11px] text-muted-foreground/60 mt-2">
-                  Apple Pay · Card · Klarna · and more
+                  {getPaymentMethods()}
                 </p>
                 <button
                   onClick={onClose}
