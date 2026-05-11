@@ -79,10 +79,11 @@ export default function GoalsSection({ selectedDate, tomorrowMode = false }: Goa
   // Session-only guard so the celebration fires once per completion streak per session
   const celebratedThisSessionRef = useRef<boolean>(false);
 
-  const { data: goals = [], isLoading } = useQuery<DailyGoal[]>({
+  const { data: _goalsRaw, isLoading } = useQuery<DailyGoal[]>({
     queryKey: ["/api/daily-goals", selectedDate],
     queryFn: () => fetch(resolveUrl(`/api/daily-goals/${selectedDate}`), { credentials: "include", cache: "no-store" }).then(r => r.json()),
   });
+  const goals: DailyGoal[] = Array.isArray(_goalsRaw) ? _goalsRaw : [];
 
   const { data: templates = [] } = useQuery<GoalTemplate[]>({
     queryKey: ["/api/goal-templates"],
