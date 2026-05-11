@@ -10,6 +10,18 @@ import { App as CapApp } from "@capacitor/app";
 import { queryClient, resolveUrl } from "@/lib/queryClient";
 
 function getAuthTokenPayload(): { userId?: number; checkoutToken?: string } {
+  // Primary: read from localStorage — survives Android cross-origin cookie blocks.
+  // The token is written there by App.tsx whenever /api/auth/me succeeds.
+  try {
+    const stored = localStorage.getItem("dbrief_checkout_auth");
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (parsed?.userId && parsed?.checkoutToken) {
+        return { userId: parsed.userId, checkoutToken: parsed.checkoutToken };
+      }
+    }
+  } catch (_) {}
+  // Fallback: React Query in-memory cache (web).
   try {
     const me = queryClient.getQueryData<any>(["/api/auth/me"]);
     if (me?.id && me?.checkoutToken) {

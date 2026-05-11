@@ -89,6 +89,16 @@ function AuthenticatedRouter() {
     staleTime: 5 * 60 * 1000,
   });
 
+  // Persist checkout auth token to localStorage so Android can include it in
+  // checkout POST bodies even when cross-origin session cookies aren't forwarded.
+  useEffect(() => {
+    if (user?.id && user?.checkoutToken) {
+      try {
+        localStorage.setItem("dbrief_checkout_auth", JSON.stringify({ userId: user.id, checkoutToken: user.checkoutToken }));
+      } catch (_) {}
+    }
+  }, [user?.id, user?.checkoutToken]);
+
   // Once per session (debounced), sync subscription state from Stripe.
   // This heals users whose status is out of sync (e.g. paid via payment link before
   // the checkout-session fix, or missed webhook). Runs silently in the background.
