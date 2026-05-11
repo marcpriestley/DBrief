@@ -698,12 +698,24 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
       ttsFirstSentenceRef.current = 0;
 
       const reader = response.body?.getReader();
-      if (!reader) throw new Error("No stream");
+      if (!reader) {
+        // Android WebView doesn't expose ReadableStream — the debrief was
+        // created server-side; query invalidation in onSuccess will load it.
+        return null;
+      }
       const decoder = new TextDecoder();
       let accumulated = "";
 
       outer: while (true) {
-        const { done, value } = await reader.read();
+        let done: boolean, value: Uint8Array | undefined;
+        try {
+          ({ done, value } = await reader.read());
+        } catch {
+          // Android WebView can drop the SSE stream mid-read — the debrief
+          // record is already saved server-side, refetch will load it.
+          reader.cancel().catch(() => {});
+          break;
+        }
         if (done) break;
         const chunk = decoder.decode(value, { stream: true });
         for (const line of chunk.split("\n")) {

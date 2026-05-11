@@ -83,7 +83,10 @@
         // 28 dp on Samsung high-DPI screens).
         if (isAndroid) {
           saibTopFallback = '28px';
-          saibFallback    = '0px';
+          // 16px covers the gesture-nav indicator; env() will return the real
+          // value (≥ 16px) on devices with 3-button navigation if the WebView
+          // supports it — max() picks the larger of the two.
+          saibFallback    = '16px';
         }
 
         // max(env(), fallback): on native Capacitor where env()=0 this resolves

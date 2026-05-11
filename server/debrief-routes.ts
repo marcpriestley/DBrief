@@ -635,6 +635,7 @@ export function registerDebriefRoutes(app: Express): void {
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
+      res.setHeader("X-Accel-Buffering", "no"); // disable nginx proxy buffering for SSE
       // Send debriefId first so the client can reference it
       res.write(`data: ${JSON.stringify({ debriefId: debrief.id })}\n\n`);
 
@@ -845,6 +846,7 @@ export function registerDebriefRoutes(app: Express): void {
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
+      res.setHeader("X-Accel-Buffering", "no"); // disable nginx proxy buffering for SSE
 
       // Emit the user message ID immediately so the client can target it for
       // Whisper correction without relying on "last user message" heuristics.
@@ -1314,6 +1316,7 @@ export function registerDebriefRoutes(app: Express): void {
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
+      res.setHeader("X-Accel-Buffering", "no"); // disable nginx proxy buffering for SSE
 
       const stream = await openai.chat.completions.create({
         model: "gpt-4o",

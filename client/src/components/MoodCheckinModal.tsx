@@ -94,6 +94,7 @@ export default function MoodCheckinModal({ open, onClose }: MoodCheckinModalProp
       {open && (
         <div
           className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+          style={{ touchAction: 'none' }}
         >
           <motion.div
             className="fixed inset-0 bg-black/50"

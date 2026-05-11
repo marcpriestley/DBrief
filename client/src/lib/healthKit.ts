@@ -203,10 +203,17 @@ export async function requestHealthPermissions(): Promise<HealthAuthResult> {
 
 /** Android only: open Health Connect in Play Store so user can install it */
 export async function showHealthConnectInPlayStore(): Promise<void> {
+  const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.google.android.apps.healthdata";
   try {
     await (Health as any).showHealthConnectInPlayStore();
   } catch (e) {
-    console.warn("[Health] showHealthConnectInPlayStore failed:", e);
+    console.warn("[Health] showHealthConnectInPlayStore failed, using browser fallback:", e);
+    try {
+      const { Browser } = await import("@capacitor/browser");
+      await Browser.open({ url: PLAY_STORE_URL });
+    } catch {
+      window.open(PLAY_STORE_URL, "_blank");
+    }
   }
 }
 
