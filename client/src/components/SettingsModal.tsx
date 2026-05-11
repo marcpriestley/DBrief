@@ -642,6 +642,22 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       const yesterday = localDateStr(new Date(now.getTime() - 86400000));
       const twoDaysAgo = localDateStr(new Date(now.getTime() - 2 * 86400000));
       const enabledNames = userMetrics.filter(m => m.isActive).map(m => m.name);
+
+      // Guard: if none of the active metrics are Health-compatible, skip the
+      // network round-trip and give the user a clear action to take instead.
+      const syncableList = getHealthSyncableMetrics();
+      const hasSyncableMetric = enabledNames.some(n => syncableList.includes(n));
+      if (!hasSyncableMetric) {
+        setHealthSyncing(false);
+        const label = isNativeAndroid() ? "Health Connect" : "Apple Health";
+        toast({
+          title: `No ${label} metrics added`,
+          description: `Tap a metric in the ${label} section below to add it, then sync.`,
+          variant: "destructive",
+        });
+        return;
+      }
+
       const [r1, r2, r3] = await Promise.all([
         syncHealthData(today, enabledNames),
         syncHealthData(yesterday, enabledNames),
@@ -654,7 +670,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       if (total === 0) {
         const hint = isNativeAndroid()
           ? "No data found for the past 3 days. Make sure Health Connect → DBrief App has all permission categories enabled."
-          : "No data found for the past 3 days. Make sure your Apple Watch or wearable has synced to Apple Health, and that DBrief has access in iPhone Settings → Privacy & Security → Health.";
+          : "No data found for the past 3 days. Make sure your Apple Watch or wearable has synced, and DBrief has full access in iPhone Settings → Privacy & Security → Health.";
         toast({ title: "Nothing synced", description: hint, variant: "destructive" });
       } else {
         toast({ title: "Sync complete", description: `Updated ${total} health reading${total !== 1 ? "s" : ""}.` });

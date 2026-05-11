@@ -638,6 +638,9 @@ export function registerDebriefRoutes(app: Express): void {
       res.setHeader("X-Accel-Buffering", "no"); // disable nginx proxy buffering for SSE
       // Send debriefId first so the client can reference it
       res.write(`data: ${JSON.stringify({ debriefId: debrief.id })}\n\n`);
+      // Heartbeat: Android WebView drops idle SSE connections — send a comment
+      // immediately so the stream stays alive during the DB + OpenAI latency.
+      res.write(`: keep-alive\n\n`);
 
       const [context, [user], orgPersonaName] = await Promise.all([
         gatherDayContext(userId, date),
@@ -645,6 +648,9 @@ export function registerDebriefRoutes(app: Express): void {
         getOrgPersonaName(userId),
       ]);
       const systemPrompt = buildSystemPrompt(context, date, 0, user?.journalPreference || "evening", user?.userProfile, user?.displayName, orgPersonaName);
+
+      // Second heartbeat before OpenAI call — this is typically the longest wait.
+      res.write(`: keep-alive\n\n`);
 
       const openingStream = await openai.chat.completions.create({
         model: "gpt-4o",
