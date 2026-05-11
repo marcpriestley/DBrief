@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { MessageCircle, Send, CheckCircle, Flag, Loader2, RotateCcw, Mic, MicOff, ArrowRight, Volume2, VolumeX, Square, ChevronDown, Trash2, Keyboard, BookOpen, X, Paperclip, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, resolveUrl } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import { Capacitor } from "@capacitor/core";
@@ -63,6 +63,13 @@ function formatMsgTime(isoStr: string) {
 }
 
 // How long of unbroken silence (no new speech) before the mic auto-stops
+/** Returns the index after the first sentence-ending punctuation (for TTS). Returns 0 if no complete sentence found yet. */
+function findFirstSentenceEnd(text: string): number {
+  const m = text.match(/[.!?](?:\s|$)/);
+  if (!m || m.index === undefined) return 0;
+  return m.index + 1;
+}
+
 const AUTO_STOP_SILENCE_MS = 30_000;
 // Default poll interval for native keep-alive. Shorter = faster restart, more stop/start churn.
 const NATIVE_RESTART_POLL_MS = 1_200;
