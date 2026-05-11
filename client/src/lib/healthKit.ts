@@ -245,13 +245,14 @@ async function queryRawMetric(dataType: DataType, dateStr: string): Promise<numb
       startDate = prevLocal.toISOString();
       endDate   = todayLocal.toISOString();
     } else {
-      // Use local midnight-to-midnight so the window aligns with the user's calendar
-      // day, not UTC midnight (which can be off by 10+ hours in non-UTC timezones).
-      // new Date("YYYY-MM-DDT00:00:00") is interpreted as LOCAL midnight in
-      // modern JS engines; .toISOString() then converts to the equivalent UTC
-      // value which HealthKit receives correctly via the Z-suffixed string.
-      startDate = new Date(`${dateStr}T00:00:00`).toISOString();
-      endDate   = new Date(`${dateStr}T23:59:59.999`).toISOString();
+      // Use UTC midnight-to-midnight. HealthKit's queryAggregated(bucket:"day")
+      // groups by UTC day, so sending explicit UTC boundaries ("T00:00:00.000Z"
+      // to "T23:59:59.999Z") guarantees one clean bucket per date string and
+      // avoids the timezone-shift problem where a local-midnight startDate falls
+      // on the *previous* UTC date (e.g. UTC+10 midnight = previous day at 14:00Z),
+      // causing the bucket query to span two UTC days and return nothing.
+      startDate = `${dateStr}T00:00:00.000Z`;
+      endDate   = `${dateStr}T23:59:59.999Z`;
     }
 
     // ── Sleep Score ───────────────────────────────────────────────────────────

@@ -70,7 +70,14 @@ function applyStatusBar(includeOverlay: boolean) {
 // implementation is wired up via Capacitor's plugin bridge when the native build
 // registers a "NavigationBar" plugin.
 function applyNavigationBar() {
-  if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== 'android') return;
+  // When the Capacitor app loads a remote server.url, Capacitor.getPlatform()
+  // can return 'web' even on a real Android device because the bridge is
+  // initialised after the remote page loads. Fall back to UA detection so
+  // we still call the plugin on native Android regardless of getPlatform().
+  const isAndroid =
+    Capacitor.getPlatform() === 'android' ||
+    (/Android/i.test(navigator.userAgent) && Capacitor.isNativePlatform());
+  if (!isAndroid) return;
   const isLight = document.documentElement.classList.contains('light');
   const lightBg = hslCssVarToHex('--background');
   // DARK style = dark icons/buttons on light background; LIGHT = light icons on dark background

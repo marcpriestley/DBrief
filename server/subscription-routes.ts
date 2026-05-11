@@ -594,11 +594,15 @@ export function registerSubscriptionRoutes(app: Express) {
 
       const interval = (sub.items.data[0]?.price as any)?.recurring?.interval ?? 'month';
       const plan = interval === 'year' ? 'annual' : 'monthly';
-      const periodStart = new Date(sub.current_period_start * 1000).toISOString();
-      const periodEnd = new Date(sub.current_period_end * 1000).toISOString();
+      const periodStart = sub.current_period_start
+        ? new Date(sub.current_period_start * 1000).toISOString()
+        : null;
+      const periodEnd = sub.current_period_end
+        ? new Date(sub.current_period_end * 1000).toISOString()
+        : null;
 
       let cancelPreview = null;
-      if (plan === 'annual') {
+      if (plan === 'annual' && sub.current_period_start) {
         const { monthsUsed, refundPence, refundFormatted } = calcAnnualRefund(sub.current_period_start * 1000);
         cancelPreview = { monthsUsed, refundPence, refundFormatted, noRefund: refundPence === 0 };
       }

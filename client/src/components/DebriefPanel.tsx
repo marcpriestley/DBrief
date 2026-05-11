@@ -676,13 +676,31 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
 
   const startDebriefMutation = useMutation({
     mutationFn: async (opts: { fresh?: boolean; userLed?: boolean } = {}) => {
-      const response = await fetch(resolveUrl("/api/debriefs/start"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ date: selectedDate, fresh: !!opts.fresh, userLed: !!opts.userLed }),
-      });
+      // Retry helper: Android WebView can drop connections on first attempt.
+      // We try up to 2 times before surfacing the error to the user.
+      const attemptFetch = async (attempt: number): Promise<Response> => {
+        try {
+          const r = await fetch(resolveUrl("/api/debriefs/start"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ date: selectedDate, fresh: !!opts.fresh, userLed: !!opts.userLed }),
+          });
+          if (!r.ok && attempt < 2) {
+            await new Promise(res => setTimeout(res, 1200));
+            return attemptFetch(attempt + 1);
+          }
+          return r;
+        } catch (err) {
+          if (attempt < 2) {
+            await new Promise(res => setTimeout(res, 1200));
+            return attemptFetch(attempt + 1);
+          }
+          throw err;
+        }
+      };
 
+      const response = await attemptFetch(1);
       if (!response.ok) throw new Error("Failed to start debrief");
 
       const contentType = response.headers.get("Content-Type") || "";
