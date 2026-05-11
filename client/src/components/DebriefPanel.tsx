@@ -598,11 +598,14 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
     queryKey: ["/api/debriefs", selectedDate],
     queryFn: async () => {
       const response = await fetch(resolveUrl(`/api/debriefs/${selectedDate}`), { credentials: "include" });
-      if (!response.ok) return [];
+      if (!response.ok) {
+        console.error("[DebriefPanel] GET failed", response.status);
+        return [];
+      }
       const data = await response.json();
       return Array.isArray(data) ? data : (data ? [data] : []);
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
   });
 
   // Normalise — old cache entries could be a single object or null; always work with an array
@@ -701,7 +704,12 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
       };
 
       const response = await attemptFetch(1);
-      if (!response.ok) throw new Error("Failed to start debrief");
+      if (!response.ok) {
+        let errMsg = "Failed to start debrief";
+        try { const j = await response.clone().json(); errMsg = j.error || errMsg; } catch {}
+        console.error("[DebriefPanel] start failed status=%d msg=%s", response.status, errMsg);
+        throw new Error(errMsg);
+      }
 
       const contentType = response.headers.get("Content-Type") || "";
 
@@ -785,10 +793,10 @@ export default function DebriefPanel({ selectedDate }: DebriefPanelProps) {
       setIsOpeningStreaming(false);
       setOpeningStreamContent("");
     },
-    onError: () => {
+    onError: (error: Error) => {
       setIsOpeningStreaming(false);
       setOpeningStreamContent("");
-      toast({ title: "Couldn't start debrief", description: "Please try again.", variant: "destructive" });
+      toast({ title: "Couldn't start debrief", description: error?.message || "Please try again.", variant: "destructive" });
     },
   });
 

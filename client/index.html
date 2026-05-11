@@ -83,11 +83,11 @@
         // 28 dp on Samsung high-DPI screens).
         if (isAndroid) {
           saibTopFallback = '28px';
-          // 34px covers gesture-nav bars (24–34dp) AND 3-button nav bars on
-          // high-DPI screens. env() returns the real value on devices that
-          // report it; max() picks the larger of the two, so this is always
-          // at least 34px — enough to fill the navigation zone on any Android.
-          saibFallback    = '34px';
+          // 48px covers gesture-nav bars (24–34dp) AND 3-button nav bars on
+          // high-DPI / Samsung screens (up to 48dp). env() returns the real
+          // value on devices that report it; max() picks the larger of the two,
+          // so this is always at least 48px — enough for any Android nav bar.
+          saibFallback    = '48px';
         }
 
         // max(env(), fallback): on native Capacitor where env()=0 this resolves

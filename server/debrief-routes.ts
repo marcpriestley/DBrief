@@ -585,14 +585,22 @@ export function registerDebriefRoutes(app: Express): void {
 
     try {
       const { date, fresh, userLed } = req.body;
+      console.log('[DEBRIEF START] uid=%d date=%s fresh=%s userLed=%s', userId, date, fresh, userLed);
+
+      if (!date) {
+        console.error('[DEBRIEF START] missing date in request body');
+        return res.status(400).json({ error: "Missing date" });
+      }
 
       // When fresh=false, resume the existing active (incomplete) debrief if one exists
       if (!fresh) {
+        console.log('[DEBRIEF START] step=check-existing');
         const existingAll = await db.select().from(debriefs)
           .where(and(eq(debriefs.userId, userId), eq(debriefs.date, date)))
           .orderBy(debriefs.createdAt);
         const active = existingAll.find(d => !d.isComplete);
         if (active) {
+          console.log('[DEBRIEF START] step=resume id=%d', active.id);
           const msgs = await db.select().from(debriefMessages)
             .where(eq(debriefMessages.debriefId, active.id))
             .orderBy(debriefMessages.createdAt);
@@ -600,38 +608,50 @@ export function registerDebriefRoutes(app: Express): void {
           return res.json({ ...active, messages: decryptedMsgs });
         }
       }
+
       // fresh=true OR no active debrief found — create a new session.
       // First, purge any abandoned empty (0-message) sessions for this date
       // so they don't accumulate in the database over time.
-      const incompleteSessions = await db.select({ id: debriefs.id }).from(debriefs)
-        .where(and(eq(debriefs.userId, userId), eq(debriefs.date, date), eq(debriefs.isComplete, false)));
-      for (const row of incompleteSessions) {
-        const msgs = await db.select().from(debriefMessages)
-          .where(eq(debriefMessages.debriefId, row.id));
-        // Delete if: no messages at all, OR every message has blank content and no attachment.
-        // Content is encrypted — decrypt before checking so empty strings are detected correctly.
-        const hasVisibleContent = msgs.some(m => {
-          const plain = decrypt(m.content);
-          return (plain && plain.trim().length > 0) || m.attachmentUrl;
-        });
-        if (msgs.length === 0 || !hasVisibleContent) {
-          await db.delete(debriefMessages).where(eq(debriefMessages.debriefId, row.id));
-          await db.delete(debriefs).where(eq(debriefs.id, row.id));
+      // Wrapped in try/catch so a purge failure never blocks debrief creation.
+      console.log('[DEBRIEF START] step=purge');
+      try {
+        const incompleteSessions = await db.select({ id: debriefs.id }).from(debriefs)
+          .where(and(eq(debriefs.userId, userId), eq(debriefs.date, date), eq(debriefs.isComplete, false)));
+        console.log('[DEBRIEF START] purge candidates=%d', incompleteSessions.length);
+        for (const row of incompleteSessions) {
+          const msgs = await db.select().from(debriefMessages)
+            .where(eq(debriefMessages.debriefId, row.id));
+          // Delete if: no messages at all, OR every message has blank content and no attachment.
+          // Content is encrypted — decrypt before checking so empty strings are detected correctly.
+          const hasVisibleContent = msgs.some(m => {
+            const plain = decrypt(m.content);
+            return (plain && plain.trim().length > 0) || m.attachmentUrl;
+          });
+          if (msgs.length === 0 || !hasVisibleContent) {
+            await db.delete(debriefMessages).where(eq(debriefMessages.debriefId, row.id));
+            await db.delete(debriefs).where(eq(debriefs.id, row.id));
+          }
         }
+      } catch (purgeErr) {
+        console.error('[DEBRIEF START] purge failed (non-blocking):', purgeErr);
       }
 
+      console.log('[DEBRIEF START] step=insert');
       const [debrief] = await db.insert(debriefs).values({
         userId,
         date,
         isComplete: false,
       }).returning();
+      console.log('[DEBRIEF START] inserted id=%d', debrief.id);
 
       // User-led mode: skip the AI opening prompt — user types first
       if (userLed) {
+        console.log('[DEBRIEF START] step=return-user-led');
         return res.json({ ...debrief, messages: [] });
       }
 
       // AI-led: stream the opening message via SSE so it appears word-by-word
+      console.log('[DEBRIEF START] step=ai-led-sse id=%d', debrief.id);
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
@@ -639,12 +659,14 @@ export function registerDebriefRoutes(app: Express): void {
       // Send debriefId first so the client can reference it
       res.write(`data: ${JSON.stringify({ debriefId: debrief.id })}\n\n`);
 
+      console.log('[DEBRIEF START] step=gather-context');
       const [context, [user], orgPersonaName] = await Promise.all([
         gatherDayContext(userId, date),
         db.select().from(users).where(eq(users.id, userId)),
         getOrgPersonaName(userId),
       ]);
       const systemPrompt = buildSystemPrompt(context, date, 0, user?.journalPreference || "evening", user?.userProfile, user?.displayName, orgPersonaName);
+      console.log('[DEBRIEF START] step=openai-stream');
 
       const openingStream = await openai.chat.completions.create({
         model: "gpt-4o",

@@ -43,7 +43,7 @@ function DashboardContent() {
       const d = await res.json();
       return Array.isArray(d) ? d : (d ? [d] : []);
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
   });
 
   const { data: goals = [] } = useQuery<any[]>({
