@@ -75,6 +75,7 @@ export default function Welcome() {
     },
     onSuccess: (data) => {
       queryClient.setQueryData(["/api/auth/me"], data);
+      queryClient.invalidateQueries();
     },
     onError: (error: Error) => {
       toast({
@@ -92,6 +93,7 @@ export default function Welcome() {
     },
     onSuccess: (data) => {
       queryClient.setQueryData(["/api/auth/me"], data);
+      queryClient.invalidateQueries();
     },
     onError: (error: Error) => {
       setGoogleLoading(false);

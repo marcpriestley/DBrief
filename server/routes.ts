@@ -120,6 +120,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.createHabit({ userId: user.id, name: "Make my bed", emoji: "🛏️", category: "morning", anchorHabit: "I wake up", reminderEnabled: false });
       
       (req.session as any).userId = user.id;
+      await new Promise<void>((resolve, reject) =>
+        req.session.save((err) => (err ? reject(err) : resolve()))
+      );
       res.json({
         id: user.id,
         username: user.username,
@@ -147,6 +150,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Invalid email or password" });
       }
       (req.session as any).userId = user.id;
+      await new Promise<void>((resolve, reject) =>
+        req.session.save((err) => (err ? reject(err) : resolve()))
+      );
       res.json({
         id: user.id,
         username: user.username,
@@ -189,6 +195,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       (req.session as any).userId = user.id;
+      await new Promise<void>((resolve, reject) =>
+        req.session.save((err) => (err ? reject(err) : resolve()))
+      );
       res.json({
         id: user.id,
         username: user.username,
@@ -250,6 +259,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       (req.session as any).userId = user.id;
+      await new Promise<void>((resolve, reject) =>
+        req.session.save((err) => (err ? reject(err) : resolve()))
+      );
       res.json({
         id: user.id,
         username: user.username,
