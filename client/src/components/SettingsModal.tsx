@@ -633,18 +633,28 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       if (isNativeHealth()) {
         await requestHealthPermissions();
       }
-      const today = new Date().toISOString().split("T")[0];
-      const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+      // Use local calendar date (not UTC) so the sync window aligns with the
+      // user's day — e.g. for UTC+10 at 9am the UTC date is still yesterday.
+      const localDateStr = (d: Date) =>
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const now = new Date();
+      const today = localDateStr(now);
+      const yesterday = localDateStr(new Date(now.getTime() - 86400000));
+      const twoDaysAgo = localDateStr(new Date(now.getTime() - 2 * 86400000));
       const enabledNames = userMetrics.filter(m => m.isActive).map(m => m.name);
-      const [r1, r2] = await Promise.all([syncHealthData(today, enabledNames), syncHealthData(yesterday, enabledNames)]);
-      const total = r1.synced + r2.synced;
+      const [r1, r2, r3] = await Promise.all([
+        syncHealthData(today, enabledNames),
+        syncHealthData(yesterday, enabledNames),
+        syncHealthData(twoDaysAgo, enabledNames),
+      ]);
+      const total = r1.synced + r2.synced + r3.synced;
       queryClient.invalidateQueries({ queryKey: ["/api/daily-scores"] });
       queryClient.invalidateQueries({ queryKey: ["/api/user-metrics"] });
       setHealthSyncResult(`Synced ${total} reading${total !== 1 ? "s" : ""}`);
       if (total === 0) {
         const hint = isNativeAndroid()
-          ? "No new data found. Check Health Connect → Permissions → DBrief App has all categories enabled."
-          : "No new data found. Check that Apple Health permissions include Sleep Analysis: iPhone Settings → Privacy & Security → Health → DBrief App.";
+          ? "No data found for the past 3 days. Make sure Health Connect → DBrief App has all permission categories enabled."
+          : "No data found for the past 3 days. Make sure your Apple Watch or wearable has synced to Apple Health, and that DBrief has access in iPhone Settings → Privacy & Security → Health.";
         toast({ title: "Nothing synced", description: hint, variant: "destructive" });
       } else {
         toast({ title: "Sync complete", description: `Updated ${total} health reading${total !== 1 ? "s" : ""}.` });

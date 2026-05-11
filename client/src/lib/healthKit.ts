@@ -245,8 +245,13 @@ async function queryRawMetric(dataType: DataType, dateStr: string): Promise<numb
       startDate = prevLocal.toISOString();
       endDate   = todayLocal.toISOString();
     } else {
-      startDate = `${dateStr}T00:00:00.000Z`;
-      endDate   = `${dateStr}T23:59:59.999Z`;
+      // Use local midnight-to-midnight so the window aligns with the user's calendar
+      // day, not UTC midnight (which can be off by 10+ hours in non-UTC timezones).
+      // new Date("YYYY-MM-DDT00:00:00") is interpreted as LOCAL midnight in
+      // modern JS engines; .toISOString() then converts to the equivalent UTC
+      // value which HealthKit receives correctly via the Z-suffixed string.
+      startDate = new Date(`${dateStr}T00:00:00`).toISOString();
+      endDate   = new Date(`${dateStr}T23:59:59.999`).toISOString();
     }
 
     // ── Sleep Score ───────────────────────────────────────────────────────────

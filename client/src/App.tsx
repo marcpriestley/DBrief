@@ -289,21 +289,30 @@ function AuthenticatedRouter() {
       // the DB; we just need React Query to fetch the new value.
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
 
-      // If the user just returned from Stripe payment, also call sync and show toast.
+      // If the user just returned from Stripe payment, also call sync and close paywall.
       const pendingSubCheck = localStorage.getItem("dbrief_sub_pending");
       if (pendingSubCheck) {
         localStorage.removeItem("dbrief_sub_pending");
-        setTimeout(async () => {
-          try { await fetch(resolveUrl("/api/subscription/sync"), { method: "POST" }); } catch (_) {}
+        const attemptPremiumConfirm = async (delayMs = 0) => {
+          if (delayMs > 0) await new Promise(r => setTimeout(r, delayMs));
+          try { await fetch(resolveUrl("/api/subscription/sync"), { method: "POST", credentials: "include" }); } catch (_) {}
           queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
           queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
           try {
-            const me = await fetch(resolveUrl("/api/auth/me")).then(r => r.json());
+            const me = await fetch(resolveUrl("/api/auth/me"), { credentials: "include" }).then(r => r.json());
             if (me.subscriptionStatus === "premium" || me.subscriptionStatus === "beta") {
-              toast({ title: "Welcome to DBrief App Premium", description: "Your features are now unlocked. Full throttle." });
+              // Notify PaywallModal (and any other listener) to close immediately.
+              window.dispatchEvent(new CustomEvent("dbrief:premium-detected"));
+              return true;
             }
           } catch (_) {}
-        }, 2500);
+          return false;
+        };
+        // Try immediately, then with increasing back-off (Stripe webhook latency).
+        attemptPremiumConfirm(1500)
+          .then(ok => { if (!ok) return attemptPremiumConfirm(4000); })
+          .then(ok => { if (!ok) return attemptPremiumConfirm(8000); })
+          .catch(() => {});
       }
 
       // Mood modal pending from a notification tap while app was backgrounded

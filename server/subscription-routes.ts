@@ -243,9 +243,19 @@ export function registerSubscriptionRoutes(app: Express) {
   ${success ? `
   <div class="status" id="st">
     <div class="spinner" id="sp"></div>
-    <span id="st-text">Returning you to DBrief App…</span>
+    <span id="st-text">Confirming payment…</span>
   </div>
+  <div class="hint" id="hint">
+    <p>Tap <strong>Return to DBrief App</strong> below, or use the <strong>Done</strong> button at the top of your screen to go back to the app.</p>
+  </div>
+  <button id="return-btn" onclick="tryReturn()" style="display:none;margin-top:2rem;background:#d97706;color:#fff;border:none;border-radius:14px;padding:1rem 1.75rem;font-size:1rem;font-weight:700;cursor:pointer;width:100%;letter-spacing:-0.2px;">
+    Return to DBrief App →
+  </button>
   <script>
+    var deepLink = 'dbrief://checkout-done?result=success' + (${sessionId ? JSON.stringify('&session_id=' + sessionId) : JSON.stringify('')});
+    function tryReturn() {
+      window.location.href = deepLink;
+    }
     (async function() {
       var sid = ${sessionId ? JSON.stringify(sessionId) : 'null'};
       // 1. Signal server — marks subscription premium in DB before app polls.
@@ -253,17 +263,20 @@ export function registerSubscriptionRoutes(app: Express) {
         try { await fetch('/api/subscription/checkout-signal?session_id=' + encodeURIComponent(sid)); }
         catch(_) {}
       }
-      // 2. Update status text.
-      document.getElementById('sp').style.display = 'none';
-      document.getElementById('st-text').textContent = 'Payment confirmed.';
-      // 3. Attempt deep-link return. iOS will show its own "Open in DBrief?"
-      //    confirmation dialog — no on-page instruction needed.
-      //    If the URL scheme is not registered, the user closes this view
-      //    with the native Done button in the browser toolbar.
-      try {
-        window.location.href = 'dbrief://checkout-done?result=${success ? 'success' : 'cancelled'}' +
-          (sid ? '&session_id=' + encodeURIComponent(sid) : '');
-      } catch(_) {}
+      // 2. Update status — payment confirmed.
+      var sp = document.getElementById('sp');
+      var stText = document.getElementById('st-text');
+      if (sp) sp.style.display = 'none';
+      if (stText) stText.textContent = 'Payment confirmed. ✓';
+      // 3. Show the return button and hint.
+      var btn = document.getElementById('return-btn');
+      var hint = document.getElementById('hint');
+      if (btn) btn.style.display = 'block';
+      if (hint) hint.style.display = 'block';
+      // 4. Attempt automatic deep-link return. On iOS this triggers the
+      //    "Open in DBrief?" system dialog. If the URL scheme isn't
+      //    registered the assignment is a no-op — the user taps the button.
+      setTimeout(function() { window.location.href = deepLink; }, 600);
     })();
   </script>
   ` : ''}

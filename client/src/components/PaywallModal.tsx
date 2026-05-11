@@ -199,6 +199,16 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
     }
   }, [isOpen]);
 
+  // Global escape hatch: App.tsx dispatches this event when it detects premium
+  // from the visibilitychange / appResume handler (e.g. user returned from Stripe
+  // without the deep link firing). This closes the paywall regardless of polling state.
+  useEffect(() => {
+    if (!isOpen) return;
+    const onGlobalPremium = () => { handlePremiumDetected(); };
+    window.addEventListener("dbrief:premium-detected", onGlobalPremium);
+    return () => window.removeEventListener("dbrief:premium-detected", onGlobalPremium);
+  }, [isOpen]);
+
   useEffect(() => {
     return () => {
       browserListenerRef.current?.remove();
@@ -216,9 +226,12 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
       const listener = await Browser.addListener("browserFinished", async () => {
         listener.remove();
         browserListenerRef.current = null;
-        stopPolling();
+        // Don't stopPolling() here — the DB may not be updated yet when the
+        // browser closes. Let the existing poll continue; it will call
+        // handlePremiumDetected() as soon as the server returns premium.
+        // Also kick off an immediate sync attempt in parallel.
         setTapped(false);
-        const checkPremium = async (): Promise<boolean> => {
+        const trySync = async (): Promise<boolean> => {
           try {
             await fetch(resolveUrl("/api/subscription/sync"), { method: "POST", credentials: "include" }).catch(() => {});
             const me = await fetch(resolveUrl("/api/auth/me"), { credentials: "include" }).then(r => r.json());
@@ -230,12 +243,10 @@ export default function PaywallModal({ isOpen, onClose, featureName }: PaywallMo
           } catch (_) {}
           return false;
         };
-        if (!(await checkPremium())) {
-          const delays = [2000, 4000, 8000];
-          for (const delay of delays) {
-            await new Promise(r => setTimeout(r, delay));
-            if (await checkPremium()) break;
-          }
+        // Immediate check; if it fails keep polling (already running via startPolling).
+        if (!(await trySync())) {
+          // Restart polling with fresh deadline in case it had stalled.
+          startPolling();
         }
       });
       browserListenerRef.current = listener;
