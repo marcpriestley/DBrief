@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "190924908204",
+    "project_id": "dbrief-90baa",
+    "storage_bucket": "dbrief-90baa.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:190924908204:android:350c87d724ae19e73be109",
+        "android_client_info": {
+          "package_name": "com.dbrief.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD5z64BAiVVpJ2HwpmgAwXKiHvWEfk0OzA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
